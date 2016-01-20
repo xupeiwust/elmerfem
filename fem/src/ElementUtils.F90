@@ -772,22 +772,43 @@ CONTAINS
        END DO
      END IF
 
-     IF( ParEnv % PEs > 1 .AND. &
-         ListGetLogical( Solver % Values,'Skip Pure Halo Nodes',Found ) ) THEN
+     IF( ParEnv % PEs > 1 ) THEN
+       k = COUNT(Perm(1:Mesh % NumberOfNodes)>0)
        j = 0
-       DO i=1,Mesh % NumberOfNodes 
-         ! These are pure halo nodes that need not be communicated. They are created only 
-         ! for sufficient geometric information on the boundaries.
-         IF( .NOT. ANY( ParEnv % Mype == Mesh % ParallelInfo % NeighbourList(i) % Neighbours ) ) THEN
-           Perm(i) = 0
-         ELSE IF( Perm(i) > 0 ) THEN
-           j = j + 1
-           Perm(i) = j
-         END IF
-       END DO
-       PRINT *,'Eliminating '//TRIM(I2S(k-j))//' halo nodes out of '&
-           //TRIM(I2S(k))//' in partition '//TRIM(I2S(ParEnv % MyPe))
-       k = j
+       IF( ListGetLogical( Solver % Values,'Skip Pure Halo Nodes',Found ) ) THEN
+         DO i=1,Mesh % NumberOfNodes 
+           ! These are pure halo nodes that need not be communicated. They are created only 
+           ! for sufficient geometric information on the boundaries.
+           IF( .NOT. ANY( ParEnv % Mype == Mesh % ParallelInfo % NeighbourList(i) % Neighbours ) ) THEN
+             Perm(i) = 0
+           ELSE IF( Perm(i) > 0 ) THEN
+             j = j + 1
+             Perm(i) = j
+           END IF
+         END DO
+         PRINT *,'Eliminating '//TRIM(I2S(k-j))//' halo nodes out of '&
+             //TRIM(I2S(k))//' in partition '//TRIM(I2S(ParEnv % MyPe))
+       END IF
+
+       IF( ListGetLogical( Solver % Values,'Skip Pure Halo Edges',Found ) ) THEN
+         j = COUNT(Perm(1:Mesh % NumberOfNodes)>0)
+         k = COUNT(Perm(Mesh % NumberOfNodes+1:)>0)
+         l = 0
+         DO i=1,Mesh % NumberOfEdges
+           ! These are pure halo nodes that need not be communicated. They are created only 
+           ! for sufficient geometric information on the boundaries.
+           IF( .NOT. ANY( ParEnv % Mype == Mesh % ParallelInfo % EdgeNeighbourList(i) % Neighbours ) ) THEN
+             l = l + 1
+             Perm(i+Mesh % NumberOfNodes) = 0
+           ELSE IF( Perm(i+Mesh % NumberOfNodes) > 0 ) THEN
+             j = j + 1
+             Perm(i+Mesh % NumberOfNodes) = j
+           END IF
+         END DO
+         PRINT *,'Eliminating '//TRIM(I2S(l))//' halo edges out of '&
+             //TRIM(I2S(k))//' in partition '//TRIM(I2S(ParEnv % MyPe))
+       END IF
+       k = COUNT(Perm>0)
      END IF
 
 

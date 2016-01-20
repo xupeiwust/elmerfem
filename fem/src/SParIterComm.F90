@@ -553,10 +553,12 @@ CONTAINS
       IsNeighbour = .FALSE.
       DO i=1,Mesh % Nodes % NumberOfNodes
         IF ( Mesh % ParallelInfo % Interface(i) ) THEN
-          DO j=1,SIZE(Mesh % ParallelInfo % NeighbourList(i) % Neighbours)
-            IsNeighbour(Mesh % ParallelInfo % &
-              NeighbourList(i) % Neighbours(j)+1) = .TRUE.
-          END DO
+          IF( ANY( Mesh % ParallelInfo % NeighbourList(i) % Neighbours == ParEnv % myPE) ) THEN
+            DO j=1,SIZE(Mesh % ParallelInfo % NeighbourList(i) % Neighbours)
+              IsNeighbour(Mesh % ParallelInfo % &
+                NeighbourList(i) % Neighbours(j)+1) = .TRUE.
+            END DO
+          END IF
         END IF
       END DO
       IsNeighbour(ParEnv % myPE+1) = .FALSE.
@@ -595,7 +597,7 @@ CONTAINS
      LOGICAL, POINTER :: ig(:)
      TYPE(NeighbourList_t), POINTER :: nb(:)
 
-     LOGICAL :: AllM, Intf, Found
+     LOGICAL :: AllM, Intf, Found, l1,l2
      LOGICAL, POINTER :: IsNeighbour(:)
      TYPE(Element_t), POINTER :: Element
 
@@ -654,10 +656,23 @@ CONTAINS
 
       Intf = ALL(ig(Element % NodeIndexes(1:2)))
       IF ( Mesh % MeshDim==2 ) THEN
-        Intf = Intf.AND..NOT. &
-             (ASSOCIATED(Element % BoundaryInfo % Left) .AND. &
-              ASSOCIATED(Element % BoundaryInfo % Right))
+        l1 = associated(Element % BoundaryInfo % Left)
+        l2 = associated(Element % BoundaryInfo % Right)
+        IF(l1.and.l2) THEN
+          Intf = Intf.AND..NOT. &
+               Element % BoundaryInfo % Left % PartIndex == Element % BoundaryInfo % Right % PartIndex
+        END IF
       END IF
+
+      p = Element % NodeIndexes(1)
+      q = Element % NodeIndexes(2)
+      IF (gdofs(p)>gdofs(q)) THEN
+        parentnodes(i,1) =  p
+        parentnodes(i,2) =  q
+      ELSE
+        parentnodes(i,1) =  q
+        parentnodes(i,2) =  p
+      ENDIF
 
       IF (Intf) THEN
         !
@@ -666,15 +681,6 @@ CONTAINS
 
         commonlist => Null() ! intersection of list1 and list2
 
-        p = Element % NodeIndexes(1)
-        q = Element % NodeIndexes(2)
-        IF (gdofs(p)>gdofs(q)) THEN
-          parentnodes(i,1) =  p
-          parentnodes(i,2) =  q
-        ELSE
-          parentnodes(i,1) =  q
-          parentnodes(i,2) =  p
-        ENDIF
 
         ! This is the list of PEs sharing parent node 1:
         list1 => nb(parentnodes(i,1)) % Neighbours
@@ -710,15 +716,17 @@ CONTAINS
         ! Now, we should have a list of PEs common to the parents:
         !----------------------------------------------------------
         IF ( SIZE(commonlist)<2 ) THEN
-          DEALLOCATE(CommonList);
-          CommonList => Null()
+          IF(Commonlist(1)==Parenv % mype) THEN
+            DEALLOCATE(CommonList);
+            CommonList => Null()
+          END IF
         END IF
 
         IF( ASSOCIATED(commonlist)) THEN
           Edgen(i) % Interface = .TRUE.
           !
-          ! Edge i owner is owner of one of the parent nodes:
-          !--------------------------------------------------
+          ! Edge i is owner of one of the parent nodes:
+          !---------------------------------------------
           q = MAX(list1(1),list2(1))
           DO p=1,SIZE(commonlist)
             IF (commonlist(p)==q) THEN
@@ -879,10 +887,10 @@ CONTAINS
            m = 3*l-2
            DO k_intf = 1,n_intf
              k = Iedges(k_intf)
-             IF( GDofs(ParentNodes(k,1)) == GIndices(m+1) .AND. &
-                 GDofs(ParentNodes(k,2)) == GIndices(m+2) .OR.  &
-                 GDofs(ParentNodes(k,1)) == GIndices(m+2) .AND. &
-                 GDofs(parentNodes(k,2)) == GIndices(m+1) ) THEN
+             IF( GDOFs(parentNodes(k,1)) == GIndices(m+1) .AND. &
+                 GDOFs(parentNodes(k,2)) == GIndices(m+2) .OR.  &
+                 GDOFs(parentNodes(k,1)) == GIndices(m+2) .AND. &
+                 GDOFs(parentNodes(k,2)) == GIndices(m+1) ) THEN
                Found=.TRUE.
                Edgen(k) % n = GIndices(m) ! global DOF number
                EXIT
@@ -898,9 +906,8 @@ CONTAINS
 
 
        !
-       ! we don't have these edges, ask to remove us from
-       ! share lists:
-       ! ------------------------------------------------
+       ! we don't have these edges, ask to remove us from share lists:
+       ! -------------------------------------------------------------
        CALL MPI_BSEND( tosend(proc+1), 1, MPI_INTEGER, &
             proc, 200, MPI_COMM_WORLD, ierr )
 
@@ -945,7 +952,7 @@ CONTAINS
     !
     ! Sync neighbour tables from owners
     !--------------------------------------------------------------
-    tosend=0
+    tosend = 0
     DO k_intf=1,n_intf
       j = Iedges(k_intf)
       IF (Edgen(j) % n==0 ) CYCLE
@@ -981,8 +988,7 @@ CONTAINS
       IF( i-1 == ParEnv % MyPE ) CYCLE
       IF( .NOT. IsNeighbour(i) ) CYCLE
 
-      CALL MPI_BSEND( tosend(i), 1, MPI_INTEGER, &
-           i-1, 300, MPI_COMM_WORLD, ierr )
+      CALL MPI_BSEND( tosend(i), 1, MPI_INTEGER, i-1, 300, MPI_COMM_WORLD, ierr )
 
       IF (tosend(i)<=0 ) CYCLE
 
@@ -1034,8 +1040,8 @@ CONTAINS
                END DO
                DEALLOCATE(Edgen(l) % Neighbours)
                ALLOCATE(Edgen(l) % Neighbours(m-j))
-               Edgen(l) % Neighbours(1)=proc
-               Edgen(l) % Neighbours(2:)=gindices(j+1:m-1)
+               Edgen(l) % Neighbours(1) = proc
+               Edgen(l) % Neighbours(2:) = gindices(j+1:m-1)
                j = m-1
                Found=.TRUE.
                EXIT
@@ -1046,6 +1052,7 @@ CONTAINS
        END IF
     END DO
 
+!-------------------------------------
     !
     ! Check that all edges have global numbers. If we haven't
     ! received a new global number, the 'owner' supposedly
@@ -1056,15 +1063,18 @@ CONTAINS
     m=0
     DO i=1,n
       IF ( Edgen(i) % n == 0 ) THEN
-        m=m+1
-        k = SIZE(Edgen(i) % Neighbours)
-        ALLOCATE(commonlist(k-1))
-        commonlist = Edgen(i) % neighbours(2:)
-        DEALLOCATE( Edgen(i) % neighbours )
-        Edgen(i) % Neighbours => commonlist
-        IF (k<=2) Edgen(i) % Interface=.FALSE.
+        IF (ANY(Edgen(i) % Neighbours==Parenv % myPE) ) THEN
+          m=m+1
+          k = SIZE(Edgen(i) % Neighbours)
+          ALLOCATE(commonlist(k-1))
+          commonlist = Edgen(i) % neighbours(2:)
+          DEALLOCATE( Edgen(i) % neighbours )
+          Edgen(i) % Neighbours => commonlist
+          IF (k<=2) Edgen(i) % Interface=.FALSE.
+        END IF
       END IF
     END DO
+
 
     CALL MPI_ALLREDUCE( m, retry, 1, &
         MPI_INTEGER, MPI_SUM, MPI_COMM_WORLD, ierr )
@@ -1076,6 +1086,7 @@ CONTAINS
     IF ( retry>0 ) GOTO 10
 
 20  CONTINUE
+
 
     ! Deallocate temp arrays:
     !------------------------
@@ -1267,7 +1278,7 @@ CONTAINS
      LOGICAL, POINTER :: ig(:)
      TYPE(NeighbourList_t), POINTER :: nb(:)
 
-     LOGICAL :: AllM, Intf
+     LOGICAL :: AllM, Intf, l1, l2
      LOGICAL, POINTER :: IsNeighbour(:)
      TYPE(Element_t), POINTER :: Element, Edge
 
@@ -1313,7 +1324,6 @@ CONTAINS
     ig => Mesh % ParallelInfo % Interface
     nb => Mesh % ParallelInfo % NeighbourList
 
-
     !
     ! Find neighbours and parent nodes for all new interface faces:
     ! =============================================================
@@ -1327,9 +1337,17 @@ CONTAINS
       nd = Element % Type % ElementCode/100
 
       Intf = ALL(ig(Element % NodeIndexes(1:nd)))
-      Intf = Intf .AND..NOT. &
-           (ASSOCIATED(Element % BoundaryInfo % Left) .AND. &
-            ASSOCIATED(Element % BoundaryInfo % Right))
+      l1 = associated(element % boundaryinfo % left)
+      l2 = associated(element % boundaryinfo % right)
+      IF(l1.and.l2) then
+        intf = intf .and..not. &
+            Element % BoundaryInfo % Left % PartIndex == Element % Boundaryinfo % Right % PartIndex
+      end if
+
+      DO j=1,nd
+        l = Element % NodeIndexes(j)
+        parentnodes(i,j) =  l
+      END DO
 
       IF ( Intf ) THEN
         !
@@ -1339,7 +1357,6 @@ CONTAINS
         commonlist => Null() ! intersection of pe lists
         DO j=1,nd
           l = Element % NodeIndexes(j)
-          parentnodes(i,j) =  l
           list(j) % pes => Mesh % ParallelInfo % NeighbourList(l) % Neighbours
         END DO
         !
@@ -1363,7 +1380,9 @@ CONTAINS
         !----------------------------------------------------------
         IF( ASSOCIATED(commonlist) ) THEN
           IF ( SIZE(commonlist)<2 ) THEN
-            DEALLOCATE(commonlist); Commonlist=>Null()
+            IF(commonlist(1) == Parenv % myPE) THEN
+              DEALLOCATE(commonlist); Commonlist=>Null()
+            END IF
           END IF
         END IF
 
@@ -1586,6 +1605,7 @@ CONTAINS
         Ifaces(n_intf)=i
       END IF
     END DO
+
     !
     ! Check that all faces have global numbers. If we haven't
     ! received a new global number, the 'owner' supposedly
@@ -1596,13 +1616,15 @@ CONTAINS
     m=0
     DO i=1,n
       IF ( Facen(i) % n == 0 ) THEN
-        m=m+1
-        k = SIZE(Facen(i) % Neighbours)
-        ALLOCATE(commonlist(k-1))
-        commonlist = Facen(i) % Neighbours(2:)
-        DEALLOCATE(Facen(i) % Neighbours)
-        Facen(i) % Neighbours => commonlist
-	IF ( k==2 ) Facen(i) % Interface=.FALSE.
+        IF (ANY(Facen(i) % Neighbours==Parenv % myPE) ) THEN
+          m = m + 1
+          k = SIZE(Facen(i) % Neighbours)
+          ALLOCATE(commonlist(k-1))
+          commonlist = Facen(i) % Neighbours(2:)
+          DEALLOCATE(Facen(i) % Neighbours)
+          Facen(i) % Neighbours => commonlist
+          IF ( k==2 ) Facen(i) % Interface=.FALSE.
+        END IF
       END IF
     END DO
 
