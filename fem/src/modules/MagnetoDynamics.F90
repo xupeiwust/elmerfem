@@ -2051,8 +2051,23 @@ CONTAINS
              STIFF(p,q) = STIFF(p,q) &
              + SUM(RotWBasis(i,:) * MATMUL(A_t, RotWBasis(j,:)))*detJ*IP%s(t)
            IF( HasVelocity ) THEN
+#ifndef __INTEL_COMPILER
              STIFF(p,q) = STIFF(p,q) &
                  - SUM(WBasis(i,:)*MATMUL(C,CrossProduct(velo, RotWBasis(j,:))))*detJ*IP%s(t)
+#else
+             ! Ifort workaround
+             RotWJ(1:3) = RotWBasis(j,1:3)
+             ! VeloCrossW(1:3) = CrossProduct(velo(1:3), RotWJ(1:3))
+             ! CVelo(1:3)=MATMUL(C(1:3,1:3),VeloCrossW(1:3))
+             CVelo(1:3) = C(1:3,1)*(velo(2)*RotWJ(3) - velo(3)*RotWJ(2))
+             CVelo(1:3) = CVelo(1:3) + C(1:3,2)*(-velo(1)*RotWJ(3) + velo(3)*RotWJ(1))
+             CVelo(1:3) = CVelo(1:3) + C(1:3,3)*(velo(1)*RotWJ(2) - velo(2)*RotWJ(1))
+             CVeloSum = REAL(0,dp)
+             DO k=1,3
+                CVeloSum = CVeloSum + CVelo(k)*WBasis(i,k)
+             END DO
+             STIFF(p,q) = STIFF(p,q) - CVeloSum*detJ*IP % s(t)
+#endif
            END IF
            IF ( Newton ) THEN
              JAC(p,q) = JAC(p,q) + muder * SUM(B_ip(:)*RotWBasis(j,:)) * &
