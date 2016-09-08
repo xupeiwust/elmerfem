@@ -362,3 +362,5 @@ ENDIF(WITH_ELMERPOST)
 if(NOT BYPASS_CPACK)
   INCLUDE(${CMAKE_CURRENT_SOURCE_DIR}/cpack/ElmerCPack.cmake)
 endif(NOT BYPASS_CPACK)
+
+SET_TARGET_PROPERTIES(MagnetoDynamics PROPERTIES COMPILE_FLAGS "-x=AVX -O2 -g -align array64byte -finline-functions -finline-limit=1000 -no-prec-div -no-prec-sqrt")
