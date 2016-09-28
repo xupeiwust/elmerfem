@@ -50,15 +50,32 @@ FUNCTION IceConductivity(Model, Node, temp) RESULT(cond)
   TYPE(Variable_t), POINTER :: HeightVar, HeightVar2
   REAL(KIND=dp) :: Height
 
-  !-----------------------------------------------
-  ! Get the height of ice layer (either upper or plain layer)
-  !-----------------------------------------------
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
   Height = 100 ! Assume there is ice
-  HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
   IF ( ASSOCIATED(HeightVar) ) THEN
     Height = HeightVar % Values ( HeightVar % Perm(Node) )
   ELSE
-    HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
@@ -66,7 +83,16 @@ FUNCTION IceConductivity(Model, Node, temp) RESULT(cond)
     END IF
   END IF
 
-  If (Height > 10.100) THEN  ! This is ice
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
+  ENDIF
+
+  IF (Height > 10.100) THEN  ! This is ice
     cond = 9.828*exp(-5.7E-03*temp)
   ELSE                       ! A very conductive layer
     cond = 20
@@ -87,18 +113,35 @@ FUNCTION IceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
   REAL(KIND=dp) :: temp, cond
 
   ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2
-  REAL(KIND=dp) :: Height
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
 
-  !-----------------------------------------------
-  ! Get the height of ice layer (either upper or plain layer)
-  !-----------------------------------------------
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
   Height = 100 ! Assume there is ice
-  HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
   IF ( ASSOCIATED(HeightVar) ) THEN
     Height = HeightVar % Values ( HeightVar % Perm(Node) )
   ELSE
-    HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
@@ -106,7 +149,16 @@ FUNCTION IceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
     END IF
   END IF
 
-  If (Height > 10.100) THEN  ! This is ice
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
+  ENDIF
+
+  IF (Height > 10.100) THEN  ! This is ice
     cond = 9.828*exp(-5.7E-03*temp)
   ELSE                       ! A very conductive layer
     cond = 20
@@ -128,24 +180,50 @@ FUNCTION IceCapacity(Model, Node, temp) RESULT(capac)
   REAL(KIND=dp) :: temp, capac
 
   ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2
-  REAL(KIND=dp) :: Height
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
 
-  !-----------------------------------------------
-  ! Get the height of ice layer (either upper or plain layer)
-  !-----------------------------------------------
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
   Height = 100 ! Assume there is ice
-  HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
   IF ( ASSOCIATED(HeightVar) ) THEN
     Height = HeightVar % Values ( HeightVar % Perm(Node) )
   ELSE
-    HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceCapacity', 'Cound not find depth or max depth')
+      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
     END IF
   END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
+  ENDIF
 
   If (Height > 10.100) THEN ! This is ice
     capac = 146.3+(7.253*temp)
@@ -168,24 +246,50 @@ FUNCTION IceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
   REAL(KIND=dp) :: temp, capac
 
   ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2
-  REAL(KIND=dp) :: Height
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
 
-  !-----------------------------------------------
-  ! Get the height of ice layer (either upper or plain layer)
-  !-----------------------------------------------
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
   Height = 100 ! Assume there is ice
-  HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
   IF ( ASSOCIATED(HeightVar) ) THEN
     Height = HeightVar % Values ( HeightVar % Perm(Node) )
   ELSE
-    HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceCapacity', 'Cound not find depth or max depth')
+      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
     END IF
   END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
+  ENDIF
 
   If (Height > 10.100) THEN ! This is ice
     capac = 146.3+(7.253*temp)

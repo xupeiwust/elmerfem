@@ -92,7 +92,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
 
   INTEGER :: N, istat, i, k
 
-  CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
+  CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel, DepthVarName
 
   LOGICAL :: FirstTime = .TRUE.
   LOGICAL :: Found, UnfoundFatal
@@ -202,7 +202,11 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   !-----------------------------------------------
   ! Get the depth of lower layer (rock layer)
   !-----------------------------------------------
-  DepthVar => VariableGet(Model % Mesh % Variables, "lower depth")
+  DepthVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found ) 
+  IF (.NOT.Found) THEN
+    WRITE(DepthVarName,'(A)') 'lower depth'
+  END IF
+  DepthVar => VariableGet(Model % Mesh % Variables, TRIM(DepthVarName))
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
@@ -212,7 +216,13 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   !-----------------------------------------------
   ! Get the total depth below all layers
   !-----------------------------------------------
-  DepthVar2 => VariableGet(Model % Mesh % Variables, "depth")
+  DepthVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(DepthVarName,'(A)') 'depth'
+  END IF
+  
+  DepthVar2 => VariableGet(Model % Mesh % Variables, TRIM(DepthVarName))
+  
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
   ELSE
@@ -345,7 +355,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
 
   INTEGER :: N, istat, i, k
 
-  CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
+  CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel, DepthVarName
 
   LOGICAL :: FirstTime = .TRUE.
   LOGICAL :: Found, UnfoundFatal
@@ -455,7 +465,12 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
   !-----------------------------------------------
   ! Get the depth of lower layer (rock layer)
   !-----------------------------------------------
-  DepthVar => VariableGet(Model % Mesh % Variables, "lower depth")
+  DepthVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found ) 
+  IF (.NOT.Found) THEN
+    WRITE(DepthVarName,'(A)') 'lower depth'
+  END IF
+  DepthVar => VariableGet(Model % Mesh % Variables, TRIM(DepthVarName))
+  !DepthVar => VariableGet(Model % Mesh % Variables, "lower depth")
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
@@ -465,6 +480,11 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
   !-----------------------------------------------
   ! Get the total depth below all layers
   !-----------------------------------------------
+  DepthVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found ) 
+  IF (.NOT.Found) THEN
+    WRITE(DepthVarName,'(A)') 'depth'
+  END IF
+  DepthVar => VariableGet(Model % Mesh % Variables, TRIM(DepthVarName))
   DepthVar2 => VariableGet(Model % Mesh % Variables, "depth")
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
