@@ -47,8 +47,8 @@ FUNCTION IceConductivity(Model, Node, temp) RESULT(cond)
   REAL(KIND=dp) :: temp, cond
 
   ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2
-  REAL(KIND=dp) :: Height
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
 
   CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
   CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
