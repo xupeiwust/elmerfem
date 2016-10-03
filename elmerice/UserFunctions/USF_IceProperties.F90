@@ -28,83 +28,85 @@
 ! *  Web:     http://elmerice.elmerfem.org
 ! *
 ! Contains functions for material properties of ice:
-! - IceConductivity
+! - IceConductivity_SI
 ! - IceConductivity_m_Mpa_a
-! - IceCapacity
+! - IceCapacity_SI
 ! - IceCapacity_m_MPa_a
 ! - IcePressureMeltingPoint
-! 
-!==============================================================================
-FUNCTION IceConductivity(Model, Node, temp) RESULT(cond)
-!==============================================================================
-
+!
+MODULE IceProperties
   USE DefUtils
-
+  USE Types
+  
   IMPLICIT None
 
+  CONTAINS
+
+  !==============================================================================
+  FUNCTION IceConductivity(Model, temp) RESULT(cond)
+  !==============================================================================
+
+    USE DefUtils
+
+    IMPLICIT None
+
+    TYPE(Model_t) :: Model
+    REAL(KIND=dp) :: temp, cond
+
+    cond = 9.828*exp(-5.7E-03*temp)
+
+  END FUNCTION IceConductivity
+  
+  !==============================================================================
+  FUNCTION IceCapacity(Model, temp) RESULT(capac)
+  !==============================================================================
+
+    USE DefUtils
+
+    IMPLICIT None
+
+    TYPE(Model_t) :: Model
+    REAL(KIND=dp) :: temp, capac
+
+
+
+    capac = 146.3_dp + (7.253_dp * temp)
+  END FUNCTION IceCapacity
+  
+  !==============================================================================
+  FUNCTION IcePressureMeltingPoint(Model, ClausiusClapeyron, press) RESULT(Tpmp)
+  !==============================================================================
+
+    USE DefUtils
+    
+    IMPLICIT None
+
+    TYPE(Model_t) :: Model
+    REAL(KIND=dp) :: Tpmp, ClausiusClapeyron, press
+
+    Tpmp = 273.15 - ClausiusClapeyron*MAX(press, 0.0_dp)
+
+  END FUNCTION IcePressureMeltingPoint
+
+END MODULE IceProperties
+
+!==============================================================================
+FUNCTION IceConductivity_SI(Model, Node, temp) RESULT(cond)
+!==============================================================================
+  USE IceProperties
+  
   TYPE(Model_t) :: Model
   INTEGER :: Node
   REAL(KIND=dp) :: temp, cond
-
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
-
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
-  ENDIF
-
-  IF (Height > 10.100) THEN  ! This is ice
-    cond = 9.828*exp(-5.7E-03*temp)
-  ELSE                       ! A very conductive layer
-    cond = 20
-  ENDIF
-
-END FUNCTION IceConductivity
-
+  
+  cond = IceConductivity(Model, temp)
+  
+END FUNCTION IceConductivity_SI
 !==============================================================================
 FUNCTION IceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
 !==============================================================================
 
-  USE DefUtils
+  USE IceProperties
 
   IMPLICIT None
 
@@ -112,66 +114,14 @@ FUNCTION IceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
   INTEGER :: Node
   REAL(KIND=dp) :: temp, cond
 
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
-
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
-  ENDIF
-
-  IF (Height > 10.100) THEN  ! This is ice
-    cond = 9.828*exp(-5.7E-03*temp)
-  ELSE                       ! A very conductive layer
-    cond = 20
-  ENDIF
-  cond = cond * 31557600 * 1.0e-06 ! From SI to m-MPa-a
+  cond = IceConductivity(Model,temp) * 31557600.0_dp * 1.0d-06 ! From SI to m-MPa-a
 
 END FUNCTION IceConductivity_m_MPa_a
 
 !==============================================================================
-FUNCTION IceCapacity(Model, Node, temp) RESULT(capac)
+FUNCTION IceCapacity_SI(Model, Node, temp) RESULT(capac)
 !==============================================================================
-
-  USE DefUtils
+  USE IceProperties
 
   IMPLICIT None
 
@@ -179,65 +129,15 @@ FUNCTION IceCapacity(Model, Node, temp) RESULT(capac)
   INTEGER :: Node
   REAL(KIND=dp) :: temp, capac
 
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
+  capac = IceCapacity(Model,temp)
 
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
-  ENDIF
-
-  If (Height > 10.100) THEN ! This is ice
-    capac = 146.3+(7.253*temp)
-  ELSE                      ! A low heat capacity layer
-    capac = 200
-  ENDIF
-
-END FUNCTION IceCapacity
+END FUNCTION IceCapacity_SI
 
 !==============================================================================
 FUNCTION IceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
 !==============================================================================
 
-  USE DefUtils
+  USE IceProperties
 
   IMPLICIT None
 
@@ -245,66 +145,15 @@ FUNCTION IceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
   INTEGER :: Node
   REAL(KIND=dp) :: temp, capac
 
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
-
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('IceConductivity', 'Cound not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Cound not find Total Depth Name')
-  ENDIF
-
-  If (Height > 10.100) THEN ! This is ice
-    capac = 146.3+(7.253*temp)
-  ELSE                      ! A low heat capacity layer
-    capac = 200
-  ENDIF
-  capac = capac * 31557600.0**2
+  capac = IceCapacity(Model,temp) * (31557600.0_dp**2.0_dp)
 
 END FUNCTION IceCapacity_m_Mpa_a
 
 !==============================================================================
-FUNCTION IcePressureMeltingPoint(Model, Node, press) RESULT(Tpmp)
+FUNCTION IcePressureMeltingPoint_K_SI(Model, Node, press) RESULT(Tpmp)
 !==============================================================================
 
-  USE DefUtils
+  USE IceProperties
 
   IMPLICIT None
 
@@ -326,12 +175,46 @@ FUNCTION IcePressureMeltingPoint(Model, Node, press) RESULT(Tpmp)
     ClausiusClapeyron = GetConstReal( Constants, 'Clausius Clapeyron Constant', GotIt)
     IF (.NOT.GotIt) THEN
       ClausiusClapeyron = 9.8d-08
-      CALL INFO("IcePressureMeltingPoint","No entry found for >Clausius Clapeyron Constant<. Setting to 9.8d-08 (SI units)")
+      CALL INFO("IcePressureMeltingPoint","No entry found for >Clausius Clapeyron Constant<.",Level=9)
+      CALL INFO("IcePressureMeltingPoint","Setting to 9.8d-08 (SI units)",Level=9)
     END IF
   END IF
 
-  Tpmp = 273.15 - ClausiusClapeyron*MAX(press, 0.0_dp)
+  Tpmp = IcePressureMeltingPoint(Model,ClausiusClapeyron,press)
 
-END FUNCTION IcePressureMeltingPoint
+END FUNCTION IcePressureMeltingPoint_K_SI
+!==============================================================================
+FUNCTION IcePressureMeltingPoint_C_SI(Model, Node, press) RESULT(Tpmp)
+!==============================================================================
 
+  USE IceProperties
+
+  IMPLICIT None
+
+  TYPE(Model_t) :: Model
+  INTEGER :: Node
+  REAL(KIND=dp) :: Tpmp, press
+
+  INTEGER :: N
+  REAL(KIND=dp) :: ClausiusClapeyron
+  TYPE(ValueList_t), POINTER :: Constants
+  LOGICAL :: FirstTime = .TRUE., GotIt
+
+  SAVE FirstTime, ClausiusClapeyron
+
+  IF (FirstTime) THEN
+    FirstTime = .FALSE.
+    Constants => GetConstants()
+    IF (.NOT.ASSOCIATED(Constants)) CALL FATAL("IcePressureMeltingPoint","No Constants associated.")
+    ClausiusClapeyron = GetConstReal( Constants, 'Clausius Clapeyron Constant', GotIt)
+    IF (.NOT.GotIt) THEN
+      ClausiusClapeyron = 9.8d-08
+      CALL INFO("IcePressureMeltingPoint","No entry found for >Clausius Clapeyron Constant<.",Level=9)
+      CALL INFO("IcePressureMeltingPoint","Setting to 9.8d-08 (SI units)",Level=9)
+    END IF
+  END IF
+
+  Tpmp = IcePressureMeltingPoint(Model,ClausiusClapeyron,press) - 273.15_dp
+
+END FUNCTION IcePressureMeltingPoint_C_SI
 !==============================================================================

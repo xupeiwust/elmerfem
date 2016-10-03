@@ -130,7 +130,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
     !-----------------------------------------------
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Model')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Model')
     ENDIF
 
     ! Keep as is for the moment
@@ -141,58 +141,58 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
 
     L = GetCReal( Material, 'Latent Heat', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Latent Heat')
+      CALL FATAL('Permafrost', 'Could not find Latent Heat')
     ENDIF
 
     !--- Rock parameters ---
     !rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
     !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Cound not find Permafrost Density Rock')
+    !   CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
     !ENDIF
     !Cr = GetCReal( Material, 'Permafrost Heat Capacity Rock', Found )
     !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Rock')
+    !   CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Rock')
     !ENDIF
 
     !--- Water parameters ---
     rhow = GetCReal( Material, 'Permafrost Density Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
     ENDIF
     Cw = GetCReal( Material, 'Permafrost Heat Capacity Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Water')
     ENDIF
 
     !--- Ice parameters ---
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Ice')
     ENDIF
     Ci = GetCReal( Material, 'Permafrost Heat Capacity Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Ice')
     ENDIF
 
     !--- Power Law model parameters ---
     IF (TRIM(PermafrostModel) .EQ. "power law") THEN
       a = GetCReal( Material, 'Permafrost Power Law Factor', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Factor')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Factor')
       ENDIF
       b = GetCReal( Material, 'Permafrost Power Law Exponent', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Exponent')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Exponent')
       ENDIF
       dT = GetCReal( Material, 'Permafrost Power law Temperature Offset', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power law Temperature Offset')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power law Temperature Offset')
       ENDIF
       !--- Exponential model parameters ---
     ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
       a = GetCReal( Material, 'Permafrost Exponential Temperature Interval', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Exponential Temperature Interval')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Exponential Temperature Interval')
       ENDIF
     ELSE
       CALL FATAL('Permafrost', 'Unknown Permafrost Model')
@@ -238,19 +238,19 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Porosity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Porosity')
   ENDIF
   Capacity(1:N) = ListGetReal ( Material, 'Permafrost Heat Capacity Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity')
   ENDIF
   Density(1:N) = ListGetReal ( Material, 'Permafrost Density Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Density')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Density')
   ENDIF
 
   DO i = 1, N
@@ -316,7 +316,7 @@ END FUNCTION PermafrostEnthalpy
 
 !==============================================================================
 FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
-  !==============================================================================
+!==============================================================================
 
   USE DefUtils
   USE types
@@ -393,7 +393,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
     !-----------------------------------------------
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Model')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Model')
     ENDIF
 
     ! Keep as is for the moment
@@ -404,58 +404,58 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
 
     L = GetCReal( Material, 'Latent Heat', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Latent Heat')
+      CALL FATAL('Permafrost', 'Could not find Latent Heat')
     ENDIF
 
     !--- Rock parameters ---
     !rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
     !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Cound not find Permafrost Density Rock')
+    !   CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
     !ENDIF
     !Cr = GetCReal( Material, 'Permafrost Heat Capacity Rock', Found )
     !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Rock')
+    !   CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Rock')
     !ENDIF
 
     !--- Water parameters ---
     rhow = GetCReal( Material, 'Permafrost Density Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
     ENDIF
     Cw = GetCReal( Material, 'Permafrost Heat Capacity Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Water')
     ENDIF
 
     !--- Ice parameters ---
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Ice')
     ENDIF
     Ci = GetCReal( Material, 'Permafrost Heat Capacity Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Ice')
     ENDIF
 
     !--- Power Law model parameters ---
     IF (TRIM(PermafrostModel) .EQ. "power law") THEN
       a = GetCReal( Material, 'Permafrost Power Law Factor', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Factor')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Factor')
       ENDIF
       b = GetCReal( Material, 'Permafrost Power Law Exponent', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Exponent')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Exponent')
       ENDIF
       dT = GetCReal( Material, 'Permafrost Power law Temperature Offset', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power law Temperature Offset')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power law Temperature Offset')
       ENDIF
       !--- Exponential model parameters ---
     ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
       a = GetCReal( Material, 'Permafrost Exponential Temperature Interval', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Exponential Temperature Interval')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Exponential Temperature Interval')
       ENDIF
     ELSE
       CALL FATAL('Permafrost', 'Unknown Permafrost Model')
@@ -501,19 +501,19 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Porosity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Porosity')
   ENDIF
   Capacity(1:N) = ListGetReal ( Material, 'Permafrost Heat Capacity Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Capacity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity')
   ENDIF
   Density(1:N) = ListGetReal ( Material, 'Permafrost Density Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Density')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Density')
   ENDIF
 
   DO i = 1, N
@@ -653,7 +653,7 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
     !-----------------------------------------------
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Model')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Model')
     ENDIF
 
     porscale = GetCReal( Material, 'Permafrost Porosity Depth Scale', Found )
@@ -665,38 +665,38 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
 
     !rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
     !IF (.NOT. Found) THEN
-    !  CALL FATAL('Permafrost', 'Cound not find Permafrost Density Rock')
+    !  CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
     !ENDIF
 
     rhow = GetCReal( Material, 'Permafrost Density Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
     ENDIF
 
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Ice')
     ENDIF
 
     !--- Power Law model parameters ---
     IF (TRIM(PermafrostModel) .EQ. "power law") THEN
       a = GetCReal( Material, 'Permafrost Power Law Factor', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Factor')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Factor')
       ENDIF
       b = GetCReal( Material, 'Permafrost Power Law Exponent', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Exponent')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Exponent')
       ENDIF
       dT = GetCReal( Material, 'Permafrost Power law Temperature Offset', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power law Temperature Offset')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power law Temperature Offset')
       ENDIF
       !--- Exponential model parameters ---
     ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
       a = GetCReal( Material, 'Permafrost Exponential Temperature Interval', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Exponential Temperature Interval')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Exponential Temperature Interval')
       ENDIF
     ELSE
       CALL FATAL('Permafrost', 'Unknown Permafrost Model')
@@ -733,13 +733,13 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Porosity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Porosity')
   ENDIF
   Density(1:N) = ListGetReal ( Material, 'Permafrost Density Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Density')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Density')
   ENDIF
 
 
@@ -883,7 +883,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
     !-----------------------------------------------
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Model')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Model')
     ENDIF
 
     porscale = GetCReal( Material, 'Permafrost Porosity Depth Scale', Found )
@@ -893,43 +893,43 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
 
     rhow = GetCReal( Material, 'Permafrost Density Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
     ENDIF
 
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Ice')
     ENDIF
 
     Kw = GetCReal( Material, 'Permafrost Heat Conductivity Water', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Conductivity Water')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Conductivity Water')
     ENDIF
 
     Ki = GetCReal( Material, 'Permafrost Heat Conductivity Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Conductivity Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Heat Conductivity Ice')
     ENDIF
 
     !--- Power Law model parameters ---
     IF (TRIM(PermafrostModel) .EQ. "power law") THEN
       a = GetCReal( Material, 'Permafrost Power Law Factor', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Factor')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Factor')
       ENDIF
       b = GetCReal( Material, 'Permafrost Power Law Exponent', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power Law Exponent')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power Law Exponent')
       ENDIF
       dT = GetCReal( Material, 'Permafrost Power law Temperature Offset', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Power law Temperature Offset')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Power law Temperature Offset')
       ENDIF
       !--- Exponential model parameters ---
     ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
       a = GetCReal( Material, 'Permafrost Exponential Temperature Interval', Found )
       IF (.NOT. Found) THEN
-        CALL FATAL('Permafrost', 'Cound not find Permafrost Exponential Temperature Interval')
+        CALL FATAL('Permafrost', 'Could not find Permafrost Exponential Temperature Interval')
       ENDIF
     ELSE
       CALL FATAL('Permafrost', 'Unknown Permafrost Model')
@@ -969,19 +969,19 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
        N, Element % NodeIndexes, Found, &
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Porosity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Porosity')
   ENDIF
   Conductivity(1:N) = ListGetReal ( Material, 'Permafrost Heat Conductivity Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Heat Conductivity')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Heat Conductivity')
   ENDIF
   Density(1:N) = ListGetReal ( Material, 'Permafrost Density Rock', &
        N, Element % NodeIndexes, Found, & 
        UnfoundFatal=UnfoundFatal )
   IF (.NOT. Found) THEN
-    CALL FATAL('Permafrost', 'Cound not find Permafrost Density')
+    CALL FATAL('Permafrost', 'Could not find Permafrost Density')
   ENDIF
 
 
@@ -1111,19 +1111,19 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
     !--- Rock parameters ---
     rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Rock')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
     ENDIF
 
     !--- Water parameters ---
     !rhow = GetCReal( Material, 'Permafrost Density Water', Found )
     !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Cound not find Permafrost Density Water')
+    !   CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
     !ENDIF
 
     !--- Ice parameters ---
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
     IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Cound not find Permafrost Density Ice')
+      CALL FATAL('Permafrost', 'Could not find Permafrost Density Ice')
     ENDIF
 
   ENDIF ! End of FirstTime
@@ -1198,4 +1198,277 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   !enthalpy = (phir*rhor*Cr + (pordepth-phiw)*rhoi*Ci + phiw*rhow*Cw)*(Temp) + phiw*rhow*L
 
 END FUNCTION PermafrostPressure
+
+!==============================================================================
+FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
+!==============================================================================
+
+  USE DefUtils
+  USE IceProperties
+
+  IMPLICIT None
+
+  TYPE(Model_t) :: Model
+  INTEGER :: Node
+  REAL(KIND=dp) :: temp, cond
+
+  ! Local variables
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
+
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
+  Height = 100 ! Assume there is ice
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
+  IF ( ASSOCIATED(HeightVar) ) THEN
+    Height = HeightVar % Values ( HeightVar % Perm(Node) )
+  ELSE
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
+    IF ( ASSOCIATED(HeightVar2) ) THEN
+      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
+    ELSE
+      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+    END IF
+  END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
+  ENDIF
+
+  IF (Height > 10.1_dp) THEN  ! This is ice
+    cond = IceConductivity(Model,temp)
+  ELSE                       ! A very conductive layer
+    cond = 20.0_dp
+  ENDIF
+
+END FUNCTION  PermafrostIceConductivity
+
+!==============================================================================
+FUNCTION  PermafrostIceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
+!==============================================================================
+
+  USE DefUtils
+  USE IceProperties
+
+
+  IMPLICIT None
+
+  TYPE(Model_t) :: Model
+  INTEGER :: Node
+  REAL(KIND=dp) :: temp, cond
+
+  ! Local variables
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
+
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
+  Height = 100 ! Assume there is ice
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
+  IF ( ASSOCIATED(HeightVar) ) THEN
+    Height = HeightVar % Values ( HeightVar % Perm(Node) )
+  ELSE
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
+    IF ( ASSOCIATED(HeightVar2) ) THEN
+      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
+    ELSE
+      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+    END IF
+  END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
+  ENDIF
+
+  IF (Height > 10.100) THEN  ! This is ice
+    cond = IceConductivity(Model,temp)
+  ELSE                       ! A very conductive layer
+    cond = 20.0_dp
+  ENDIF
+  cond = cond * 31557600.0_dp * 1.0e-06 ! From SI to m-MPa-a
+
+END FUNCTION PermafrostIceConductivity_m_Mpa_a
+
+!==============================================================================
+FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
+!==============================================================================
+
+  USE DefUtils
+  USE IceProperties
+
+
+  IMPLICIT None
+
+  TYPE(Model_t) :: Model
+  INTEGER :: Node
+  REAL(KIND=dp) :: temp, capac
+
+  ! Local variables
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
+
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
+  Height = 100 ! Assume there is ice
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
+  IF ( ASSOCIATED(HeightVar) ) THEN
+    Height = HeightVar % Values ( HeightVar % Perm(Node) )
+  ELSE
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
+    IF ( ASSOCIATED(HeightVar2) ) THEN
+      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
+    ELSE
+      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+    END IF
+  END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
+  ENDIF
+
+  If (Height > 10.100) THEN ! This is ice
+    capac = IceCapacity(Model,temp)
+  ELSE                      ! A low heat capacity layer
+    capac = 200.0_dp
+  ENDIF
+
+END FUNCTION PermafrostIceCapacity
+
+!==============================================================================
+FUNCTION  PermafrostIceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
+!==============================================================================
+
+  USE DefUtils
+  USE IceProperties
+
+  IMPLICIT None
+
+  TYPE(Model_t) :: Model
+  INTEGER :: Node
+  REAL(KIND=dp) :: temp, capac
+
+  ! Local variables
+  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
+  REAL(KIND=dp) :: Height, TotalHeight
+
+  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
+
+  LOGICAL :: Found, Found2
+
+  !---------------------------------------------------------------------------
+  ! Get the height of ice layer 
+  ! Default is either upper layer or the only layer
+  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
+  !---------------------------------------------------------------------------
+  Height = 100 ! Assume there is ice
+  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
+  IF (.NOT.Found) THEN
+    WRITE(HeightVarName,'(A)') 'max upper depth'
+    WRITE(Height2VarName,'(A)') 'max depth'
+  ELSE
+    WRITE(Height2VarName,'(A)') 'Depth'
+  END IF
+
+  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
+  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
+  IF ( ASSOCIATED(HeightVar) ) THEN
+    Height = HeightVar % Values ( HeightVar % Perm(Node) )
+  ELSE
+    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
+    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
+    IF ( ASSOCIATED(HeightVar2) ) THEN
+      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
+    ELSE
+      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+    END IF
+  END IF
+
+  IF (Found) THEN
+    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
+    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
+    Height = TotalHeight - Height
+  ELSE
+    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
+  ENDIF
+
+  If (Height > 10.100) THEN ! This is ice
+    capac = IceCapacity(Model,temp)
+  ELSE                      ! A low heat capacity layer
+    capac = 200.0_dp
+  ENDIF
+  capac = capac * (31557600.0_dp**2.0_dp)
+
+END FUNCTION PermafrostIceCapacity_m_MPa_a
+
 
