@@ -173,8 +173,7 @@ FUNCTION getFrictionLoads(  Model, Node, DummyInput )RESULT(frictionLoad)
   SAVE FirstTime, FunctionName, DIM
 
   IF (FirstTime) THEN
-     WRITE(FunctionName,'(A)') 'USF_GetFrictionHeating(getFrictionLoads)'
-     FirstTime = .FALSE.    
+     WRITE(FunctionName,'(A)') 'USF_GetFrictionHeating(getFrictionLoads)'        
      DIM = CoordinateSystemDimension()
   END IF
 
@@ -188,9 +187,10 @@ FUNCTION getFrictionLoads(  Model, Node, DummyInput )RESULT(frictionLoad)
       WRITE(FlowSolutionName,'(A)') 'Flow Solution'
       WRITE(Message,'(A,A)') 'Using default name for flow solution: ', &
            FlowSolutionName
-      CALL WARN(FunctionName,Message)
+      IF (FirstTime) CALL WARN(FunctionName,Message)
     END IF
   END IF
+
   FlowSol => VariableGet( Model % Variables, TRIM(FlowSolutionName),UnFoundFatal=UnFoundFatal)
   FlowPerm    => FlowSol % Perm
   FlowValues  => FlowSol % Values
@@ -203,9 +203,12 @@ FUNCTION getFrictionLoads(  Model, Node, DummyInput )RESULT(frictionLoad)
       WRITE(FlowLoadsName,'(A)') TRIM(FlowSolutionName)//' Loads'
       WRITE(Message,'(A,A)') 'Using default name for flow solution: ', &
            FlowLoadsName
-      CALL WARN(FunctionName,Message)
+      IF (FirstTime) CALL WARN(FunctionName,Message)
     END IF
   END IF
+
+  IF (FirstTime) FirstTime = .FALSE.
+  
   FlowLoadSol => VariableGet( Model % Variables, TRIM(FlowLoadsName),UnFoundFatal=UnFoundFatal)
   FlowLoadPerm    => FlowLoadSol % Perm
   FlowLoadValues  => FlowLoadSol % Values
