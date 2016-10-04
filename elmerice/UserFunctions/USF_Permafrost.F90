@@ -1226,7 +1226,7 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
   ! Default is either upper layer or the only layer
   ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
   !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
+  Height = 100.0_dp ! Assume there is ice
   HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
   IF (.NOT.Found) THEN
     WRITE(HeightVarName,'(A)') 'max upper depth'
@@ -1245,17 +1245,17 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+      CALL FATAL(' PermafrostIceConductivity', 'Could not find depth or upper depth')
     END IF
   END IF
 
   IF (Found) THEN
     TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    IF (.NOT.Found2) &
+         CALL FATAL('PermafrostIceConductivity', 'Could not find Total Depth Name')
     TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
     TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
     Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
   ENDIF
 
   IF (Height > 10.1_dp) THEN  ! This is ice
@@ -1313,25 +1313,25 @@ FUNCTION  PermafrostIceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+      CALL FATAL('PermafrostIceConductivity_m_Mpa_a', 'Could not find depth or upper depth')
     END IF
   END IF
 
   IF (Found) THEN
     TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    IF (.NOT.Found2) &
+         CALL FATAL('PermafrostIceConductivity_m_Mpa_a', 'Could not find Total Depth Name')
     TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
     TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
     Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
   ENDIF
 
-  IF (Height > 10.100) THEN  ! This is ice
+  IF (Height > 10.100_dp) THEN  ! This is ice
     cond = IceConductivity(Model,temp)
   ELSE                       ! A very conductive layer
     cond = 20.0_dp
   ENDIF
-  cond = cond * 31557600.0_dp * 1.0e-06 ! From SI to m-MPa-a
+  cond = cond * 31557600.0_dp * 1.0d-06 ! From SI to m-MPa-a
 
 END FUNCTION PermafrostIceConductivity_m_Mpa_a
 
@@ -1382,17 +1382,17 @@ FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+      CALL FATAL('PermafrostIceCapacity', 'Could not find depth or upper depth')
     END IF
   END IF
 
   IF (Found) THEN
     TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    IF (.NOT. Found2) &
+         CALL FATAL('PermafrostIceCapacity', 'Could not find Total Depth Name')
     TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
     TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
     Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
   ENDIF
 
   If (Height > 10.100) THEN ! This is ice
@@ -1449,17 +1449,17 @@ FUNCTION  PermafrostIceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
     IF ( ASSOCIATED(HeightVar2) ) THEN
       Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
     ELSE
-      CALL FATAL('IceConductivity', 'Could not find depth or upper depth')
+      CALL FATAL('PermafrostIceCapacity_m_MPa_a', 'Could not find depth or upper depth')
     END IF
   END IF
 
   IF (Found) THEN
     TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
+    IF (.NOT.Found2) &
+         CALL FATAL('PermafrostIceCapacity_m_MPa_a', 'Could not find Total Depth Name')
     TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
     TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
     Height = TotalHeight - Height
-  ELSE
-    CALL FATAL('IceConductivity', 'Could not find Total Depth Name')
   ENDIF
 
   If (Height > 10.100) THEN ! This is ice
