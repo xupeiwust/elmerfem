@@ -85,7 +85,7 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
 
   SAVE Visited,Initialized,UnitVector,Coord,MaskExists,MaskPerm,TopPointer,BotPointer,&
       TopMode,BotMode,TopField,BotField,TopPerm,BotPerm,Field,Surface,nsize, OrigCoord, &
-      nnodes, ComputeTangledMask, MidPointer, MidLayerExists, ActiveDirection
+      nnodes, ComputeTangledMask, MidPointer, MidLayerExists, ActiveDirection, TrueCoord
 
   CALL Info( 'StructuredMeshMapper','---------------------------------------',Level=4 )
   CALL Info( 'StructuredMeshMapper','Performing mapping on a structured mesh ',Level=4 )
