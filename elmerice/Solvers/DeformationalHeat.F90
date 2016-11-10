@@ -201,7 +201,7 @@ CONTAINS
 
         mu = SUM( Viscosity(1:n) * Basis(1:n) )
         mu = EffectiveViscosity( mu, 1.0_dp , Velo(1,:) , Velo(2,:), Velo(3,:), &
-                                   Element, Nodes, n, n, IP % U(t), IP % V(t), IP % W(t) )
+             Element, Nodes, n, n, IP % U(t), IP % V(t), IP % W(t) )
         IF (Specific) THEN
           rho = SUM( Density(1:n) * Basis(1:n) )
         ELSE
@@ -220,7 +220,8 @@ CONTAINS
                End do
           END DO
          DO p=1,n
-            Force(p) = Force(p) + IP % S(t) * detJ * 0.5_dp * mu * SecondInvariant(VeloIP,LGrad)  * Basis(p)/rho
+           Force(p) = Force(p) + &
+                IP % S(t) * detJ * 0.5_dp * mu * SecondInvariant(VeloIP,LGrad)  * Basis(p)/rho
        END DO
     END DO
 !------------------------------------------------------------------------------

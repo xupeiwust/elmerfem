@@ -89,13 +89,14 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press ! For computing pressures
-
+  REAL(KIND=dp), PARAMETER :: factor=1.0E-06
+  
   INTEGER :: N, istat, i, k
 
   CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel, DepthVarName
 
   LOGICAL :: FirstTime = .TRUE.
-  LOGICAL :: Found, UnfoundFatal
+  LOGICAL :: Found, UnfoundFatal, ScaleSystem
 
   SAVE porscale
   SAVE rhow, rhoi
@@ -311,6 +312,11 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   ENDIF
 
   enthalpy = (phir*rhor*Cr + (pordepth-phiw)*rhoi*Ci + phiw*rhow*Cw)*(Temp) + phiw*rhow*L
+  
+  ! scale with remaining scaling factor of rhoi*Ci or rhow*L
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem)  enthalpy = enthalpy * factor
 
 END FUNCTION PermafrostEnthalpy
 
@@ -352,13 +358,14 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press ! For computing pressures
+  REAL(KIND=dp), PARAMETER :: factor=(31556926.0_dp)**(2.0_dp)
 
   INTEGER :: N, istat, i, k
 
   CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel, DepthVarName
 
   LOGICAL :: FirstTime = .TRUE.
-  LOGICAL :: Found, UnfoundFatal
+  LOGICAL :: Found, UnfoundFatal, ScaleSystem
 
   SAVE porscale
   SAVE rhow, rhoi
@@ -370,7 +377,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
   Element => Model % CurrentElement
   Material => GetMaterial(Element)
   IF (.NOT.ASSOCIATED(Material)) THEN
-    CALL FATAL('Permafrost', 'No Material found')
+    CALL FATAL('PermafrostCapacity', 'No Material found')
   END IF
 
   IF (FirstTime) THEN
@@ -575,6 +582,9 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
 
   enthalpy = phir*Cr + (pordepth-phiw)*Ci + phiw*Cw
 
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem)  enthalpy = enthalpy * factor
 END FUNCTION PermafrostCapacity
 
 !==============================================================================
@@ -612,13 +622,14 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press
-
+  REAL(KIND=dp), PARAMETER :: factor=1.0_dp/(1.0d06 * 31557600.0_dp**2.0_dp)
+  
   INTEGER :: N, istat, i, k
 
   CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
 
   LOGICAL :: FirstTime = .TRUE.
-  LOGICAL :: Found, UnfoundFatal
+  LOGICAL :: Found, UnfoundFatal, ScaleSystem
 
   SAVE porscale
   SAVE rhow, rhoi
@@ -787,7 +798,7 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
     IF (Temp > Tpmp) then
       fw = 1.0
     ELSE
-      fw = EXP(-((Temp - Tpmp)/a)**2)
+      fw = EXP(-((Temp - Tpmp)/a)**2.0_dp)
     ENDIF
     phiw =  pordepth * fw
   ELSE
@@ -799,8 +810,16 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   IF (phiw > pordepth) THEN
     phiw = pordepth
   ENDIF
-
+  
   Dens = phir*rhor + (pordepth-phiw)*rhoi + phiw*rhow
+
+    Material => GetMaterial(Model % CurrentElement)
+  IF (.NOT.ASSOCIATED(Material)) THEN
+    CALL FATAL('Permafrost', 'No Material found')
+  END IF
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem) Dens = Dens * factor
 
 END FUNCTION PermafrostDensity
 
@@ -842,13 +861,14 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press
-
+  REAL(KIND=dp), PARAMETER ::  factor = 31.5576000_dp
+  
   INTEGER :: N, istat, i, k
 
   CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
 
   LOGICAL :: FirstTime = .TRUE.
-  LOGICAL :: Found, UnfoundFatal
+  LOGICAL :: Found, UnfoundFatal, ScaleSystem
 
   SAVE porscale
   SAVE rhoi, rhow
@@ -1026,7 +1046,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
     IF (Temp > Tpmp) then
       fw = 1.0
     ELSE
-      fw = EXP(-((Temp - Tpmp)/a)**2)
+      fw = EXP(-((Temp - Tpmp)/a)**2.0_dp)
     ENDIF
     phiw =  pordepth * fw
   ELSE
@@ -1039,6 +1059,17 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   ENDIF
 
   Cond = Kr**phir * Ki**(pordepth-phiw) * Kw**phiw
+  
+  Material => GetMaterial(Model % CurrentElement)
+  IF (.NOT.ASSOCIATED(Material)) THEN
+    CALL FATAL('Permafrost', 'No Material found')
+  END IF
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem) THEN
+    CALL INFO('PermafrostConductivity','Applying Mpa-m-a scaling',Level=9)
+    Cond = Cond * factor
+  END IF
   !write (*,*) Depth, Kr, Kw, phir, phiw, pordepth, Kr**phir * Ki**(pordepth-phiw) * Kw**phiw
 
 END FUNCTION PermafrostConductivity
@@ -1066,6 +1097,7 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
 
   TYPE(Variable_t), POINTER :: DepthVar, DepthVar2
   REAL(KIND=dp) :: Depth, Depth2
+  REAL(KIND=dp), PARAMETER :: factor = 1.0d-06
 
   !REAL(KIND=dp) :: por                 ! Porosity
   !REAL(KIND=dp) :: porscale            ! Porosity length scale
@@ -1085,7 +1117,7 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   !CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
 
   LOGICAL :: FirstTime = .TRUE.
-  LOGICAL :: Found
+  LOGICAL :: Found, ScaleSystem
 
   ! SAVE porscale
   SAVE rhor, rhow, rhoi
@@ -1169,6 +1201,17 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   pice = iceDepth * rhoi * 9.81
   prock = Depth * rhor * 9.81
   pressure = pice + prock
+  
+  Material => GetMaterial(Model % CurrentElement)
+  IF (.NOT.ASSOCIATED(Material)) THEN
+    CALL FATAL('Permafrost', 'No Material found')
+  END IF
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem) THEN
+    CALL INFO('PermafrostPressure','Applying Mpa-m-a scaling',Level=9)
+    pressure = pressure * factor
+  END IF
   !write (*,*) Depth, Depth2, iceDepth, pressure
   !Tpmp = 273.15 - 9.8E-08*press
 
@@ -1214,12 +1257,14 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
 
   ! Local variables
   TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
+  TYPE(ValueList_t), POINTER :: Material
+  REAL(KIND=dp) :: Height, TotalHeight, MinimumIceDepth
+  REAL(KIND=dp), PARAMETER ::  factor = 31.5576000_dp 
 
   CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
   CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
 
-  LOGICAL :: Found, Found2
+  LOGICAL :: Found, Found2, ScaleSystem
 
   !---------------------------------------------------------------------------
   ! Get the height of ice layer 
@@ -1258,82 +1303,31 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
     Height = TotalHeight - Height
   ENDIF
 
-  IF (Height > 10.1_dp) THEN  ! This is ice
+  Material => GetMaterial(Model % CurrentElement)
+  IF (.NOT.ASSOCIATED(Material)) THEN
+    CALL FATAL('Permafrost', 'No Material found')
+  END IF
+
+  MinimumIceDepth = GetConstReal(Material, 'Minimum Height', Found)
+  IF (.NOT.Found) THEN
+    CALL FATAL('PermafrostIceConductivity','No variable >Minimum Height< found in Material')
+  END IF
+  
+  IF (Height > MinimumIceDepth) THEN  ! This is ice
     cond = IceConductivity(Model,temp)
   ELSE                       ! A very conductive layer
     cond = 20.0_dp
   ENDIF
 
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+  IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem) THEN
+    CALL INFO('PermafrostIceConductivity','Applying Mpa-m-a scaling',Level=9)
+    cond = cond * factor
+  END IF
+  
 END FUNCTION  PermafrostIceConductivity
 
-!==============================================================================
-FUNCTION  PermafrostIceConductivity_m_Mpa_a(Model, Node, temp) RESULT(cond)
-!==============================================================================
-
-  USE DefUtils
-  USE IceProperties
-
-
-  IMPLICIT None
-
-  TYPE(Model_t) :: Model
-  INTEGER :: Node
-  REAL(KIND=dp) :: temp, cond
-
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
-
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('PermafrostIceConductivity_m_Mpa_a', 'Could not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    IF (.NOT.Found2) &
-         CALL FATAL('PermafrostIceConductivity_m_Mpa_a', 'Could not find Total Depth Name')
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ENDIF
-
-  IF (Height > 10.100_dp) THEN  ! This is ice
-    cond = IceConductivity(Model,temp)
-  ELSE                       ! A very conductive layer
-    cond = 20.0_dp
-  ENDIF
-  cond = cond * 31557600.0_dp * 1.0d-06 ! From SI to m-MPa-a
-
-END FUNCTION PermafrostIceConductivity_m_Mpa_a
 
 !==============================================================================
 FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
@@ -1351,12 +1345,14 @@ FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
 
   ! Local variables
   TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
+  TYPE(ValueList_t), POINTER :: Material
+  REAL(KIND=dp) :: Height, TotalHeight, MinimumIceDepth
+  REAL(KIND=dp), PARAMETER :: factor = 31557600.0_dp**2.0_dp
 
   CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
   CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
 
-  LOGICAL :: Found, Found2
+  LOGICAL :: Found, Found2, ScaleSystem
 
   !---------------------------------------------------------------------------
   ! Get the height of ice layer 
@@ -1395,80 +1391,29 @@ FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
     Height = TotalHeight - Height
   ENDIF
 
-  If (Height > 10.100) THEN ! This is ice
+  Material => GetMaterial(Model % CurrentElement)
+  IF (.NOT.ASSOCIATED(Material)) THEN
+    CALL FATAL('Permafrost', 'No Material found')
+  END IF
+  
+  MinimumIceDepth = GetConstReal(Material, 'Minimum Height', Found)
+  IF (.NOT.Found) THEN
+    CALL FATAL('PermafrostIceConductivity','No variable >Minimum Height< found in Material')
+  END IF
+  If (Height > MinimumIceDepth) THEN ! This is ice
     capac = IceCapacity(Model,temp)
   ELSE                      ! A low heat capacity layer
     capac = 200.0_dp
   ENDIF
-
+ 
+  ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
+    IF (.NOT.Found) ScaleSystem=.FALSE.
+  IF (ScaleSystem) THEN
+    CALL INFO('PermafrostIceCapacity','Applying Mpa-m-a scaling',Level=9)
+    capac = capac * factor
+  END IF
 END FUNCTION PermafrostIceCapacity
 
-!==============================================================================
-FUNCTION  PermafrostIceCapacity_m_MPa_a(Model, Node, temp) RESULT(capac)
-!==============================================================================
 
-  USE DefUtils
-  USE IceProperties
-
-  IMPLICIT None
-
-  TYPE(Model_t) :: Model
-  INTEGER :: Node
-  REAL(KIND=dp) :: temp, capac
-
-  ! Local variables
-  TYPE(Variable_t), POINTER :: HeightVar, HeightVar2, TotalHeightVar
-  REAL(KIND=dp) :: Height, TotalHeight
-
-  CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
-  CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
-
-  LOGICAL :: Found, Found2
-
-  !---------------------------------------------------------------------------
-  ! Get the height of ice layer 
-  ! Default is either upper layer or the only layer
-  ! Optional is to give 'Lower Depth Name" and "Total Depth Name"
-  !---------------------------------------------------------------------------
-  Height = 100 ! Assume there is ice
-  HeightVarName = GetString( Model % Solver % Values , 'Lower Depth Name', Found )
-  IF (.NOT.Found) THEN
-    WRITE(HeightVarName,'(A)') 'max upper depth'
-    WRITE(Height2VarName,'(A)') 'max depth'
-  ELSE
-    WRITE(Height2VarName,'(A)') 'Depth'
-  END IF
-
-  !HeightVar => VariableGet(Model % Mesh % Variables, "max upper depth")
-  HeightVar => VariableGet(Model % Mesh % Variables, TRIM(HeightVarName))
-  IF ( ASSOCIATED(HeightVar) ) THEN
-    Height = HeightVar % Values ( HeightVar % Perm(Node) )
-  ELSE
-    !HeightVar2 => VariableGet(Model % Mesh % Variables, "max depth")
-    HeightVar2 => VariableGet(Model % Mesh % Variables, TRIM(Height2VarName))
-    IF ( ASSOCIATED(HeightVar2) ) THEN
-      Height = HeightVar2 % Values ( HeightVar2 % Perm(Node) )
-    ELSE
-      CALL FATAL('PermafrostIceCapacity_m_MPa_a', 'Could not find depth or upper depth')
-    END IF
-  END IF
-
-  IF (Found) THEN
-    TotalHeightVarName = GetString( Model % Solver % Values , 'Total Depth Name', Found2 )
-    IF (.NOT.Found2) &
-         CALL FATAL('PermafrostIceCapacity_m_MPa_a', 'Could not find Total Depth Name')
-    TotalHeightVar => VariableGet(Model % Mesh % Variables, TRIM(TotalHeightVarName))
-    TotalHeight = TotalHeightVar % Values ( TotalHeightVar % Perm(Node) )
-    Height = TotalHeight - Height
-  ENDIF
-
-  If (Height > 10.100) THEN ! This is ice
-    capac = IceCapacity(Model,temp)
-  ELSE                      ! A low heat capacity layer
-    capac = 200.0_dp
-  ENDIF
-  capac = capac * (31557600.0_dp**2.0_dp)
-
-END FUNCTION PermafrostIceCapacity_m_MPa_a
 
 

@@ -349,7 +349,7 @@ this ise not in USE
               ArrheniusFactor = A2 * EXP( -Q2/(R * (273.15 + Temp)))
            ELSE
               ArrheniusFactor = A2 * EXP( -Q2/(R * (273.15)))
-              CALL INFO('EffectiveViscosity','Positive Temperature detected in Glen - limiting to zero!', Level = 5)
+              CALL INFO('EffectiveViscosity','Positive Temperature detected in Glen - limiting to zero!', Level = 9)
            END IF
         ELSE
            ArrheniusFactor = GetConstReal(Material,'Arrhenius Factor', GotIt)
