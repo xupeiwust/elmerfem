@@ -321,7 +321,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
 END FUNCTION PermafrostEnthalpy
 
 !==============================================================================
-FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
+FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
 !==============================================================================
 
   USE DefUtils
@@ -334,7 +334,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
 
   TYPE(Model_t) :: Model
   INTEGER :: Node
-  REAL(KIND=dp) :: Temp, enthalpy
+  REAL(KIND=dp) :: Temp, effectivecapacity
 
   ! Local variables
   TYPE(Element_t),POINTER :: Element
@@ -389,9 +389,9 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
          Density(N),      & 
          STAT=istat)
     IF (istat /= 0) THEN
-      CALL FATAL(  'USF_Permafrost', 'Enthalpy memory allocation error' )
+      CALL FATAL(  'USF_Permafrost', 'Effectivecapacity memory allocation error' )
     ELSE
-      WRITE(Message,'(a)') 'Enthalpy memory allocation done'
+      WRITE(Message,'(a)') 'Effectivecapacity memory allocation done'
       CALL INFO("Permafrost",Message,Level=4)
     END IF
 
@@ -580,11 +580,11 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(enthalpy)
     phiw = pordepth
   ENDIF
 
-  enthalpy = phir*Cr + (pordepth-phiw)*Ci + phiw*Cw
+  effectivecapacity = phir*Cr + (pordepth-phiw)*Ci + phiw*Cw
 
   ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
   IF (.NOT.Found) ScaleSystem=.FALSE.
-  IF (ScaleSystem)  enthalpy = enthalpy * factor
+  IF (ScaleSystem)  effectivecapacity = effectivecapacity * factor
 END FUNCTION PermafrostCapacity
 
 !==============================================================================
