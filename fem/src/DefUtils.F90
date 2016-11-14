@@ -4011,6 +4011,20 @@ CONTAINS
        x => Solver % Variable
      END IF
 
+
+     ! -------------------------------------------------------------------------------------
+     ! Apply nodal loads. These should be done prior to determining the limiters.
+     ! -------------------------------------------------------------------------------------    
+     DO DOF=1,x % DOFs
+       name = x % name
+       IF (x % DOFs > 1) name=ComponentName(name,DOF)       
+       CALL SetNodalLoads( CurrentModel,A, b, &
+           Name,DOF,x % DOFs,x % Perm ) ! , Offset ) not yet ?
+     END DO
+
+
+
+     
      ! Create soft limiters to be later applied by the Dirichlet conditions
      ! This is done only once for each solver, hence the complex logic. 
      !---------------------------------------------------------------------
@@ -4137,10 +4151,7 @@ CONTAINS
      ! -------------------------------------------------------------------------------------    
      DO DOF=1,x % DOFs
         name = x % name
-        IF (x % DOFs>1) name=ComponentName(name,DOF)
-
-        CALL SetNodalLoads( CurrentModel,A, b, &
-             Name,DOF,x % DOFs,x % Perm ) ! , Offset ) not yet ?
+        IF (x % DOFs > 1) name = ComponentName(name,DOF)
 
         CALL SetDirichletBoundaries( CurrentModel, A, b, &
              Name, DOF, x % DOFs, x % Perm, Offset, OffDiagonalMatrix )
