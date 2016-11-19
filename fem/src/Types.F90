@@ -177,7 +177,8 @@ END INTERFACE
 
   TYPE Matrix_t
     TYPE(Matrix_t), POINTER :: Child => NULL(), Parent => NULL(), CircuitMatrix => Null(), &
-        ConstraintMatrix=>NULL(), EMatrix=>NULL(), AddMatrix=>NULL(), CollectionMatrix=>NULL()
+        ConstraintMatrix=>NULL(), EMatrix=>NULL(), AddMatrix=>NULL(), CollectionMatrix=>NULL(), &
+        MortarMatrix=>NULL()
 
     INTEGER :: NumberOfRows, ExtraDOFs=0, ParallelDOFs=0
 
@@ -744,7 +745,7 @@ END INTERFACE
       TYPE(Variable_t), POINTER :: Variable => NULL()
 
       TYPE(MortarBC_t), POINTER :: MortarBCs(:) => NULL()
-      LOGICAL :: MortarBCsChanged = .FALSE., MortarBCsOnly=.FALSE.
+      LOGICAL :: MortarBCsChanged = .FALSE.
       INTEGER(KIND=AddrInt) :: MortarProc
 
       TYPE(Graph_t), POINTER :: ColourIndexList => NULL()
