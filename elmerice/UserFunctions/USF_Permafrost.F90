@@ -90,7 +90,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press ! For computing pressures
-  REAL(KIND=dp), PARAMETER :: factor=1.0E-06
+  REAL(KIND=dp), PARAMETER :: factor=1.0d-06
   
   INTEGER :: N, istat, i, k
 
@@ -1267,6 +1267,8 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
   TYPE(ValueList_t), POINTER :: Material
   REAL(KIND=dp) :: Height, TotalHeight, MinimumIceDepth
   REAL(KIND=dp), PARAMETER ::  factor = 31.5576000_dp 
+  REAL(KIND=dp), PARAMETER :: DHeight = 50.0000000_dp 
+  REAL(KIND=dp) :: c0, c1, sigmoid
 
   CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
   CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
@@ -1320,10 +1322,13 @@ FUNCTION PermafrostIceConductivity(Model, Node, temp) RESULT(cond)
     CALL FATAL('PermafrostIceConductivity','No variable >Minimum Height< found in Material')
   END IF
   
-  IF (Height > MinimumIceDepth) THEN  ! This is ice
+  IF (Height > MinimumIceDepth + DHeight) THEN  ! This is ice + DHeight
     cond = IceConductivity(Model,temp)
   ELSE                       ! A very conductive layer
-    cond = 20.0_dp
+    c0 = IceConductivity(Model,temp)
+    c1 = c0*5
+    sigmoid = 1.0/(1.0 + EXP( (-Height + (MinimumIceDepth+DHeight)/2.0)/3.0 ) )
+    cond = c0 + (1.0 - sigmoid) * (c1-c0)
   ENDIF
 
   ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
@@ -1355,6 +1360,8 @@ FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
   TYPE(ValueList_t), POINTER :: Material
   REAL(KIND=dp) :: Height, TotalHeight, MinimumIceDepth
   REAL(KIND=dp), PARAMETER :: factor = 31557600.0_dp**2.0_dp
+  REAL(KIND=dp), PARAMETER :: DHeight = 50.0000000_dp 
+  REAL(KIND=dp) :: c0, c1, sigmoid
 
   CHARACTER(LEN=MAX_NAME_LEN) :: HeightVarName, Height2VarName
   CHARACTER(LEN=MAX_NAME_LEN) :: TotalHeightVarName
@@ -1407,10 +1414,14 @@ FUNCTION  PermafrostIceCapacity(Model, Node, temp) RESULT(capac)
   IF (.NOT.Found) THEN
     CALL FATAL('PermafrostIceConductivity','No variable >Minimum Height< found in Material')
   END IF
-  If (Height > MinimumIceDepth) THEN ! This is ice
+  If (Height > MinimumIceDepth + DHeight) THEN ! This is ice + DHeight
     capac = IceCapacity(Model,temp)
   ELSE                      ! A low heat capacity layer
-    capac = 200.0_dp
+    !capac = 200.0_dp
+    c0 = IceCapacity(Model,temp)
+    c1 = c0*5
+    sigmoid = 1.0/(1.0 + EXP( (-Height + (MinimumIceDepth+DHeight)/2.0)/3.0 ) )
+    capac = c0 + (1.0 - sigmoid) * (c1-c0)
   ENDIF
  
   ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
