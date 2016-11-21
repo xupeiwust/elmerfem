@@ -1701,6 +1701,7 @@ CONTAINS
            
            Found = .FALSE.
            IF( t > Model % NumberOfBulkElements ) THEN
+             IF( t == Model % NumberOfBulkElements + 1 ) LimitDone = .FALSE.
              DO bc = 1,Model % NumberOfBCs
                IF ( Element % BoundaryInfo % Constraint == Model % BCs(bc) % Tag ) THEN
                  Found = .TRUE.
