@@ -10811,7 +10811,12 @@ END FUNCTION SearchNodeL
     IF ( ConstrainedSolve > 0 ) THEN
       CALL Info('SolveSystem','Solving linear system with constraint matrix',Level=10)
       IF( ListGetLogical( Params,'Save Constraint Matrix',Found ) ) THEN
-        CALL SaveProjector(A % ConstraintMatrix,.TRUE.,'cm')
+        IF( ASSOCIATED( A % ConstraintMatrix ) ) &
+            CALL SaveProjector(A % ConstraintMatrix,.TRUE.,'cm')
+      END IF
+      IF( ListGetLogical( Params,'Save Mortar Matrix',Found ) ) THEN
+        IF( ASSOCIATED( A % MortarMatrix ) ) &
+            CALL SaveProjector(A % MortarMatrix,.TRUE.,'mm')
       END IF
       CALL SolveWithLinearRestriction( A,bb,x,Norm,DOFs,Solver )
     ELSE
@@ -11709,8 +11714,6 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
         'Finished Adding MortarMatrix',Level=12)
   END IF
 
-
-  
 !------------------------------------------------------------------------------
 ! Put the AddMatrix to upper part of CollectionMatrix
 !------------------------------------------------------------------------------
@@ -11739,8 +11742,6 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 ! Assumes biorthogonal basis for Lagrange coefficient interpolation, but not
 ! necesserily biorthogonal constraint equation test functions.
 !------------------------------------------------------------------------------
-PRINT *,'Sizes:',StiffMatrix % NumberOfRows, arows, crows, mrows
-
   IF( EliminateConstraints ) THEN
     IF (crows > 0 .AND. mrows > 0 ) THEN
       CALL Fatal('SolveWithLinearRestriction',&
@@ -11753,11 +11754,11 @@ PRINT *,'Sizes:',StiffMatrix % NumberOfRows, arows, crows, mrows
     ELSE IF( mrows > 0 ) THEN
        CALL Info('SolveWithLinearRestriction',&
           'Eliminating Mortars from CollectionMatrix',Level=10)
-      CALL EliminateConstrainedDofs(CollectionMatrix, CollectionVector, &
-          MortarMatrix,MortarVector)
+       CALL EliminateConstrainedDofs(CollectionMatrix, CollectionVector, &
+           MortarMatrix,MortarVector)
     END IF
   END IF
-    
+
 
 !------------------------------------------------------------------------------
 ! Revert back to CRS matrix before going to linear solution
@@ -11780,8 +11781,6 @@ PRINT *,'Sizes:',StiffMatrix % NumberOfRows, arows, crows, mrows
   i = StiffMatrix % NumberOfRows+1
   j = SIZE(CollectionSolution)
 
-  PRINT *,'ij:',i,j
-
   IF( .NOT. InitMultiplier ) THEN
     IF(ExportMultiplier) CollectionSolution(i:j) = MultiplierValues(1:j-i+1)
   END IF
@@ -11795,7 +11794,7 @@ PRINT *,'Sizes:',StiffMatrix % NumberOfRows, arows, crows, mrows
       StiffMatrix % NumberOfRows,0)
 
   CALL Info( 'SolveWithLinearRestriction', 'CollectionVector done', Level=5 )
-
+ 
 !------------------------------------------------------------------------------
 ! Solve the Collection-system 
 !------------------------------------------------------------------------------
@@ -12160,8 +12159,8 @@ CONTAINS
         END IF
 
         IF( ABS( TVals(j) ) < TINY( 1.0_dp ) ) THEN
-          PRINT *,'Tvals too small',ParEnv % MyPe,j,i,k,dMat % InvPerm(i),Tvals(j)
-          CYCLE
+          !PRINT *,'Tvals too small',ParEnv % MyPe,j,i,k,dMat % InvPerm(i),Tvals(j)
+          !CYCLE
         END IF
 
         IF(k == dMat % InvPerm(i)) THEN
@@ -12347,7 +12346,8 @@ CONTAINS
           CALL List_AddToMatrixElement( Lmat, k, &
               StiffMatrix % Cols(l), scl * StiffMatrix % Values(l) )
         END DO
-        TotVec(k) = TotVec(k) + scl * dVec(i)
+
+        TotVec(k) = TotVec(k) + scl * ForceVector(i)
       END DO
     END DO
 
@@ -12415,6 +12415,7 @@ CONTAINS
                   CALL List_AddToMatrixElement( Tmat % listmatrix, i, l, scl*TotMat % Values(p) )
             END DO
             TotVec(i) = TotVec(i) + scl * TotVec(k)
+            IF( TotVec(i) > 1.0e10 ) PRINT *,'i4',i,TotVec(i),k,scl,TotVec(k)
           END DO
         END DO
 

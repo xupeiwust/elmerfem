@@ -9263,7 +9263,7 @@ END SUBROUTINE GetMaxDefs
 
     CHARACTER(LEN=MAX_NAME_LEN) :: Filename
     INTEGER :: i,j,ii,jj
-    REAL(KIND=dp) :: rowsum, dia, val
+    REAL(KIND=dp) :: rowsum, dia, val, tval
     INTEGER, POINTER :: IntInvPerm(:)
     LOGICAL :: GlobalInds
 
@@ -9294,11 +9294,21 @@ END SUBROUTINE GetMaxDefs
       DO j=projector % rows(i), projector % rows(i+1)-1
         jj = projector % cols(j)
         val = projector % values(j)
-        IF( GlobalInds ) THEN
-          jj = CurrentModel % Mesh % ParallelInfo % GlobalDofs(jj)
-          WRITE(1,*) ii,jj,ParEnv % MyPe, val
-        ELSE
-          WRITE(1,*) ii,jj,val
+        IF( ASSOCIATED( projector % tvalues ) ) THEN
+          tval = projector % tvalues(j)
+          IF( GlobalInds ) THEN
+            jj = CurrentModel % Mesh % ParallelInfo % GlobalDofs(jj)
+            WRITE(1,*) ii,jj,ParEnv % MyPe, val, tval
+          ELSE
+            WRITE(1,*) ii,jj,val,tval
+          END IF
+        ELSE          
+          IF( GlobalInds ) THEN
+            jj = CurrentModel % Mesh % ParallelInfo % GlobalDofs(jj)
+            WRITE(1,*) ii,jj,ParEnv % MyPe, val
+          ELSE
+            WRITE(1,*) ii,jj,val
+          END IF
         END IF
       END DO
     END DO
