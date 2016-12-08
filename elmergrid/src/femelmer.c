@@ -517,10 +517,13 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
 /* This procedure reads the mesh assuming ElmerSolver format.
    */
 {
-  int noknots,noelements,nosides,maxelemtype;
+  int noknots,noelements,nosides,maxelemtype,maxnodes,nonodes;
   int sideind[MAXNODESD1],tottypes,elementtype;
   int i,j,k,l,dummyint,cdstat,fail;
   int falseparents,noparents,bctopocreated;
+  int activeperm,activeelemperm,mini,maxi,minelem,maxelem,p1,p2;
+  int *nodeperm,*elemperm,*invperm,*invelemperm;
+  int iostat,noelements0;
   FILE *in;
   char line[MAXLINESIZE],line2[MAXLINESIZE],filename[MAXFILESIZE],directoryname[MAXFILESIZE];
   char *ptr1,*ptr2;
@@ -554,19 +557,23 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
   sscanf(line,"%d",&tottypes);
 
   maxelemtype = 0;
+  maxnodes = 0;
   for(i=1;i<=tottypes;i++) {   
     getline;
     sscanf(line,"%d",&dummyint);
-    if(dummyint > maxelemtype) maxelemtype = dummyint;
+    maxelemtype = MAX( dummyint, maxelemtype );
+    j = maxelemtype % 100;
+    maxnodes = MAX( j, maxnodes );
   }
   printf("Maximum elementtype index is: %d\n",maxelemtype);
+  printf("Maximum number of nodes in element is: %d\n",maxnodes);
   fclose(in);
 
   data->dim = GetElementDimension(maxelemtype);
 
-  data->maxnodes = maxelemtype % 100;
+  data->maxnodes = maxnodes;
   data->noknots = noknots;
-  data->noelements = noelements;
+  data->noelements = noelements0 = noelements;
 
 
   if(info) printf("Allocating for %d knots and %d elements.\n",
@@ -578,48 +585,142 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
   if ((in = fopen(filename,"r")) == NULL) {
     if(info) printf("LoadElmerInput: The opening of the nodes-file %s failed!\n",
 		    filename);
-    return(2);
+    bigerror("Cannot continue without nodes file!\n");
   }
   else 
     printf("Loading %d Elmer nodes from %s\n",noknots,filename);
 
+  activeperm = FALSE;
   for(i=1; i <= noknots; i++) {
     getline;
     sscanf(line,"%d %d %le %le %le",
 	   &j, &dummyint, &(data->x[i]),&(data->y[i]),&(data->z[i]));
-    if(j != i) printf("LoadElmerInput: nodes i=%d j=%d\n",i,j);
+    if(j != i && !activeperm) {
+      printf("LoadElmerInput: The node number (%d) at node %d is not compact, creating permutation\n",j,i);
+      activeperm = TRUE;
+      nodeperm = Ivector(1,noknots);
+      for(k=1;k<i;k++) nodeperm[k] = k;
+    }
+    if(activeperm) nodeperm[i] = j;
   }
   fclose(in);
 
 
+  /* Create inverse permutation for nodes */
+  if(activeperm) {
+    for(i=1;i<=noknots;i++) {
+      if(i==1) {
+	mini = nodeperm[i];
+	maxi = nodeperm[i];
+      }
+      else {
+	mini = MIN(nodeperm[i],mini);
+	maxi = MAX(nodeperm[i],maxi);
+      }
+    }
+    if(info) printf("LoadElmerInput: Node index range is: [%d %d]\n",mini,maxi);
+    invperm = Ivector(mini,maxi);
+    for(i=mini;i<=maxi;i++)
+      invperm[i] = -1;
+    for(i=1;i<=noknots;i++) {
+      j = nodeperm[i];
+      if( invperm[j] > 0 ) 
+	printf("LoadElmerInput: Node %d is redundant which may be problematic!\n",j);      
+      else
+	invperm[j] = i;
+    }
+  }
+  else {
+    mini = 1;
+    maxi = noknots;
+  }
+  
+  
+  activeelemperm = FALSE;
   sprintf(filename,"%s","mesh.elements");
   if ((in = fopen(filename,"r")) == NULL) {
     printf("LoadElmerInput: The opening of the element-file %s failed!\n",
 	   filename);
-    return(3);
+    bigerror("Cannot continue without element file!\n");
   }
   else 
     if(info) printf("Loading %d bulk elements from %s\n",noelements,filename);
-
+  
   for(i=1; i <= noelements; i++) {
-    fscanf(in,"%d",&j);
-    if(0 && i != j) printf("LoadElmerInput: i=%d element=%d\n",i,dummyint);
-    fscanf(in,"%d",&(data->material[j]));
-    fscanf(in,"%d",&elementtype);
+    iostat = fscanf(in,"%d",&j);
+    if(iostat <= 0 ) {
+      printf("LoadElmerInput: Failed reading element line %d, reducing size of element table to %d!\n",i,i-1);
+      data->noelements = noelements = i-1;
+      break;
+    }
+    
+    if(i != j && !activeelemperm) {
+      printf("LoadElmerInput: The element numbering (%d) at element %d is not compact, creating permutation\n",j,i);
+      activeelemperm = TRUE;
+      elemperm = Ivector(1,noelements0);
+      for(k=1; k < i; k++)
+	elemperm[k] = k;
+    }
+    if( activeelemperm ) elemperm[i] = j;
+    iostat = fscanf(in,"%d %d",&(data->material[i]),&elementtype);
+    if( iostat < 2 ) {
+      printf("LoadElmerInput: Failed reading definitions for bulk element %d\n",j);
+      bigerror("Cannot continue without this data!\n");
+    }
     if(elementtype > maxelemtype ) {
       printf("Invalid bulk elementtype: %d\n",elementtype);
       bigerror("Cannot continue with invalid elements");
     }
-    data->elementtypes[j] = elementtype;
-    for(k=0;k< elementtype%100 ;k++) {
+    data->elementtypes[i] = elementtype;
+    nonodes = elementtype % 100;
+    if( nonodes > maxnodes ) {
+      printf("Number of nodes %d in element %d is greater than allocated maximum %d\n",nonodes,j,maxnodes);
+      bigerror("Cannot continue with invalid elements");
+    }
+    for(k=0;k<nonodes;k++) {
       fscanf(in,"%d",&l);
-      data->topology[j][k] = l;
-      if(l < 0 || l > noknots ) {
-	printf("node out of range: %d %d %d %d %d\n",i,j,elementtype,k,l);
+      if( l < mini || l > maxi ) {
+	printf("Node %d in element %d is out of range: %d\n",k+1,j,l);
+	bigerror("Cannot continue with this node numbering");
       }
+      if( activeperm )
+	data->topology[i][k] = invperm[l];
+      else
+	data->topology[i][k] = l;
     }
   }
   fclose(in);
+ 
+
+  /* Create inverse permutation for bulk elements */
+  if(activeelemperm) {
+    for(i=1;i<=noelements;i++) {
+      if(i==1) {
+	minelem = elemperm[i];
+	maxelem = elemperm[i];
+      }
+      else {
+	minelem = MIN(elemperm[i],minelem);
+	maxelem = MAX(elemperm[i],maxelem);
+      }
+    }
+    if(info) printf("LoadElmerInput: Element index range is: [%d %d]\n",minelem,maxelem);
+    invelemperm = Ivector(minelem,maxelem);
+    for(i=minelem;i<=maxelem;i++)
+      invelemperm[i] = -1;
+    for(i=1;i<=noelements;i++) {
+      j = elemperm[i];
+      if( invelemperm[j] > 0 )
+	printf("LoadElmerInput: Element %d is redundant which may be problematic!\n",j);      
+      else	
+	invelemperm[j] = i;
+    }
+  }
+  else {
+    minelem = 1;
+    maxelem = noelements;
+  }
+
 
 
   falseparents = 0;
@@ -639,32 +740,63 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
   if( nosides > 0 ) {
     AllocateBoundary(bound,nosides);
     data->noboundaries = 1;
-  }
+  };
 
   i = 0;
   for(k=1; k <= nosides; k++) {
-
+    
+    iostat = fscanf(in,"%d",&dummyint);
+    if( iostat < 1 ) {
+      printf("LoadElmerInput: Failed reading boundary element line %k, reducing size of element table to %d!\n",i);
+      bound->nosides = nosides = i;
+      break;
+    }      
     i++;
-    fscanf(in,"%d",&dummyint);
 
-#if 0
-    if(k != dummyint) printf("LoadElmerInput: k=%d side=%d\n",k,dummyint);
-#endif
-    fscanf(in,"%d",&(bound->types[i]));
-    fscanf(in,"%d",&(bound->parent[i]));
-    fscanf(in,"%d",&(bound->parent2[i]));
-    fscanf(in,"%d",&elementtype);
-
+    iostat = fscanf(in,"%d %d %d %d",&(bound->types[i]),&p1,&p2,&elementtype);
+    if(iostat < 4 ) {
+      printf("LoadElmerInput: Failed reading definitions for boundary element %d\n",k);
+      bigerror("Cannot continue without this data!\n"); 
+    }    
+    if( p1 > 0 && (p1 < minelem || p1 > maxelem ) ) {
+      printf("Parent in boundary element %d out of range: %d\n",k,p1);    
+      bigerror("Cannot continue with bad parents");
+    }
+    if( p2 > 0 && (p2 < minelem || p2 > maxelem ) ) {
+      printf("Parent in boundary element %d out of range: %d\n",k,p2);
+      bigerror("Cannot continue with bad parents");
+    }
+      
+    if(activeelemperm) {
+      p1 = invelemperm[p1];
+      p2 = invelemperm[p2];
+    }
+    
     if(elementtype > maxelemtype ) {
       printf("Invalid boundary elementtype: %d\n",elementtype);
       bigerror("Cannot continue with invalid elements");
     }
-    for(j=0;j< elementtype%100 ;j++) 
-      fscanf(in,"%d",&(sideind[j]));
-
-    if(bound->parent[i] == 0 && bound->parent2[i] != 0) {
-      bound->parent[i] = bound->parent2[i];
-      bound->parent2[i] = 0;
+    nonodes = elementtype % 100;
+    if( nonodes > maxnodes ) {
+      printf("Number of nodes %d in side element %d is greater than allocated maximum %d\n",nonodes,dummyint,maxnodes);
+      bigerror("Cannot continue with invalid elements");
+    }
+    
+    for(j=0;j< nonodes ;j++) { 
+      fscanf(in,"%d",&l);
+      if(activeperm) 
+	sideind[j] = invperm[l];
+      else
+	sideind[j] = l;
+    }
+          
+    if( p1 == 0 && p2 != 0 ) {
+      bound->parent[i] = p2;
+      bound->parent2[i] = p1;
+    }
+    else {
+      bound->parent[i] = p1;
+      bound->parent2[i] = p2;
     }
 
     if(bound->parent[i] > 0) {
@@ -672,7 +804,7 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
       if(fail) falseparents++;      
     }
     else {
-#if 1
+#if 0
       printf("Parents not specified for side %d with inds: ",dummyint);
       for(j=0;j< elementtype%100 ;j++) 
 	printf("%d ",sideind[j]);
@@ -685,7 +817,6 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
 	bound->topology = Imatrix(1,nosides,0,data->maxnodes-1);
 	bctopocreated = TRUE;
       }
-
       for(j=0;j< elementtype%100 ;j++) 
 	bound->topology[i][j] = sideind[j];
       bound->elementtypes[i] = elementtype;
@@ -704,7 +835,20 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
 
   bound->nosides = i;
   fclose(in); 
-
+  
+  /* Save node permutation for later use */
+  data->nodepermexist = activeperm;
+  if(activeperm) {
+    data->nodeperm = nodeperm;
+    free_Ivector(invperm,mini,maxi);
+  }
+  
+  /* Element permutation is irrelevant probably for practical purposes (?) and hence it is forgotten. */
+  if(activeelemperm) {
+    free_Ivector(invelemperm,minelem,maxelem);
+    free_Ivector(elemperm,1,noelements0);
+  }
+  
 
 
   sprintf(filename,"%s","mesh.names");
@@ -798,6 +942,7 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
       printf("Warning: omitting use of names because the indexes are beyond range, code some more...\n");
     }
   }
+
 
   if(!cdstat) chdir("..");
 
@@ -1217,10 +1362,22 @@ int SaveElmerInput(struct FemType *data,struct BoundaryType *bound,
       }
     }
     fclose(out);
-
-
   }
   
+  if(data->nodepermexist) {
+    sprintf(filename,"%s","mesh.nodeperm");
+    out = fopen(filename,"w");
+
+    if(info) printf("Saving initial node permutation to %s.\n",filename);  
+    if(out == NULL) {
+      printf("opening of file was not successful\n");
+      return(3);
+    }
+    for(i=1; i <= noknots; i++) 
+      fprintf(out,"%d %d\n",i,data->nodeperm[i]);
+  }
+
+
   chdir("..");
   
   return(0);
