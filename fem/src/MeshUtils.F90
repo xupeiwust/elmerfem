@@ -6348,7 +6348,8 @@ END SUBROUTINE GetMaxDefs
       INTEGER :: jj,ii,sgn0,k,kmax,ind,indM,nip,nn,ne,nf,inds(10),nM,neM,nfM,iM,i2,i2M
       INTEGER :: edge, edof, fdof
       INTEGER :: ElemCands, TotCands, ElemHits, TotHits, EdgeHits, CornerHits, &
-          MaxErrInd, MinErrInd, InitialHits, ActiveHits, TimeStep, NoGaussPoints
+          MaxErrInd, MinErrInd, InitialHits, ActiveHits, TimeStep, NoGaussPoints, &
+          AllocStat
       INTEGER :: ElemCode, LinCode, ElemCodeM, LinCodeM
       TYPE(Element_t), POINTER :: Element, ElementM, ElementP
       TYPE(Element_t) :: ElementT
@@ -6369,7 +6370,7 @@ END SUBROUTINE GetMaxDefs
       TYPE(Mesh_t), POINTER :: Mesh
       TYPE(Variable_t), POINTER :: TimestepVar
 
-      ! These are used temporarely for debugging purposes
+      ! These are used temporarely for debugging and visualization purposes
       INTEGER :: SaveInd, MaxSubElem, MaxSubTriangles, DebugInd, Nslave, Nmaster
       LOGICAL :: SaveElem, DebugElem
       CHARACTER(LEN=20) :: FileName
@@ -6388,14 +6389,22 @@ END SUBROUTINE GetMaxDefs
       Timestep = NINT( TimestepVar % Values(1) )
  
       n = Mesh % MaxElementNodes
-      ALLOCATE( Nodes % x(n), Nodes % y(n), Nodes % z(n) )
-      ALLOCATE( NodesM % x(n), NodesM % y(n), NodesM % z(n) )
-      ALLOCATE( NodesT % x(n), NodesT % y(n), NodesT % z(n) )
-      ALLOCATE( Basis(n), BasisM(n), dBasisdx(n,3) )
-      IF(BiOrthogonalBasis) ALLOCATE(CoeffBasis(n), MASS(n,n))
-      n = 12 ! Hard-coded size sufficient for second-order edge elements
-      ALLOCATE( WBasis(n,3), WBasisM(n,3), RotWBasis(n,3) )
+      ALLOCATE( Nodes % x(n), Nodes % y(n), Nodes % z(n), &
+          NodesM % x(n), NodesM % y(n), NodesM % z(n), &
+          NodesT % x(n), NodesT % y(n), NodesT % z(n), &
+          Basis(n), BasisM(n), dBasisdx(n,3), STAT = AllocStat )
+      IF (AllocStat /= 0) CALL Fatal('AddProjectorWeakGeneric','Allocation error 1')
 
+      IF(BiOrthogonalBasis) THEN
+        ALLOCATE(CoeffBasis(n), MASS(n,n), STAT = AllocStat)
+        IF (AllocStat /= 0) CALL Fatal('AddProjectorWeakGeneric','Allocation error 2')        
+      END IF
+
+      n = 12 ! Hard-coded size sufficient for second-order edge elements
+      ALLOCATE( WBasis(n,3), WBasisM(n,3), RotWBasis(n,3), STAT = AllocStat )
+      IF (AllocStat /= 0) CALL Fatal('AddProjectorWeakGeneric','Allocation error 3')        
+      
+      
       Nodes % z  = 0.0_dp
       NodesM % z = 0.0_dp
       NodesT % z = 0.0_dp
@@ -6429,11 +6438,11 @@ END SUBROUTINE GetMaxDefs
       Nmaster = 0
 
 
-
+      CALL Info('LevelProjector','Initialialization done',Level=20)
 
 
       DO ind=1,BMesh1 % NumberOfBulkElements
-
+        
         ! Optionally save the submesh for specified element, for vizualization and debugging
         SaveElem = ( SaveInd == ind )
         DebugElem = ( DebugInd == ind )
@@ -6499,7 +6508,7 @@ END SUBROUTINE GetMaxDefs
         RefArea = detJ * SUM( IP % s(1:IP % n) )
         SumArea = 0.0_dp
         TrueArea = 0.0_dp
-
+        
         IF( SaveElem ) THEN
           FileName = 't'//TRIM(I2S(TimeStep))//'_a.dat'
           OPEN( 10,FILE=Filename)
@@ -6522,12 +6531,16 @@ END SUBROUTINE GetMaxDefs
             IF( nrow == 0 ) CYCLE
             CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
                 j, 0.0_dp ) 
-             IF(ASSOCIATED(Projector % Child)) &
-               CALL List_AddToMatrixElement(Projector % Child % ListMatrix, nrow, &
-                   j, 0.0_dp ) 
+            IF(ASSOCIATED(Projector % Child)) &
+                CALL List_AddToMatrixElement(Projector % Child % ListMatrix, nrow, &
+                j, 0.0_dp ) 
           END DO
         END IF
-
+        
+        IF( DebugElem ) THEN
+          PRINT *,'Going to loop over master: ',BMesh2 % NumberOfBulkElements
+        END IF
+        
 
         ! Currently a n^2 loop but it could be improved
         !--------------------------------------------------------------------
@@ -6535,6 +6548,8 @@ END SUBROUTINE GetMaxDefs
         ElemHits = 0
         DO indM=1,BMesh2 % NumberOfBulkElements
 
+          IF( DebugElem ) PRINT *,'Candidate Ind: ',IndM
+          
           ElementM => BMesh2 % Elements(indM)        
           IndexesM => ElementM % NodeIndexes
 
@@ -7210,11 +7225,13 @@ END SUBROUTINE GetMaxDefs
         END IF
       END DO
 
-      DEALLOCATE( Nodes % x, Nodes % y, Nodes % z )
-      DEALLOCATE( NodesM % x, NodesM % y, NodesM % z )
-      DEALLOCATE( NodesT % x, NodesT % y, NodesT % z )
-      DEALLOCATE( Basis, BasisM )
-      DEALLOCATE( dBasisdx, WBasis, WBasisM, RotWBasis )
+      CALL Info('LevelProjector','Looping done',Level=20)
+      
+      DEALLOCATE( Nodes % x, Nodes % y, Nodes % z, &
+          NodesM % x, NodesM % y, NodesM % z, &
+          NodesT % x, NodesT % y, NodesT % z, &
+          Basis, BasisM, &
+          dBasisdx, WBasis, WBasisM, RotWBasis )
 
       CALL Info('LevelProjector','Number of integration pair candidates: '&
           //TRIM(I2S(TotCands)),Level=10)

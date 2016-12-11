@@ -146,6 +146,7 @@ CONTAINS
 
      CALL FreeMatrix( Matrix % EMatrix )
      CALL FreeMatrix( Matrix % ConstraintMatrix )
+     CALL FreeMatrix( Matrix % MortarMatrix )
 
      IF(ASSOCIATED(Matrix % ParallelInfo)) THEN
        DEALLOCATE(Matrix % ParallelInfo % GlobalDOFs)

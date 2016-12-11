@@ -89,7 +89,8 @@ CONTAINS
        TYPE(Mesh_t), POINTER :: Mesh
        TYPE(Element_t), POINTER :: Element
        TYPE(NeighbourList_t), POINTER :: MtrxN, MeshN
-
+       TYPE(Matrix_t), POINTER :: CMatrix
+       
        INTEGER :: maxnode, maxedge, maxface, fdofs, maxfdofs, col, &
                   edofs, maxedofs, maxbdofs, l_beg, g_beg, proc, sz
 
@@ -106,7 +107,7 @@ CONTAINS
 
 !-------------------------------------------------------------------------------
 
-
+       
 !tt = realtime()
 #ifdef PARALLEL_FOR_REAL
        IF ( ParEnv % PEs <= 1 .OR. .NOT. ASSOCIATED(Matrix) ) RETURN
@@ -282,9 +283,16 @@ CONTAINS
          LocalConstraints = ListGetLogical(Solver % Values, 'Partition Local Constraints',Found)
          DiscontBC  = ListGetLogicalAnyBC(CurrentModel,'Discontinuous Boundary' )
 
-         Found = ASSOCIATED(Solver % Matrix % ConstraintMatrix)
-         IF(Found) Found = ASSOCIATED(Solver % Matrix % ConstraintMatrix % InvPerm)
+         CMatrix => Solver % Matrix % ConstraintMatrix
+         Found = ASSOCIATED(CMatrix)
+         IF(Found) Found = ASSOCIATED(CMatrix % InvPerm)
 
+         IF(.NOT. Found ) THEN
+           CMatrix => Solver % Matrix % MortarMatrix
+           Found = ASSOCIATED(CMatrix)
+           IF(Found) Found = ASSOCIATED(CMatrix % InvPerm)
+         END IF
+         
          G => Null()
          IF( LocalConstraints  ) THEN
            G => AllocateMatrix()
@@ -337,7 +345,7 @@ CONTAINS
 
              k = j + g_beg
            ELSE IF(Found) THEN
-             n = Solver % Matrix % ConstraintMatrix % InvPerm(j-Matrix % ParallelDOFs)
+             n = CMatrix % InvPerm(j-Matrix % ParallelDOFs)
              IF( n<=0 ) CYCLE
              k = MOD(n-1,Solver % Matrix % NumberOfRows)+1
              n = (n-1) / Solver % Matrix % NumberOfRows

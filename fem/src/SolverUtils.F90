@@ -10097,6 +10097,7 @@ END FUNCTION SearchNodeL
     REAL(KIND=dp) :: Vals(3)
     INTEGER, ALLOCATABLE :: Owner(:)
 
+    
     DoMass = .FALSE.
     IF( PRESENT( SaveMass ) ) DoMass = SaveMass
     IF( DoMass .AND. .NOT. ASSOCIATED( A % MassValues ) ) THEN
@@ -10153,9 +10154,17 @@ END FUNCTION SearchNodeL
         col = A % Cols(j)
         IF(Parallel) THEN
           IF(Cnumbering) THEN
-            col = A % Gorder(col)
+            IF( col < 1 .OR. col > SIZE( A % Gorder ) ) THEN
+              PRINT *,'col out of Gorder',col,SIZE(A % Gorder)
+            ELSE
+              col = A % Gorder(col)
+            END IF
           ELSE 
-            col = A % ParallelInfo % GlobalDOFs(col)
+            IF(  col < 1 .OR. col > SIZE( A % ParallelInfo % GlobalDOFs ) ) THEN
+              PRINT *,'col out of GlobalDofs',col, SIZE(A % ParallelInfo % GlobalDOFs)
+            ELSE
+              col = A % ParallelInfo % GlobalDOFs(col)
+            END IF
           END IF
         END IF
 
@@ -11506,12 +11515,12 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
       MortarVector(:)
   REAL(KIND=dp), ALLOCATABLE, TARGET :: CollectionSolution(:), TotValues(:)
   INTEGER :: NumberOfRows, NumberOfValues, MultiplierDOFs, istat, NoEmptyRows 
-  INTEGER :: i, j, k, l, m, n, p,q, ix, Loop, arows, crows, mrows
+  INTEGER :: i, j, k, l, m, n, p,q, ix, Loop, arows, darows, crows, mrows
   TYPE(Variable_t), POINTER :: MultVar
   REAL(KIND=dp) :: scl, rowsum
   LOGICAL :: Found, ExportMultiplier, NotExplicit, Refactorize, EnforceDirichlet, EliminateDiscont, &
               EmptyRow, ComplexSystem, ConstraintScaling, UseTranspose, EliminateConstraints, &
-              SkipConstraints
+              SkipConstraints, NotExplicitMortar, EliminateMortars
   SAVE MultiplierValues, SolverPointer
 
   CHARACTER(LEN=MAX_NAME_LEN) :: MultiplierName
@@ -11535,11 +11544,9 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 
   Parallel = (ParEnv % PEs > 1 )
 
-  NotExplicit = ListGetLogical(Solver % Values,'No Explicit Constrained Matrix',Found)
-  IF(.NOT. Found) NotExplicit=.FALSE.
-
   ! Check whether there is a constraint matrix and put the pointers accordingly
   !----------------------------------------------------------------------------
+  NotExplicit = ListGetLogical(Solver % Values,'No Explicit Constrained Matrix',Found)
   ConstraintMatrix => NULL()
   crows = 0
   IF(.NOT.NotExplicit) THEN
@@ -11549,27 +11556,36 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
   IF(ASSOCIATED(ConstraintMatrix)) THEN
     crows = ConstraintMatrix % NumberOfRows
     ConstraintVector => ConstraintMatrix % RHS
+    CALL Info('SolveWithLinearRestriction','Constraint matrix with '&
+        //TRIM(I2S(crows))//' rows',Level=12)
   END IF
     
   ! Check whether there is a mortar matrix and put the pointers accordingly
   !------------------------------------------------------------------------
+  NotExplicitMortar = ListGetLogical(Solver % Values,'No Explicit Mortar Matrix',Found)
   MortarMatrix => NULL()
   mrows = 0
-  IF(.NOT.NotExplicit) THEN
+  IF(.NOT.NotExplicitMortar) THEN
     MortarMatrix => StiffMatrix % MortarMatrix
   END IF
   MortarVector => NULL()
   IF(ASSOCIATED(MortarMatrix)) THEN
     mrows = MortarMatrix % NumberOfRows
     MortarVector => MortarMatrix % RHS
+    CALL Info('SolveWithLinearRestriction','Mortar matrix with '&
+        //TRIM(I2S(mrows))//' rows',Level=12)
   END IF
     
   ! Check whether there is an add matrix and put pointers accordingly
   !------------------------------------------------------------------
   AddMatrix => StiffMatrix % AddMatrix
   AddVector => NULL()
+  darows = 0
   IF(ASSOCIATED(AddMatrix)) THEN
     AddVector => AddMatrix % RHS
+    darows = MAX(0, AddMatrix % NumberOfRows - StiffMatrix % NumberOfRows)
+    CALL Info('SolveWithLinearRestriction','Add matrix with '&
+        //TRIM(I2S(darows))//' additional rows',Level=12)
   END IF
     
   ! Initialize the collection matrix that includes all the above
@@ -11592,17 +11608,31 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
     DEALLOCATE(CollectionMatrix % RHS)
     CollectionMatrix % Values = 0.0_dp
   END IF
-  IF(NotExplicit) CollectionMatrix % ConstraintMatrix => ConstraintMatrix
-
-  arows = StiffMatrix % NumberOfRows
-  IF(ASSOCIATED(AddMatrix)) arows = MAX(arows,AddMatrix % NumberOfRows)
-  
-  EliminateConstraints = ListGetLogical( Solver % Values, 'Eliminate Linear Constraints', Found)
-  IF( EliminateConstraints ) THEN
-    NumberOfRows = arows
-  ELSE
-    NumberOfRows = arows + crows + mrows
+  IF(NotExplicit) THEN
+    CollectionMatrix % ConstraintMatrix => ConstraintMatrix
   END IF
+    
+  arows = StiffMatrix % NumberOfRows + darows 
+  NumberOfRows = arows
+
+  EliminateConstraints = ( crows > 0 ) .AND. &
+      ListGetLogical( Solver % Values, 'Eliminate Linear Constraints', Found) 
+  IF( EliminateConstraints ) THEN
+    CALL Info('SolveWithLinearRestriction','Constraints will be eliminated',Level=12)
+  ELSE
+    NumberOfRows = NumberOfRows + crows
+  END IF
+  
+  EliminateMortars = ( mrows > 0 ) .AND. &
+      ListGetLogical( Solver % Values, 'Eliminate Mortar Constraints', Found)
+  IF( EliminateMortars ) THEN
+    CALL Info('SolveWithLinearRestriction','Mortars will be eliminated',Level=12)
+  ELSE
+    NumberOfRows = NumberOfRows + mrows
+  END IF
+
+  CALL Info('SolveWithLinearRestriction','Creating collection matrix with '&
+      //TRIM(I2S(NumberOfRows))//' rows',Level=8)
   
   ALLOCATE( CollectionMatrix % RHS( NumberOfRows ), &
        CollectionSolution( NumberOfRows ), STAT = istat )
@@ -11617,7 +11647,9 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 !------------------------------------------------------------------------------
 
   ExportMultiplier = ListGetLogical( Solver % Values, 'Export Lagrange Multiplier', Found )
-  InitMultiplier = .FALSE.
+  InitMultiplier = ListGetLogical( Solver % Values,'Initialize Lagrange Multiplier',Found )
+  IF(.NOT. Found ) InitMultiplier = .TRUE.
+  
   
   IF ( ExportMultiplier ) THEN
     MultiplierName = ListGetString( Solver % Values, 'Lagrange Multiplier Name', Found )
@@ -11628,14 +11660,14 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
     END IF
     
     MultVar => VariableGet(Solver % Mesh % Variables, MultiplierName)
-    j = arows + crows + mrows - StiffMatrix % NumberOfRows
+    j = darows + crows + mrows 
 
     IF ( .NOT. ASSOCIATED(MultVar) ) THEN
       ALLOCATE( MultiplierValues(j), STAT=istat )
       IF ( istat /= 0 ) CALL Fatal('SolveWithLinearRestriction','Memory allocation error.')
       
       MultiplierValues = 0.0_dp
-      InitMultiplier = .TRUE.
+      InitMultiplier = .FALSE.
       CALL VariableAdd(Solver % Mesh % Variables, Solver % Mesh, SolverPointer, &
           MultiplierName, 1, MultiplierValues)
     END IF
@@ -11644,9 +11676,10 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
     MultiplierValues => MultVar % Values
 
     IF (j > SIZE(MultiplierValues)) THEN
+      CALL Info('SolveWithLinearRestriction','Increasing size of multiplier to: '//TRIM(I2S(j)),Level=12)
       ALLOCATE(MultiplierValues(j))
       MultiplierValues(1:SIZE(MultVar % Values)) = MultVar % Values
-      MultiplierValues(SIZE(MultVar % Values):) = 0.0_dp
+      MultiplierValues(SIZE(MultVar % Values)+1:j) = 0.0_dp
       DEALLOCATE(MultVar % Values)
       MultVar % Values => MultiplierValues
     END IF
@@ -11678,11 +11711,12 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 
     NoEmptyRows = 0
     ConstraintScaling = ListGetLogical(Solver % Values, 'Constraint Scaling',Found)
-    IF(ConstraintScaling) THEN
-      rowsum = ListGetConstReal( Solver % Values, 'Constraint Scale', Found)
-      IF(Found) ConstraintMatrix % Values = ConstraintMatrix % Values * rowsum
-    END IF
-    
+
+    rowsum = ListGetConstReal( Solver % Values, 'Constraint Scale', Found)
+    IF(Found) ConstraintMatrix % Values = ConstraintMatrix % Values * rowsum
+
+    ! Start appending from the last rows because then ListMatrix is more efficient
+    ! Here the offset for rows considers the other matrices
     CALL AppendConstraintMatrix( CollectionMatrix, CollectionVector, &
         ConstraintMatrix, ConstraintVector, &
         .TRUE., StiffMatrix % ConstrainedDof, .TRUE., ComplexSystem, &
@@ -11694,16 +11728,15 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 
 
   
-  IF( mrows > 0 .AND. .NOT. EliminateConstraints ) THEN
+  IF( mrows > 0 .AND. .NOT. EliminateMortars ) THEN
     CALL Info('SolveWithLinearRestriction',&
         'Adding MortarMatrix into CollectionMatrix',Level=10)
 
     NoEmptyRows = 0
-    ConstraintScaling = ListGetLogical(Solver % Values, 'Constraint Scaling',Found)
-    IF(ConstraintScaling) THEN
-      rowsum = ListGetConstReal( Solver % Values, 'Constraint Scale', Found)
-      IF(Found) MortarMatrix % Values = MortarMatrix % Values * rowsum
-    END IF
+    ConstraintScaling = ListGetLogical(Solver % Values, 'Mortar Scaling',Found)
+
+    rowsum = ListGetConstReal( Solver % Values, 'Mortar Scale', Found)
+    IF(Found) MortarMatrix % Values = MortarMatrix % Values * rowsum
     
     CALL AppendConstraintMatrix( CollectionMatrix, CollectionVector, &
         MortarMatrix, MortarVector, &
@@ -11768,25 +11801,37 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
   IF(CollectionMatrix % FORMAT==MATRIX_LIST) &
     CALL List_toCRSMatrix(CollectionMatrix)
 
+  j = CollectionMatrix % NumberOfRows
   CALL Info( 'SolveWithLinearRestriction', 'CollectionMatrix with '//&
-      TRIM(I2S(CollectionMatrix % NumberOfRows))//' rows done', Level=6 )
+      TRIM(I2S(j))//' rows', Level=6 )
+  CALL Info( 'SolveWithLinearRestriction', 'CollectionMatrix with '//&
+      TRIM(I2S(CollectionMatrix % Rows(j+1)-1))//' entries', Level=6 )
 
+  
 !------------------------------------------------------------------------------
 ! Assign values to CollectionVector
 !------------------------------------------------------------------------------
 
+  ! The normal part of solution
   j = StiffMatrix % NumberOfRows  
+  CALL Info('SolveWithLinearRestriction','Initializing the standard '//&
+      TRIM(I2S(j))//' dofs',Level=12)
   CollectionSolution(1:j) = Solution(1:j)
-  
+
+  ! THe added lines
   i = StiffMatrix % NumberOfRows+1
   j = SIZE(CollectionSolution)
 
-  IF( .NOT. InitMultiplier ) THEN
-    IF(ExportMultiplier) CollectionSolution(i:j) = MultiplierValues(1:j-i+1)
+  IF(ExportMultiplier) THEN
+    IF(InitMultiplier) THEN
+      CALL Info('SolveWithLinearRestriction','Initializing the added '//&
+          TRIM(I2S(j-i+1))//' dofs',Level=12)
+      CollectionSolution(i:j) = MultiplierValues(1:j-i+1)
+    END IF
   END IF
     
   CollectionMatrix % ExtraDOFs = CollectionMatrix % NumberOfRows - &
-                  StiffMatrix % NumberOfRows
+      StiffMatrix % NumberOfRows
 
   CollectionMatrix % ParallelDOFs = 0
   IF(ASSOCIATED(AddMatrix)) &
@@ -11827,18 +11872,27 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
   !------------------------------------------------------------------------------
   Found = ASSOCIATED(Solver % Variable % NonlinValues)
   IF( Found .AND. .NOT. SkipConstraints ) THEN
+    j = SIZE(Solver % Variable % NonlinValues)
     k = CollectionMatrix % NumberOfRows
-    IF ( SIZE(Solver % Variable % NonlinValues) /= k) THEN
+    IF ( j /= k) THEN
+      CALL Info('SolveWithLinearRestriction','Resizing nonlin values from '&
+          //TRIM(I2S(j))//' to '//TRIM(I2S(k)),Level=10)
       DEALLOCATE(Solver % Variable % NonlinValues)
       ALLOCATE(Solver % Variable % NonlinValues(k))
     END IF
+    CALL Info('SolveWithLinearRestriction','Initialized the values from previous step',Level=10)
     Solver % Variable % NonlinValues(1:k) = CollectionSolution(1:k)
   END IF
 
   CollectionMatrix % Comm = StiffMatrix % Comm
 
+
+  !------------------------------------------------------------------------------
+  ! Now solve in standard way as if the matrix equation would not consist of several blocks
+  !------------------------------------------------------------------------------ 
   CALL Info('SolveWithLinearRestriction',&
       'Now going for the coupled linear system',Level=8)
+
 
   CALL SolveLinearSystem( CollectionMatrix, CollectionVector, &
       CollectionSolution, Norm, DOFs, Solver, StiffMatrix )
@@ -11865,6 +11919,7 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
       END IF
 
       IF( mrows + crows > 0 ) THEN
+        i = StiffMatrix % NumberOfRows
         j = arows + mrows + crows
         IF( .NOT. EliminateConstraints ) THEN
           MultiplierValues(arows-i+1:j-i) = CollectionSolution(arows+1:j)            
@@ -11911,7 +11966,7 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
     END IF
       
 !------------------------------------------------------------------------------
-
+   
     StiffMatrix % CollectionMatrix => CollectionMatrix
     DEALLOCATE(CollectionSolution)
     CollectionMatrix % ConstraintMatrix => NULL()
@@ -12415,7 +12470,6 @@ CONTAINS
                   CALL List_AddToMatrixElement( Tmat % listmatrix, i, l, scl*TotMat % Values(p) )
             END DO
             TotVec(i) = TotVec(i) + scl * TotVec(k)
-            IF( TotVec(i) > 1.0e10 ) PRINT *,'i4',i,TotVec(i),k,scl,TotVec(k)
           END DO
         END DO
 
@@ -12456,7 +12510,7 @@ CONTAINS
     END IF
 
     CALL Info('SolveWithLinearRestriction',&
-        'Finished Adding ConstraintMatrix',Level=12)
+        'Finished eliminating constraints',Level=12)
 
   END SUBROUTINE EliminateConstrainedDofs
     
@@ -12502,7 +12556,6 @@ CONTAINS
     LOGICAL :: FoundDiag
     INTEGER, POINTER :: Rows(:), Cols(:)
     REAL(KIND=dp), POINTER :: Vals(:)
-    REAL(KIND=dp) :: coeff
     INTEGER :: i,ii,j,n,offset,DirSize
     
     n = dMat % NumberOfRows
@@ -12547,7 +12600,7 @@ CONTAINS
           END IF
         END IF
       END IF
-      TotVec(ii) = TotVec(ii) + coeff * dVec(i)
+      TotVec(ii) = TotVec(ii) + dVec(i)
     END DO
     
   END SUBROUTINE AppendAddMatrix
@@ -12586,6 +12639,7 @@ CONTAINS
     END IF
 
     NoEmptyRows = 0
+
     
     DO i=n,1,-1
 
@@ -12640,7 +12694,8 @@ CONTAINS
         EmptyRow = .FALSE.
         
         IF (UseTranspose .AND. ASSOCIATED(dMat % TValues)) THEN
-          CALL AddToMatrixElement( TotMat, ii, Cols(j), dMat % TValues(j) )
+          ! Transpose values scaled similarly, should they? 
+          CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * dMat % TValues(j) )
         ELSE
           CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * Vals(j) )
         END IF
@@ -12654,7 +12709,7 @@ CONTAINS
 
         ! Now set the transpose values
         IF (ASSOCIATED(dMat % TValues)) THEN
-          CALL AddToMatrixElement( TotMat, Cols(j), ii, dMat % TValues(j) )
+          CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff * dMat % TValues(j) )
         ELSE
           CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff *  Vals(j) )
         END IF
@@ -12704,7 +12759,6 @@ CONTAINS
   END SUBROUTINE SolveWithLinearRestriction
 !------------------------------------------------------------------------------
       
-
 !------------------------------------------------------------------------------
   SUBROUTINE SaveLinearSystem( Solver, Ain )
 !------------------------------------------------------------------------------
@@ -12716,20 +12770,30 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN) :: dumpfile, dumpprefix
     INTEGER, POINTER :: Perm(:)
     INTEGER :: i
-    LOGICAL :: SaveMass, SaveDamp, SavePerm, Found , Parallel, CNumbering
+    LOGICAL :: SaveMass, SaveDamp, SavePerm, Found , Parallel, &
+        PNumbering, CNumbering
 !------------------------------------------------------------------------------
 
     CALL Info('SaveLinearSystem','Saving linear system',Level=4)
 
     Parallel = ParEnv % PEs > 1
 
+    
     Params => Solver % Values
     IF(.NOT. ASSOCIATED( Params ) ) THEN
       CALL Fatal('SaveLinearSystem','Parameter list not associated!')
     END IF
 
-    CNumbering = ListGetLogical(Params, 'Linear System Save Continuous Numbering',Found)
+    IF( Parallel ) THEN    
+      CNumbering = ListGetLogical(Params, 'Linear System Save Continuous Numbering',Found)
+      PNumbering = ListGetLogical(Params, 'Linear System Save Parallel Numbering',Found)
+      IF(.NOT. Found ) PNumbering = .TRUE.
+    ELSE
+      CNumbering = .FALSE.
+      PNumbering = .FALSE.
+    END IF
 
+      
     IF( PRESENT(Ain)) THEN
       A => Ain
     ELSE
@@ -12751,14 +12815,14 @@ CONTAINS
     IF(Parallel) dumpfile = TRIM(dumpfile)//'.'//TRIM(I2S(ParEnv % myPE))
     CALL Info('SaveLinearSystem','Saving matrix to: '//TRIM(dumpfile))
     OPEN(1,FILE=dumpfile, STATUS='Unknown')
-    CALL PrintMatrix(A,Parallel,Cnumbering,SaveMass=SaveMass,SaveDamp=SaveDamp)
+    CALL PrintMatrix(A,Pnumbering,Cnumbering,SaveMass=SaveMass,SaveDamp=SaveDamp)
     CLOSE(1)
 
     dumpfile = TRIM(dumpprefix)//'_b.dat'
     IF(Parallel) dumpfile = TRIM(dumpfile)//'.'//TRIM(I2S(ParEnv % myPE))
     CALL Info('SaveLinearSystem','Saving matrix rhs to: '//TRIM(dumpfile))
     OPEN(1,FILE=dumpfile, STATUS='Unknown')
-    CALL PrintRHS(A, Parallel, CNumbering)
+    CALL PrintRHS(A, Pnumbering, CNumbering)
     CLOSE(1)
     
     SavePerm = ListGetLogical( Params,'Linear System Save Perm',Found)
@@ -13802,7 +13866,7 @@ CONTAINS
      INTEGER, ALLOCATABLE :: BCOrdering(:), BCPriority(:)
 
 
-     CALL Info('GenerateMortarMatrix','Building constraint matrix',Level=12)
+     CALL Info('GenerateMortarMatrix','Building mortar matrix',Level=12)
 
      IF( .NOT. Solver % MortarBCsChanged ) THEN
        CALL Info('GenerateMortarMatrix','Nothing to do!',Level=12)
@@ -14363,7 +14427,7 @@ CONTAINS
      IF( .NOT. AllocationsDone ) THEN
        CALL Info('GenerateMortarMatrix','Allocating '//&
            TRIM(I2S(sumrow))//' rows and '//TRIM(I2S(k2))//' nonzeros',&
-           Level=6)
+           Level=12)
 
        TotMat => AllocateMatrix()
        ALLOCATE( TotMat % RHS(sumrow), TotMat % Rows(sumrow+1), &
@@ -14399,20 +14463,24 @@ CONTAINS
      ! Eliminate entries
      IF( EliminatedRows > 0 ) THEN
        CALL Info('GenerateMortarMatrix','Number of eliminated rows: '&
-           //TRIM(I2S(EliminatedRows)))
+           //TRIM(I2S(EliminatedRows)),Level=8)
        CALL CRS_PackMatrix( TotMat ) 
      END IF
 
      IF( NeglectedRows > 0 ) THEN
        CALL Info('GenerateMortarMatrix','Number of neglected rows: '&
-           //TRIM(I2S(NeglectedRows)))
+           //TRIM(I2S(NeglectedRows)),Level=8)
      END IF
 
      Solver % Matrix % MortarMatrix => TotMat     
      Solver % MortarBCsChanged = .FALSE.
 
-     CALL Info('GenerateMortarMatrix','Finished creating constraint matrix',Level=12)
-
+     i = TotMat % NumberOfRows
+     CALL Info('GenerateMortarMatrix','Created mortar matrix with '&
+         //TRIM(I2S(i))//' rows',Level=6)
+     CALL Info('GenerateMortarMatrix','Created mortar matrix with '&
+         //TRIM(I2S(TotMat % Rows(i+1)-1))//' entries',Level=10)
+     
    END SUBROUTINE GenerateMortarMatrix
      
 
