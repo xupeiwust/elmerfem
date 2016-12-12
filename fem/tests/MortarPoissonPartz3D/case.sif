@@ -211,19 +211,18 @@ End
 
 
 Solver 2 :: Reference Norm = 8.45041158E-01
-Solver 2 :: Reference Norm Tolerance = 1.0e-8
 
 RUN
 
 
 ! Also check in a nontrivial angle 
 Body Force 1 :: Mesh Rotate 3 = 27.0
-Solver 2 :: Reference Norm = 8.47292451E-01
+Solver 2 :: Reference Norm = 8.47292448E-01
 
 RUN
 
 ! Also check in another nontrivial angle 
 Body Force 1 :: Mesh Rotate 3 = 117.0
-Solver 2 :: Reference Norm = 8.47292451E-01
+Solver 2 :: Reference Norm = 8.47292447E-01
 
 RUN

@@ -11921,7 +11921,7 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
       IF( mrows + crows > 0 ) THEN
         i = StiffMatrix % NumberOfRows
         j = arows + mrows + crows
-        IF( .NOT. EliminateConstraints ) THEN
+        IF( .NOT. ( EliminateConstraints .OR. EliminateMortars) ) THEN
           MultiplierValues(arows-i+1:j-i) = CollectionSolution(arows+1:j)            
         ELSE      
           MultiplierValues(arows-i+1:j-i) = 0.0_dp
@@ -13898,7 +13898,7 @@ CONTAINS
          'Mortar BCs Additive', Found )
      IF( .NOT. Found .AND. bcount > 1 ) THEN
        IF( ListGetLogical( Solver % Values, &
-           'Eliminate Linear Constraints',Found ) ) THEN
+           'Eliminate Mortar Constraints',Found ) ) THEN
          CALL Info('GenerateMortarMatrix',&
              'Enforcing > Mortar BCs Additive < to True to enable elimination',Level=6)
          SumProjectors = .TRUE.
