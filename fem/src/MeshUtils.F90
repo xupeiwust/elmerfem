@@ -9986,14 +9986,14 @@ END SUBROUTINE GetMaxDefs
             Neighbours(1) == ParEnv % MyPE ) j=j+1
       END DO
       CALL MPI_ALLREDUCE(j,gnodes,1, &
-           MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+           MPI_INTEGER,MPI_SUM,ELMER_COMM_WORLD,ierr)
 
       j=0
       DO i=1,Mesh_in % NumberOfBulkElements
         IF (Mesh_in % Elements(i) % PartIndex == ParEnv % MyPE) j=j+1
       END DO
       CALL MPI_ALLREDUCE(j,gelements,1, &
-           MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+           MPI_INTEGER,MPI_SUM,ELMER_COMM_WORLD,ierr)
     END IF
 
 
@@ -10199,7 +10199,7 @@ END SUBROUTINE GetMaxDefs
       IF(isParallel) THEN
         j=max_bid
         CALL MPI_ALLREDUCE(j,max_bid,1, &
-            MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,ierr)
+            MPI_INTEGER,MPI_MAX,ELMER_COMM_WORLD,ierr)
       END IF
 
       max_baseline_bid = max_bid
@@ -10310,7 +10310,7 @@ END SUBROUTINE GetMaxDefs
     IF(isParallel) THEN
       j=max_bid
       CALL MPI_ALLREDUCE(j,max_bid,1, &
-          MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,ierr)
+          MPI_INTEGER,MPI_MAX,ELMER_COMM_WORLD,ierr)
     END IF
 
     WRITE( Message,'(A,I0)') 'First Extruded BC set to: ',max_bid+1
@@ -10323,7 +10323,7 @@ END SUBROUTINE GetMaxDefs
     IF(isParallel) THEN
       j=max_body
       CALL MPI_ALLREDUCE(j,max_body,1, &
-          MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,ierr)
+          MPI_INTEGER,MPI_MAX,ELMER_COMM_WORLD,ierr)
     END IF
 
     WRITE( Message,'(A,I0)') 'Number of new BCs for layers: ',max_body
@@ -13622,7 +13622,7 @@ END SUBROUTINE FindNeighbourNodes
     ParTmp(6) = NewMesh % NumberOfBoundaryElements
 
     IF( .FALSE. .AND. ParEnv % PEs > 1 ) THEN
-      CALL MPI_ALLREDUCE(ParTmp,ParSizes,6,MPI_INTEGER,MPI_SUM,MPI_COMM_WORLD,ierr)
+      CALL MPI_ALLREDUCE(ParTmp,ParSizes,6,MPI_INTEGER,MPI_SUM,ELMER_COMM_WORLD,ierr)
 
       CALL Info('SplitMeshEqual','Information on parallel mesh sizes')
       WRITE ( Message,'(A,I0,A)') 'Initial mesh has ',ParSizes(1),' nodes'
@@ -14285,28 +14285,35 @@ CONTAINS
 !------------------------------------------------------------------------------
 
 
-!------------------------------------------------------------------------------
-  SUBROUTINE DisplaceMesh( Mesh, Update, SIGN, Perm, DOFs, StabRecomp )
-!------------------------------------------------------------------------------
+!----------------------------------------------------------------------------------
+  SUBROUTINE DisplaceMesh( Mesh, Update, SIGN, Perm, DOFs, StabRecomp, UpdateDirs )
+!----------------------------------------------------------------------------------
     TYPE(Mesh_t) , POINTER :: Mesh 
     REAL(KIND=dp) :: Update(:)
     INTEGER :: DOFs,SIGN,Perm(:)
     LOGICAL, OPTIONAL :: StabRecomp
+    INTEGER, OPTIONAL :: UpdateDirs
 
-    INTEGER :: i,k
+    INTEGER :: i,k,dim
     LOGICAL :: StabFlag
 
     TYPE(Nodes_t) :: ElementNodes
     TYPE(Element_t), POINTER :: Element
+
+    IF ( PRESENT( UpdateDirs ) ) THEN
+      dim = UpdateDirs
+    ELSE
+      dim = DOFs
+    END IF
 
     DO i=1,MIN( SIZE(Perm), SIZE(Mesh % Nodes % x) )
        k = Perm(i)
        IF ( k > 0 ) THEN
          k = DOFs * (k-1)
          Mesh % Nodes % x(i)   = Mesh % Nodes % x(i) + SIGN * Update(k+1)
-         IF ( DOFs > 1 ) &
+         IF ( dim > 1 ) &
            Mesh % Nodes % y(i) = Mesh % Nodes % y(i) + SIGN * Update(k+2)
-         IF ( DOFs > 2 ) &
+         IF ( dim > 2 ) &
            Mesh % Nodes % z(i) = Mesh % Nodes % z(i) + SIGN * Update(k+3)
         END IF
     END DO
@@ -17974,11 +17981,11 @@ CONTAINS
        DO i=1,ParEnv % PEs
          IF(.NOT. isNeighbour(i)) CYCLE
 
-         CALL MPI_BSEND( cnt(i),1,MPI_INTEGER,i-1,1310,MPI_COMM_WORLD,ierr )
+         CALL MPI_BSEND( cnt(i),1,MPI_INTEGER,i-1,1310,ELMER_COMM_WORLD,ierr )
          IF(cnt(i)>0) THEN
-           CALL MPI_BSEND( buf(i) % gdof,cnt(i),MPI_INTEGER,i-1,1311,MPI_COMM_WORLD,ierr )
-           CALL MPI_BSEND( buf(i) % ival,cnt(i),MPI_INTEGER,i-1,1312,MPI_COMM_WORLD,ierr )
-           CALL MPI_BSEND( buf(i) % dval,cnt(i),MPI_DOUBLE_PRECISION,i-1,1313,MPI_COMM_WORLD,ierr )
+           CALL MPI_BSEND( buf(i) % gdof,cnt(i),MPI_INTEGER,i-1,1311,ELMER_COMM_WORLD,ierr )
+           CALL MPI_BSEND( buf(i) % ival,cnt(i),MPI_INTEGER,i-1,1312,ELMER_COMM_WORLD,ierr )
+           CALL MPI_BSEND( buf(i) % dval,cnt(i),MPI_DOUBLE_PRECISION,i-1,1313,ELMER_COMM_WORLD,ierr )
          END IF
        END DO
      END SUBROUTINE SendInterface
@@ -17993,12 +18000,12 @@ CONTAINS
 
          IF(.NOT.isNeighbour(i)) CYCLE
 
-         CALL MPI_RECV( cnt,1,MPI_INTEGER,i-1,1310,MPI_COMM_WORLD,status,ierr )
+         CALL MPI_RECV( cnt,1,MPI_INTEGER,i-1,1310,ELMER_COMM_WORLD,status,ierr )
          IF(cnt>0) THEN
            ALLOCATE( gdof(cnt), ival(cnt), dval(cnt) )
-           CALL MPI_RECV( gdof,cnt,MPI_INTEGER,i-1,1311,MPI_COMM_WORLD,status,ierr )
-           CALL MPI_RECV( ival,cnt,MPI_INTEGER,i-1,1312,MPI_COMM_WORLD,status,ierr )
-           CALL MPI_RECV( dval,cnt,MPI_DOUBLE_PRECISION,i-1,1313,MPI_COMM_WORLD,status,ierr )
+           CALL MPI_RECV( gdof,cnt,MPI_INTEGER,i-1,1311,ELMER_COMM_WORLD,status,ierr )
+           CALL MPI_RECV( ival,cnt,MPI_INTEGER,i-1,1312,ELMER_COMM_WORLD,status,ierr )
+           CALL MPI_RECV( dval,cnt,MPI_DOUBLE_PRECISION,i-1,1313,ELMER_COMM_WORLD,status,ierr )
 
            DO j=1,cnt
              k = SearchNode(Mesh % ParallelInfo, gdof(j))
@@ -18010,7 +18017,7 @@ CONTAINS
            DEALLOCATE( gdof, ival, dval )
          END IF
        END DO
-       CALL MPI_BARRIER(MPI_COMM_WORLD,ierr)
+       CALL MPI_BARRIER(ELMER_COMM_WORLD,ierr)
      END SUBROUTINE RecvInterface
 
   END SUBROUTINE CalculateBodyAverage

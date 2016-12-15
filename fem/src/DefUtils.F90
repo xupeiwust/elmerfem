@@ -2610,7 +2610,7 @@ CONTAINS
          SlaveSolver => CurrentModel % Solvers(k)
 
          IF(ParEnv % PEs>1) THEN
-           IF ( Solver % Matrix % Comm /= MPI_COMM_WORLD ) &
+           IF ( Solver % Matrix % Comm /= ELMER_COMM_WORLD ) &
              CALL ListAddLogical( SlaveSolver % Values, 'Slave not parallel', .TRUE.)
 
            alloc_parenv = .FALSE.
@@ -2630,7 +2630,7 @@ CONTAINS
          CALL SolverActivate_x( CurrentModel,SlaveSolver,dt,Transient)
 
          IF(ParEnv % PEs>1) THEN
-           IF ( Solver % Matrix % Comm /= MPI_COMM_WORLD ) &
+           IF ( Solver % Matrix % Comm /= ELMER_COMM_WORLD ) &
              CALL ListAddLogical( SlaveSolver % Values, 'Slave not parallel', .FALSE.)
 
            IF(alloc_parenv) THEN
@@ -2706,7 +2706,7 @@ CONTAINS
          PostSolver => CurrentModel % Solvers(k)
 
          IF(ParEnv % PEs>1) THEN
-           IF ( Solver % Matrix % Comm /= MPI_COMM_WORLD ) &
+           IF ( Solver % Matrix % Comm /= ELMER_COMM_WORLD ) &
              CALL ListAddLogical( PostSolver % Values, 'Post not parallel', .TRUE.)
 
            alloc_parenv = .FALSE.
@@ -2725,7 +2725,7 @@ CONTAINS
          CALL SolverActivate_x( CurrentModel,PostSolver,dt,Transient)
 
          IF(ParEnv % PEs>1) THEN
-           IF ( Solver % Matrix % Comm /= MPI_COMM_WORLD ) &
+           IF ( Solver % Matrix % Comm /= ELMER_COMM_WORLD ) &
              CALL ListAddLogical( PostSolver % Values, 'Post not parallel', .FALSE.)
 
            IF(alloc_parenv) THEN
@@ -3105,7 +3105,10 @@ CONTAINS
   END DO
 
   !CALL Permon_UpdateMatrix( A % PermonMatrix, n*dofs, ind, vals )
-  eType = 3 !! 3D element -> type of the element is the same as its dimension
+
+  eType = ElementDim( CurrentModel % CurrentElement )
+  ! type of the element is the same as its dimension
+
   CALL FETI4IAddElement(A % PermonMatrix, eType, n, nInd, n*dofs, ind, vals)
 
 #endif
