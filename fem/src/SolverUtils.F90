@@ -12685,7 +12685,6 @@ CONTAINS
         END IF
       END IF
 
-<<<<<<< HEAD
       EmptyRow = .TRUE.
       
       DO j=Rows(i+1)-1,Rows(i),-1
