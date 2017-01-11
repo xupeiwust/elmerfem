@@ -2111,6 +2111,7 @@ CONTAINS
          StickContact = ListGetLogical( BC,'Stick Contact',Found )
          IF(.NOT. Found ) TieContact = ListGetLogical( BC,'Tie Contact',Found )
          IF(.NOT. Found ) FrictionContact = ListGetLogical( BC,'Friction Contact',Found )
+         IF(.NOT. Found ) SlipContact = ListGetLogical( BC,'Slip Contact',Found )
          IF(.NOT. Found ) SlipContact = ListGetLogical( BC,'Slide Contact',Found )
          IF(.NOT. Found ) THEN 
            CALL Warn('DetermineContact','No contact type given, assuming > Slip Contact <')
@@ -2124,6 +2125,17 @@ CONTAINS
        IF( SlipContact ) CALL Info('DetermineContact','Using slip contact for displacement',Level=10)
        
 
+       ! At the start it may be beneficial to assume initial tie contact
+       IF( (FrictionContact .OR. StickContact .OR. SlipContact ) .AND. &
+           (TimeStep == 1 .AND. NonlinIter == 1 ) ) THEN
+         DoIt = ListGetLogical(BC,'Initial Tie Contact',Found )
+         IF( DoIt ) THEN
+           FrictionContact = .FALSE.; StickContact = .FALSE.; SlipContact = .FALSE.
+           TieContact = .TRUE.
+           CALL Info('DetermineContact','Assuming initial tie contact',Level=10)
+         END IF
+       END IF
+         
        ! At the first time it may be beneficial to assume frictionless initial contact.
        SkipFriction = .FALSE.
        IF( (FrictionContact .OR. StickContact .OR. SlipContact ) .AND. TimeStep == 1 ) THEN
@@ -2569,9 +2581,10 @@ CONTAINS
        INTEGER, POINTER :: Indexes(:)
        INTEGER :: elemcode, CoeffSign
        REAL(KIND=dp), ALLOCATABLE :: CoeffTable(:)
-       INTEGER :: l2
-       LOGICAL :: DebugNormals
-
+       INTEGER :: l2,elem,i1,i2,j1,j2
+       LOGICAL :: LinearContactGap, DebugNormals
+       
+       
        CALL Info('DetermineContact','Computing distance between mortar boundaries',Level=14)
 
        DispVals => Solver % Variable % Values
@@ -2592,6 +2605,8 @@ CONTAINS
              'Previous displacement field required!')
        END IF
 
+       LinearContactGap = ListGetLogical( Model % Simulation,&
+           'Contact BCs linear gap', Found )      
 
        ALLOCATE( SlaveNode( Mesh % NumberOfNodes ) ) 
        SlaveNode = .FALSE.
@@ -2880,6 +2895,51 @@ CONTAINS
          END IF
        END IF
 
+       
+       IF( LinearContactGap ) THEN       
+         DO elem=Mesh % NumberOfBulkElements + 1, &
+             Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
+           
+           Element => Mesh % Elements( elem )         
+           
+           IsSlave = ( Element % BoundaryInfo % Constraint == Model % BCs(bc_ind) % Tag ) 
+           IsMaster = ( Element % BoundaryInfo % Constraint == Model % BCs(master_ind) % Tag ) 
+           IF( .NOT. ( IsSlave .OR. ( CreateDual .AND. IsMaster ) ) ) CYCLE
+           
+           Indexes => Element % NodeIndexes         
+           ElemCode = Element % TYPE % ElementCode           
+
+           SELECT CASE ( ElemCode )
+
+           CASE( 408 )
+             DO i=5,8
+               i1=i-4
+               i2=i1+1
+               IF(i2==5) i2=1
+               j = DistVar % Perm(Indexes(i))
+               IF( j == 0 ) CYCLE
+               j1 = DistVar % Perm(Indexes(i1))
+               j2 = DistVar % Perm(Indexes(i2))
+
+               DistVar % Values(j) = 0.5_dp * &
+                   ( DistVar % Values(j1) + DistVar % Values(j2))
+               GapVar % Values(j) = 0.5_dp * &
+                   ( GapVar % Values(j1) + GapVar % Values(j2))
+               
+               IF( CalculateVelocity ) THEN
+                 DO k=1,Dofs
+                   VeloVar % Values( Dofs*(j-1)+k ) = 0.5_dp * &
+                       ( VeloVar % Values(Dofs*(j1-1)+k) + VeloVar % Values(Dofs*(j2-1)+k))  
+                 END DO
+               END IF
+             END DO
+             
+           CASE DEFAULT
+             CALL Fatal('DetermineContact','Implement linear gaps for: '//TRIM(I2S(ElemCode)))
+           END SELECT
+         END DO
+       END IF
+       
        IF( CalculateVelocity ) THEN
          !PRINT *,'Velo range:',MINVAL( VeloVar % Values), MAXVAL( VeloVar % Values)
        END IF
@@ -2910,7 +2970,9 @@ CONTAINS
        LOGICAL :: Stat, IsSlave, IsMaster
        TYPE(Matrix_t), POINTER :: ActiveProjector
        LOGICAL, ALLOCATABLE :: NodeDone(:)
-
+       LOGICAL :: LinearContactLoads
+       INTEGER :: i1,i2,j1,j2,ElemCode
+       
        n = Mesh % MaxElementNodes
        ALLOCATE(Basis(n), Nodes % x(n), Nodes % y(n), Nodes % z(n) )
 
@@ -2923,7 +2985,10 @@ CONTAINS
        ALLOCATE( NodeDone( Mesh % NumberOfNodes ) )
        NodeDone = .FALSE.
 
+       LinearContactLoads = ListGetLogical( Model % Simulation,&
+           'Contact BCs linear loads', Found )
 
+       
 100    DO elem=Mesh % NumberOfBulkElements + 1, &
            Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
          
@@ -3016,6 +3081,41 @@ CONTAINS
          END IF
        END DO
 
+       IF( LinearContactLoads ) THEN       
+         DO elem=Mesh % NumberOfBulkElements + 1, &
+             Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
+           
+           Element => Mesh % Elements( elem )         
+
+           IsSlave = ( Element % BoundaryInfo % Constraint == Model % BCs(bc_ind) % Tag ) 
+           IsMaster = ( Element % BoundaryInfo % Constraint == Model % BCs(master_ind) % Tag ) 
+           IF( .NOT. ( IsSlave .OR. ( CreateDual .AND. IsMaster ) ) ) CYCLE
+           
+           Indexes => Element % NodeIndexes         
+           ElemCode = Element % TYPE % ElementCode           
+
+           SELECT CASE ( ElemCode )
+
+           CASE( 408 )
+             DO i=5,8
+               i1=i-4
+               i2=i1+1
+               IF(i2==5) i2=1
+               j = SlipLoadVar % Perm(Indexes(i))
+               j1 = SlipLoadVar % Perm(Indexes(i1))
+               j2 = SlipLoadVar % Perm(Indexes(i2))
+               SlipLoadVar % Values(j) = 0.5_dp * &
+                   ( SlipLoadVar % Values(j1) + SlipLoadVar % Values(j2))
+               NormalLoadVar % Values(j) = 0.5_dp * &
+                   ( NormalLoadVar % Values(j1) + NormalLoadVar % Values(j2))
+             END DO
+               
+           CASE DEFAULT
+             CALL Fatal('DetermineContact','Implement linear loads for: '//TRIM(I2S(ElemCode)))
+           END SELECT
+         END DO
+       END IF
+       
        IF( FlatProjector .OR. PlaneProjector ) THEN
          IF( NormalCount == 0 ) THEN
            CALL Info('DetermineContact','All normals are consistently signed',Level=10)
@@ -11525,7 +11625,7 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
   TYPE(Variable_t), POINTER :: MultVar
   REAL(KIND=dp) :: scl, rowsum
   LOGICAL :: Found, ExportMultiplier, NotExplicit, Refactorize, EnforceDirichlet, EliminateDiscont, &
-              EmptyRow, ComplexSystem, ConstraintScaling, UseTranspose, EliminateConstraints, &
+              ComplexSystem, ConstraintScaling, UseTranspose, EliminateConstraints, &
               SkipConstraints, NotExplicitMortar, EliminateMortars
   SAVE MultiplierValues, SolverPointer
 
@@ -11979,6 +12079,8 @@ RECURSIVE SUBROUTINE SolveWithLinearRestriction( StiffMatrix, ForceVector, Solut
 
     CALL Info( 'SolveWithLinearRestriction', 'All done', Level=5 )
 
+
+    
 CONTAINS
 
 
@@ -12622,9 +12724,9 @@ CONTAINS
     LOGICAL :: EnforceDirichlet, EnsureDiag, ComplexSystem
     LOGICAL, ALLOCATABLE :: ConstrainedDof(:)
     INTEGER :: offset
-    LOGICAL :: Scaling
+    LOGICAL :: Scaling, FreeDof
     
-    LOGICAL :: FoundDiag
+    LOGICAL :: FoundDiag, NonEmptyRow
     INTEGER, POINTER :: Rows(:), Cols(:)
     REAL(KIND=dp), POINTER :: Vals(:)
     REAL(KIND=dp) :: coeff
@@ -12671,73 +12773,65 @@ CONTAINS
         END IF
       END IF
 
-      ! No need to add just zeros
-      IF( rowsum < EPSILON( rowsum ) ) THEN
-        NoEmptyRows = NoEmptyRows + 1
-        CYCLE
-      END IF
-        
-      ! Define scaling but not if there are something already on the diagonal
+      NonEmptyRow = .FALSE.
       coeff = 1.0_dp
-      IF( Scaling ) THEN
-        IF( .NOT. ( diag > 0 .AND. ABS( Vals(diag) ) > 0.0_dp ) ) THEN
-          coeff = 1.0_dp / rowsum
-        END IF
-      END IF
 
-      EmptyRow = .TRUE.
-      
-      DO j=Rows(i+1)-1,Rows(i),-1
-        ! The initial reason for this is somewhat unclear to me
-        IF( Cols(j) <= 0 ) CYCLE
-
-        ! Neglect too small values but it is a bit risky for complex problems
-        IF( .NOT. ComplexSystem ) THEN
-          IF( ABS( Vals(j) )  < EPSILON(rowsum) * rowsum ) CYCLE
-        END IF
+      ! No need to add just zeros
+      IF( rowsum > EPSILON( rowsum ) ) THEN
         
-        EmptyRow = .FALSE.
-        
-        IF (UseTranspose .AND. ASSOCIATED(dMat % TValues)) THEN
-          ! Transpose values scaled similarly, should they? 
-          CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * dMat % TValues(j) )
-        ELSE
-          CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * Vals(j) )
-        END IF
-               
-        ! Skip the already set dirichlet BCs which the constraint should not affect
-        IF( EnforceDirichlet ) THEN
-          IF( Cols(j) <= DirSize ) THEN
-            IF( ConstrainedDof(Cols(j)) ) CYCLE
+        ! Define scaling but not if there are something already on the diagonal
+        IF( Scaling ) THEN
+          IF( .NOT. ( diag > 0 .AND. ABS( Vals(diag) ) > 0.0_dp ) ) THEN
+            coeff = 1.0_dp / rowsum
           END IF
         END IF
 
-        ! Now set the transpose values
-        IF (ASSOCIATED(dMat % TValues)) THEN
-          CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff * dMat % TValues(j) )
-        ELSE
-          CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff *  Vals(j) )
-        END IF
-      END DO
-      
-      ! If the constraint is associated to the Dirichelt condition the constraint can not really
-      ! have any freedom so fix it also to zero.
-      IF( EnforceDirichlet ) THEN
-        IF(ASSOCIATED(dMat % InvPerm ) ) THEN
-          l = dMat % InvPerm(i)
-          IF(l>0) THEN
-            l = MOD(l-1,DirSize)+1
-            IF(ConstrainedDof(l)) THEN
-              TotVec(ii) = 0.0_dp
-              CALL ZeroRow(TotMat,ii)
-              CALL SetMatrixElement(TotMat,ii,ii,1._dp)
+        DO j=Rows(i+1)-1,Rows(i),-1
+          ! The initial reason for this is somewhat unclear to me
+          IF( Cols(j) <= 0 ) CYCLE
+
+          ! Neglect too small values but it is a bit risky for complex problems
+          IF( .NOT. ComplexSystem ) THEN
+            IF( ABS( Vals(j) )  < EPSILON(rowsum) * rowsum ) CYCLE
+          END IF
+
+          FreeDof = .TRUE.
+          IF (EnforceDirichlet .AND. Cols(j) <= StiffMatrix % NumberOfRows) THEN
+            FreeDof = .NOT. StiffMatrix % ConstrainedDOF(Cols(j))
+          END IF
+
+          IF( FreeDof ) THEN
+            IF (UseTranspose .AND. ASSOCIATED(dMat % TValues)) THEN
+              ! Transpose values scaled similarly, should they? 
+              CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * dMat % TValues(j) )
+              NonEmptyRow = NonEmptyRow .OR. dMat % TValues(j) /= 0
+            ELSE
+              CALL AddToMatrixElement( TotMat, ii, Cols(j), coeff * Vals(j) )
+              NonEmptyRow = NonEmptyRow .OR. Vals(j) /= 0
             END IF
+
+            ! Now set the transpose values
+            IF (ASSOCIATED(dMat % TValues)) THEN
+              CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff * dMat % TValues(j) )
+            ELSE
+              CALL AddToMatrixElement( TotMat, Cols(j), ii, coeff *  Vals(j) )
+            END IF
+          ELSE
+            IF (UseTranspose .AND. ASSOCIATED(dMat % TValues)) THEN
+              TotVec(ii) = TotVec(ii) - &
+                        coeff * dMat % TValues(j) * ForceVector(dMat % Cols(j)) / &
+                        StiffMatrix % Values(StiffMatrix % Diag(dMat % Cols(j)))
+            ELSE
+              TotVec(ii) = TotVec(ii) - &
+                  coeff * dMat % Valuess(j) * ForceVector(dMat % Cols(j)) / &
+                  StiffMatrix % Values(StiffMatrix % Diag(dMat % Cols(j)))
           END IF
-        END IF
+            
+        END DO
       END IF
 
       ! If there is no matrix entry, there can be no non-zero r.h.s.
-      IF( EmptyRow ) THEN
+      IF( .NOT. NonEmptyRow ) THEN
         NoEmptyRows = NoEmptyRows + 1
         TotVec(ii) = 0._dp
         !        might not be the right thing to do in parallel!!

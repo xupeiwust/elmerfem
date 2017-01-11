@@ -380,9 +380,14 @@ SUBROUTINE WhitneyAVSolver_Init0(Model,Solver,dt,Transient)
 
   SolverParams => GetSolverParams()
   IF ( .NOT.ListCheckPresent(SolverParams, "Element") ) THEN
-    PiolaVersion = GetLogical(SolverParams, &
-        'Use Piola Transform', Found )   
     SecondOrder = GetLogical(SolverParams, 'Quadratic Approximation', Found)
+    IF( SecondOrder ) THEN
+      PiolaVersion = .TRUE.
+    ELSE
+      PiolaVersion = GetLogical(SolverParams, &
+          'Use Piola Transform', Found )   
+    END IF
+
     IF (PiolaVersion) THEN
       IF ( Transient .OR. LorentzConductivity ) THEN
         IF (SecondOrder) THEN
@@ -506,8 +511,13 @@ SUBROUTINE WhitneyAVSolver( Model,Solver,dt,Transient )
   SolverParams => GetSolverParams()
 
 
-  PiolaVersion = GetLogical( SolverParams, 'Use Piola Transform', Found )
   SecondOrder = GetLogical( SolverParams, 'Quadratic Approximation', Found )
+  IF( SecondOrder ) THEN
+    PiolaVersion = .TRUE.
+  ELSE
+    PiolaVersion = GetLogical( SolverParams, 'Use Piola Transform', Found )
+  END IF
+
   IF (PiolaVersion) THEN
     CALL Info('WhitneyAVSolver', &
         'Using Piola Transformed element basis functions',Level=4)
@@ -3103,8 +3113,13 @@ SUBROUTINE WhitneyAVHarmonicSolver_Init0(Model,Solver,dt,Transient)
 
   SolverParams => GetSolverParams()
   IF ( .NOT.ListCheckPresent(SolverParams, "Element") ) THEN
-    PiolaVersion = GetLogical(SolverParams, 'Use Piola Transform', Found )
     SecondOrder = GetLogical(SolverParams, 'Quadratic Approximation', Found)
+    IF( SecondOrder ) THEN
+      PiolaVersion = .TRUE.
+    ELSE
+      PiolaVersion = GetLogical(SolverParams, 'Use Piola Transform', Found )
+    END IF
+
     IF (PiolaVersion) THEN    
        IF (SecondOrder) THEN
           CALL ListAddString( SolverParams, &
@@ -3199,8 +3214,13 @@ SUBROUTINE WhitneyAVHarmonicSolver( Model,Solver,dt,Transient )
 
   SolverParams => GetSolverParams()
   
-  PiolaVersion = GetLogical( SolverParams, 'Use Piola Transform', Found )
   SecondOrder = GetLogical( SolverParams, 'Quadratic Approximation', Found )
+  IF( SecondOrder ) THEN
+    PiolaVersion = .TRUE.
+  ELSE
+    PiolaVersion = GetLogical( SolverParams, 'Use Piola Transform', Found )
+  END IF
+
   IF (PiolaVersion) THEN
     CALL Info('WhitneyAVSolver', &
         'Using Piola Transformed element basis functions',Level=4)
@@ -5766,6 +5786,10 @@ END SUBROUTINE MagnetoDynamicsCalcFields_Init
    INTEGER, POINTER, SAVE :: SetPerm(:) => NULL()
 !-------------------------------------------------------------------------------------------
    IF ( .NOT. ASSOCIATED( Solver % Matrix ) ) RETURN
+   
+   CALL Info('MagnetoDynamicsCalcFields','------------------------------',Level=6)
+   CALL Info('MagnetoDynamicsCalcFields','Computing postprocessed fields',Level=5)
+
 
    dim = CoordinateSystemDimension()
    SolverParams => GetSolverParams()
@@ -5790,16 +5814,22 @@ END SUBROUTINE MagnetoDynamicsCalcFields_Init
 
    ! Inherit the solution basis from the primary solver
    vDOFs = pSolver % Variable % DOFs
-   PiolaVersion = GetLogical( pSolver % Values,'Use Piola Transform', Found ) 
-   IF (PiolaVersion) &
-       CALL Info('MagnetoDynamicsCalcFields', &
-       'Using Piola transformed finite elements',Level=5)
    SecondOrder = GetLogical( pSolver % Values, 'Quadratic Approximation', Found )  
    IF (SecondOrder) THEN
      EdgeBasisDegree = 2
    ELSE
      EdgeBasisDegree = 1
    END IF
+
+   IF( SecondOrder ) THEN
+     PiolaVersion = .TRUE.
+   ELSE
+     PiolaVersion = GetLogical( pSolver % Values,'Use Piola Transform', Found ) 
+   END IF
+
+   IF (PiolaVersion) &
+       CALL Info('MagnetoDynamicsCalcFields', &
+       'Using Piola transformed finite elements',Level=5)
 
    ElectricPotName = GetString(SolverParams, 'Precomputed Electric Potential', PrecomputedElectricPot)
    IF (PrecomputedElectricPot) THEN
@@ -7549,6 +7579,8 @@ CONTAINS
 !------------------------------------------------------------------------------
    IF(.NOT. ASSOCIATED(var)) RETURN
 
+   CALL Info('MagnetoDynamicsCalcFields','Solving for field: '//TRIM(Var % Name),Level=6)
+   
    DO i=1,m
      dofs = dofs+1
      Solver % Matrix % RHS => b(:,dofs)

@@ -378,19 +378,22 @@ static int FindParentSide(struct FemType *data,struct BoundaryType *bound,
   int i,j,sideelemtype2,elemind,parent,normal,elemtype;
   int elemsides,side,sidenodes,nohits,hit,hit1,hit2;
   int sideind2[MAXNODESD1];
-
+  int debug;
+  
   hit = FALSE;
   elemsides = 0;
   elemtype = 0;
   hit1 = FALSE;
   hit2 = FALSE;
 
+  debug = FALSE;
+  
   for(parent=1;parent<=2;parent++) {
     if(parent == 1) 
       elemind = bound->parent[sideelem];
     else
       elemind = bound->parent2[sideelem];
-
+    
     if(elemind > 0) {
       elemtype = data->elementtypes[elemind];
       elemsides = elemtype / 100;
@@ -404,17 +407,19 @@ static int FindParentSide(struct FemType *data,struct BoundaryType *bound,
 
 	for(side=0;side<elemsides;side++) {
 
-	  if(0) printf("elem = %d %d %d %d\n",elemind,elemsides,normal,side);
+	  if(debug) printf("elem = %d %d %d %d\n",elemind,elemsides,normal,side);
 
 	  GetElementSide(elemind,side,normal,data,&sideind2[0],&sideelemtype2);
-
+	  
 	  if(sideelemtype2 < 300 && sideelemtype > 300) break;	
 	  if(sideelemtype2 < 200 && sideelemtype > 200) break;		
 	  if(sideelemtype != sideelemtype2) continue;
 
-	  sidenodes = sideelemtype % 100;
+	  sidenodes = sideelemtype / 100;
 
 	  for(j=0;j<sidenodes;j++) {
+	    if(debug) printf("sidenode: %d %d %d\n",j,sideind[j],sideind2[j]);
+
 	    hit = TRUE;
 	    for(i=0;i<sidenodes;i++) 
 	      if(sideind[(i+j)%sidenodes] != sideind2[i]) hit = FALSE;
@@ -433,7 +438,7 @@ static int FindParentSide(struct FemType *data,struct BoundaryType *bound,
 	    }
 	  }
 	}
-      }	
+      }
 
       
       /* this finding of sides does not guarantee that normals are oriented correctly */
@@ -474,14 +479,16 @@ static int FindParentSide(struct FemType *data,struct BoundaryType *bound,
 
     skip:  
       if(!hit) {
-	printf("FindParentSide: cannot locate BC element in given bulk element\n");
-	printf("BC elem of type %d with indexes: ",sideelemtype);
-	for(i=0;i<sideelemtype%100;i++)
+	printf("FindParentSide: cannot locate BC element in parent %d: %d\n",parent,elemind);
+	printf("BC elem %d of type %d with corner indexes: ",sideelem,sideelemtype);
+	for(i=0;i<sideelemtype/100;i++)
 	  printf(" %d ",sideind[i]);
 	printf("\n");
 
-	printf("Bulk elem %d of type %d with indexes: ",elemind,elemtype);
-	for(i=0;i<elemtype/100;i++)
+	printf("Bulk elem %d of type %d with corner indexes: ",elemind,elemtype);
+	j = elemtype/100;
+	if( j >= 5 && j<=7 ) j = j-1;
+	for(i=0;i<j;i++)
 	  printf(" %d ",data->topology[elemind][i]);
 	printf("\n");             
       }
@@ -768,8 +775,8 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
     }
       
     if(activeelemperm) {
-      p1 = invelemperm[p1];
-      p2 = invelemperm[p2];
+      if( p1 > 0 ) p1 = invelemperm[p1];
+      if( p2 > 0 ) p2 = invelemperm[p2];
     }
     
     if(elementtype > maxelemtype ) {
@@ -798,7 +805,7 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
       bound->parent[i] = p1;
       bound->parent2[i] = p2;
     }
-
+    
     if(bound->parent[i] > 0) {
       fail = FindParentSide(data,bound,i,elementtype,sideind);
       if(fail) falseparents++;      
@@ -1258,7 +1265,6 @@ int SaveElmerInput(struct FemType *data,struct BoundaryType *bound,
     if(bound[j].nosides == 0) continue;
     
     for(i=1; i <= bound[j].nosides; i++) {
-
       GetBoundaryElement(i,&bound[j],data,ind,&sideelemtype); 
       sumsides++;
       
@@ -2078,7 +2084,7 @@ int PartitionSimpleElements(struct FemType *data,struct ElmergridType *eg,struct
     bigerror("Partitioning not performed");
   }
     
-  if( eg->partbcz > 1 ) 
+  if( eg->partbcz > 1 || eg->partbcr ) 
     PartitionConnectedElements1D(data,bound,eg,info);
   else if( eg->partbcmetis > 1 ) 
     PartitionConnectedElementsMetis(data,bound,eg->partbcmetis,3,info); 
@@ -2853,22 +2859,28 @@ int PartitionConnectedElementsStraight(struct FemType *data,struct BoundaryType 
 
 int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound,
 				 struct ElmergridType *eg, int info) {
-  int i,j,k,l,dim,allocated,debug,partz,hit,bctype;
+  int i,j,k,l,dim,allocated,debug,partz,partr,parts,hit,bctype;
   int noknots, noelements,bcelem,bc,maxbcelem;
   int IndZ,noconnect,totpartelems,sideelemtype,sidenodes,sidehits,nohits;
   int *cumz,*elemconnect,*partelems,*nodeconnect;
   int sideind[MAXNODESD2];
-  Real z,MaxZ,MinZ; 
+  Real val,z,MaxZ,MinZ; 
 
 
   debug = FALSE;
 
   partz = eg->partbcz;
-  if( partz == 0 ) return(0);
+  partr = eg->partbcr;
+  
+  if( partz == 0 && partr == 0) return(0);
 
+  parts = MAX( partz, partr ); 
 
   if(info) {
-    printf("Making a simple 1D partitioing in z for the connected elements only\n");
+    if( partz )
+      printf("Making a simple 1D partitioing in z for the connected elements only\n");
+    else
+      printf("Making a simple 1D partitioing in r for the connected elements only\n");     
   }
 
   if(!data->nodeconnectexist) {
@@ -2887,15 +2899,25 @@ int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound
   noelements = data->noelements;
   totpartelems = 0;
 
-  MaxZ = MinZ = data->z[1];
-  for(i=1;i<=noknots;i++) {
-    z = data->z[i];
+  /* Because we don't want to change the code too much use 'z' for the 
+     coordinate also in the radial case. */ 
+  if( partr )
+    z = sqrt( data->x[1] * data->z[1] + data->y[1] * data->y[1]);
+  else
+    z = data->z[1];
+  MaxZ = MinZ = z;
+  
+  for(i=1;i<=noknots;i++) {    
+    if( partr )
+      z = sqrt( data->x[i] * data->x[i] + data->y[i] * data->y[i]);
+    else
+      z = data->z[i];
     MaxZ = MAX( MaxZ, z);
     MinZ = MIN( MinZ, z);
   }
 
   if( info ) {
-    printf("Range in z-direction: %12.5e %12.5e\n",MinZ,MaxZ);
+    printf("Range in coordinate extent: %12.5e %12.5e\n",MinZ,MaxZ);
   }
 
   /* Zero is the 1st value so that recursive algos can be used. */ 
@@ -2918,21 +2940,6 @@ int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound
 		     data,sideind,&sideelemtype);
 
       sidenodes = sideelemtype % 100;
-#if 0
-      /* This method of going through the connected BC elements was not really 
-	 robust enough since there can be elements that are not on the boundary 
-	 but still past the test if all their nodes are on the boundary. */
-      nohits = 0;      
-      z = 0.0; 
-      for(j=0;j<sidenodes;j++) {
-	k = sideind[j];
-	if( nodeconnect[k] ) {
-	  nohits++;
-	  z += data->z[k];
-	}
-      }
-      if( nohits < sidenodes ) continue;
-#else     
       hit = FALSE;
       
       for(k=1;k<=eg->connect;k++) {
@@ -2956,9 +2963,12 @@ int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound
       z = 0.0; 
       for(j=0;j<sidenodes;j++) {
 	k = sideind[j];
-	z += data->z[k];
+	if( partr )
+	  val = sqrt( data->x[k]*data->x[k] + data->y[k]*data->y[k]);
+	else
+	  val = data->z[k];
+	z += val;
       }
-#endif
 
       z = z / sidenodes;
       IndZ = ceil( MAXCATEGORY * ( z - MinZ ) / ( MaxZ - MinZ ) );
@@ -3019,7 +3029,7 @@ int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound
     
     noconnect = bcelem;
     for(i=1;i<=MAXCATEGORY;i++) 
-      cumz[i] = ceil( 1.0 * partz * cumz[i] / noconnect );
+      cumz[i] = ceil( 1.0 * parts * cumz[i] / noconnect );
     
     if( debug ) {
       printf("Partition categories\n");
@@ -3903,7 +3913,7 @@ int PartitionMetisGraph(struct FemType *data,struct BoundaryType *bound,
 
   nparts = partitions;
   if( dual ) {
-    if( eg->partbcz > 1 ) 
+    if( eg->partbcz > 1 || eg->partbcr ) 
       PartitionConnectedElements1D(data,bound,eg,info);
     else if( eg->partbcmetis > 1 ) 
       PartitionConnectedElementsMetis(data,bound,eg->partbcmetis,metisopt,info);
