@@ -9884,9 +9884,9 @@ END SUBROUTINE GetMaxDefs
         IF( jj == 0) THEN
           PRINT *,'Projector col is zero:',ParEnv % MyPe, i, ii, j, jj
           CYCLE
-        END IF       
+        END IF
         val = projector % values(j)
-
+        
         IF( GlobalInds ) THEN
           IF( jj > SIZE( GlobalDofs ) ) THEN
             PRINT *,'Projecor invperm is larger than globaldofs',&
@@ -9898,8 +9898,8 @@ END SUBROUTINE GetMaxDefs
             PRINT *,'Projector global col is zero:',ParEnv % MyPe, i, ii, j, jj
             CYCLE
           END IF
-        ELSE
-
+        END IF
+          
         IF( ASSOCIATED( projector % tvalues ) ) THEN
           tval = projector % tvalues(j)
           IF( GlobalInds ) THEN
