@@ -12823,8 +12823,9 @@ CONTAINS
                         StiffMatrix % Values(StiffMatrix % Diag(dMat % Cols(j)))
             ELSE
               TotVec(ii) = TotVec(ii) - &
-                  coeff * dMat % Valuess(j) * ForceVector(dMat % Cols(j)) / &
+                  coeff * dMat % Values(j) * ForceVector(dMat % Cols(j)) / &
                   StiffMatrix % Values(StiffMatrix % Diag(dMat % Cols(j)))
+            END IF
           END IF
             
         END DO
