@@ -160,35 +160,37 @@ CONTAINS
     ! local
     D1 = delta/(ew + delta)
   END FUNCTION D1
-
-  RECURSIVE REAL FUNCTION XiT(B1,B2,D1,D2,Xi0,ew,Temperature)
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0
-    !local
-    REAL(KIND=dp) :: aux1, aux2
-    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
-    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
-    XiT= (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
-         *Mw*(l0 + (cw0 - ci0)*(Temperature -T0))/(T0*R*Temperature)
-  END FUNCTION XiT
-
-  RECURSIVE REAL FUNCTION XiP(B1,B2,D1,D2,Xi0,ewrhow0,rhoi0,Temperature)
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0
-    !local
-    REAL(KIND=dp) :: aux1, aux2
-    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
-    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
-    XiT= (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
-         *Mw*((1.0_dp/rhoi0) - (1.0_dp/rhow0))/(R*Temperature)
-  END FUNCTION XiT
   
-
   RECURSIVE REAL FUNCTION Xi(B1,B2,D1,D2,Xi0)
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0
     Xi= Xi0/(1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1)) &
          + (1.0_dp - Xi0)/(1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))
   END FUNCTION Xi
+  
+  RECURSIVE REAL FUNCTION XiT(B1,B2,D1,D2,Xi0,Mw,ew,delta,cw0,ci0,l0,T0,GasConstant,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,cw0,ci0,l0,T0,GasConstant,Temperature
+    !local
+    REAL(KIND=dp) :: aux1, aux2
+    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
+    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
+    XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
+         *Mw*(l0 + (cw0 - ci0)*(Temperature -T0))/(T0*GasConstant*Temperature)
+  END FUNCTION XiT
+
+  RECURSIVE REAL FUNCTION XiP(B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature
+    !local
+    REAL(KIND=dp) :: aux1, aux2
+    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
+    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
+    XiP = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
+         *Mw*((1.0_dp/rhoi0) - (1.0_dp/rhow0))/(GasConstant*Temperature)
+  END FUNCTION XiP
 
   RECURSIVE REAL FUNCTION ksth(ks0th,bs,T0,Temperature)
+    IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ks0th,bs,T0,Temperature
     ksth = ks0th/( 1.0_dp + bs*(Temperature - T0)/T0)
   END FUNCTION ksth
@@ -203,8 +205,9 @@ CONTAINS
     KGTT = unittensor/factor
   END FUNCTION GetKGTT
 
-  RECURSIVE REAL FUNCTION CGTT(Xi,XiT,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0,T0,Temperature)
-    REAL(KIND=dp), INTENT(IN) :: Xi,XiT,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0,T0,Temperature
+  RECURSIVE REAL FUNCTION CGTT(Xi,XiT,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Xi,XiT,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0
     CGTT = (1.0_dp - eta0)*rhos0*cs0 + Xi*eta0*rhow0*cw0 &
          + (1.0_dp - Xi)*eta0*rhoi0*ci0 &
          + rhoi0*l0*eta0*XiT
@@ -239,8 +242,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   INTEGER,PARAMETER :: io=20,NumberOfEntries=10
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),PorosityPerm(:),SalinityPerm(:)
   REAL(KIND=dp) :: Norm
-  REAL(KIND=dp),POINTER :: Ks0TT(:,:,:),Xi0(:),ew(:),bs(:),rhos0(:),cs0(:), &
-       Temperature(:), Pressure(:), Porosity(:), Salinity(:)
+  REAL(KIND=dp),POINTER :: Temperature(:), Pressure(:), Porosity(:), Salinity(:)
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:), NodalTemperature(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
        NoDarcy=.FALSE.,ConstantPorosity=.FALSE., NoSalinity=.FALSE.
@@ -419,8 +421,8 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
     !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: CGTT, CgwTT, KGTTAtIP(3,3)   ! needed in equation
-    REAL(KIND=dp) :: XiAtIP,ksthAtIP  ! function values needed for KGTT
+    REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
+    REAL(KIND=dp) :: XiAtIP,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     REAL(KIND=dp) :: ks0th,rhos0,bs,cs0,ew  ! stuff comming from RockMaterial
@@ -514,9 +516,14 @@ CONTAINS
       B1AtIP = B1(deltaInElement,ew,Mw,GasConstant,TemperatureAtIP)
       B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
       XiAtIP = Xi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0)
+      XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+           deltaInElement,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP)
+      XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+           deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       ksthAtIP = ksth(ks0th,bs,T0,TemperatureAtIP)
-      KGTTAtIP = GetKGTT(ksthAtIP,kwth,kith,eta0,XiAtIP,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-      
+      KGTTAtIP = GetKGTT(ksthAtIP,kwth,kith,eta0,XiAtIP,&
+           TemperatureAtIP,PressureAtIP,PorosityAtIP)
+      CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       StiffPQ = 0.0
@@ -532,14 +539,14 @@ CONTAINS
           !STIFF(p,q) = STIFF(p,q) + Weight * R*Basis(q) * Basis(p)
           DO i=1,DIM
             DO J=1,DIM
-              StiffPQ = StiffPQ + KGTTAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
+              StiffPQ = StiffPQ - KGTTAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
             END DO
           END DO
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
 
           ! time derivative (rho*du/dt,v): !! THIS IS OK AS IS !!!
           ! ------------------------------
-          MASS(p,q) = MASS(p,q) + Weight * CGTT * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) + Weight * CGTTAtIP * Basis(q) * Basis(p)
         END DO
       END DO
 
