@@ -6,9 +6,9 @@ MODULE PermafrostMaterials
 
   TYPE RockMaterial_t
      INTEGER :: NumberOfRecords
-     REAL(KIND=dp), ALLOCATABLE :: ks0th(:),ew(:),bs(:),rhos0(:),cs0(:)
-     REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0, p0,T20, rhow0,rhoi0,&
-         l0,cw0,ci0,eps,kwth,kith,kcth, Xi0,eta0
+     REAL(KIND=dp), ALLOCATABLE :: ks0th(:),ew(:),bs(:),rhos0(:),cs0(:),Xi0(:),eta0(:),hs0(:),Kgw(:,:,:)
+     REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
+         hw0,hi0,cw0,ci0,eps,kw0th,ki0th
      CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   END TYPE RockMaterial_t
 
@@ -57,6 +57,9 @@ CONTAINS
            CurrentRockMaterial % bs,&
            CurrentRockMaterial % rhos0,&
            CurrentRockMaterial % cs0,&
+           CurrentRockMaterial % Xi0,&
+           CurrentRockMaterial % eta0,&
+           CurrentRockMaterial % hs0,&
            CurrentRockMaterial % VariableBaseName)
     END IF
     ALLOCATE(&
@@ -65,6 +68,10 @@ CONTAINS
          CurrentRockMaterial % bs(NumberOfRecords),&
          CurrentRockMaterial % rhos0(NumberOfRecords),&
          CurrentRockMaterial % cs0(NumberOfRecords),&
+         CurrentRockMaterial % Xi0(NumberOfRecords),&
+         CurrentRockMaterial % eta0(NumberOfRecords),&
+         CurrentRockMaterial % hs0(NumberOfRecords),&
+         CurrentRockMaterial % Kgw(3,3,NumberOfRecords),&
          CurrentRockMaterial % VariableBaseName(NumberOfRecords),&
          STAT=OK)
     AllocationsDone = .TRUE.
@@ -73,40 +80,48 @@ CONTAINS
     !------------------------------------------------------------------------------
     ! Read in information from material file
     ! General constants
-    !  GasConstant, Mw, DeltaT, T0, p0,T20, rhow0,rhoi0,&
-    !     l0,cw0,ci0,eps,kwth,kith,kcth, Xi0,eta0
+    !  GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
+    !     hw0,hi0,cw0,ci0,eps,kw0th,ki0th
     !------------------------------------------------------------------------------
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % GasConstant, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Mw, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % DeltaT,Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % T0,Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % p0,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % T20, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhow0, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhoi0,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % l0, Comment
+    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hw0, Comment
+    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hi0, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % cw0, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ci0, Comment
     READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % eps, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % kwth, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % kith, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % kwth, Comment   
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Xi0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % eta0, Comment
+    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % kw0th, Comment
+    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ki0th, Comment
+
     ! for each material
     !       ks0th(:),ew(:),b(:),rhos0(:),cs0(:)
     DO I=1,NumberOfRecords
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % VariableBaseName(I)
       WRITE(Message,'(A,I2,A,A)') "Input for Variable No.",I,": ", CurrentRockMaterial % VariableBaseName(I)
       CALL INFO(FunctionName,Message,Level=9)
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Xi0(I), Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % eta0(I), Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ks0th(I), Comment          
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ew(I), Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % bs(I), Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhos0(I), Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % cs0(I), Comment
-      WRITE(Message,'(A)') "Ks0th,Xi0,ew,b,rhos0,cs0:"
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment
+      DO J=1,3
+        DO K=1,3
+          READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Kgw(J,K,I), Comment
+        END DO
+      END DO
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment
+      WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
       CALL INFO(FunctionName,Message,Level=9)
-      WRITE(Message,'(E20.5,E20.5,E20.5,E20.5,E20.5)') CurrentRockMaterial % Ks0th(I), &
+      WRITE(Message,'(E20.5,E20.5,E20.5,E20.5,E20.5,E20.5,E20.5)') CurrentRockMaterial % Xi0(I),&
+           CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
            CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
            CurrentRockMaterial % cs0(I)
       CALL INFO(FunctionName,Message,Level=9)
@@ -117,10 +132,16 @@ CONTAINS
 10  CLOSE(io)
     IF (I < NumberOfRecords) THEN
       WRITE(Message,'(I3,A,I3)') I,"records read, which is smaller than given number ", NumberOfRecords
-      CALL WARN(FunctionName,Message)
+      CALL FATAL(FunctionName,Message)
+    ELSE
+      WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
+      CALL INFO(FunctionName,Message,Level=1)
     END IF
     RETURN
-30  CALL FATAL(FunctionName,"I/O error")
+    
+30  CALL WARN(FunctionName,"I/O error! Last successfully read variable:")
+    CALL WARN(FunctionName,Comment)
+    CALL FATAL(FunctionName,"Stopping simulation")    
   END FUNCTION ReadPermafrostRockMaterial
 
   RECURSIVE REAL FUNCTION delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
@@ -195,13 +216,13 @@ CONTAINS
     ksth = ks0th/( 1.0_dp + bs*(Temperature - T0)/T0)
   END FUNCTION ksth
   
-  RECURSIVE FUNCTION GetKGTT(ksth,kwth,kith,eta0,Xi,Temperature,Pressure,Porosity)RESULT(KGTT)
+  RECURSIVE FUNCTION GetKGTT(ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity)RESULT(KGTT)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: ksth,kwth,kith,eta0,Xi,Temperature,Pressure,Porosity
+    REAL(KIND=dp), INTENT(IN) :: ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity
     ! local
     REAL(KIND=dp) :: KGTT(3,3), factor,unittensor(3,3)
     unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
-    factor = (1.0_dp - eta0)/ksth + Xi*eta0/kwth + (1.0_dp - Xi)*eta0/kith
+    factor = (1.0_dp - eta0)/ks0th + Xi*eta0/kw0th + (1.0_dp - Xi)*eta0/ki0th
     KGTT = unittensor/factor
   END FUNCTION GetKGTT
 
@@ -212,6 +233,24 @@ CONTAINS
          + (1.0_dp - Xi)*eta0*rhoi0*ci0 &
          + rhoi0*l0*eta0*XiT
   END FUNCTION CGTT
+  
+  RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0
+    fTildewT = 0.0_dp ! TBD
+  END FUNCTION fTildewT
+  
+  RECURSIVE REAL FUNCTION  fTildewp(B1,D1,delta,ew,rhow0,rhoi0)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: B1,D1,delta,ew,rhow0,rhoi0 
+    fTildewp = 0.0_dp ! TBD
+  END FUNCTION fTildewp
+
+  RECURSIVE REAL FUNCTION KgwpT(rhow0,fTildewTATIP,Kgw)
+   IMPLICIT NONE
+   REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewTATIP,Kgw(3,3)
+       KgwpT = 0.0_dp ! TBD
+  END FUNCTION KgwpT
   
   END MODULE PermafrostMaterials
 
@@ -424,10 +463,11 @@ CONTAINS
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
+    REAL(KIND=dp) :: JgwDAtIP(3),KgwpTAtIP, KgwppAtIP, fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,rhos0,bs,cs0,ew  ! stuff comming from RockMaterial
-    REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
-         l0,cw0,ci0,eps,kwth,kith,kcth,Xi0,eta0     ! coonstants read only once
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgw(3,3)  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0,p0,rhow0,rhoi0,&
+         l0,cw0,ci0,eps,kw0th,ki0th,CgwTT    ! constants read only once
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,&
          Weight,LoadAtIP,TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,StiffPQ
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
@@ -439,7 +479,7 @@ CONTAINS
 
     
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
-         l0,cw0,ci0,eps,kwth,kith,kcth,Xi0,eta0
+         l0,cw0,ci0,eps,kw0th,ki0th,CgwTT
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       DIM = CoordinateSystemDimension()
@@ -450,15 +490,13 @@ CONTAINS
       p0= CurrentRockMaterial % p0
       rhow0= CurrentRockMaterial % rhow0
       rhoi0= CurrentRockMaterial % rhoi0
-      l0= CurrentRockMaterial % l0
       cw0= CurrentRockMaterial % cw0
       ci0= CurrentRockMaterial % ci0
       eps=CurrentRockMaterial % eps
-      kwth= CurrentRockMaterial % kwth
-      kith= CurrentRockMaterial % kith
-      kcth= CurrentRockMaterial % kcth
-      Xi0= CurrentRockMaterial % Xi0
-      eta0= CurrentRockMaterial % eta0
+      kw0th= CurrentRockMaterial % kw0th
+      ki0th= CurrentRockMaterial % ki0th
+      l0= (CurrentRockMaterial % hw0) - (CurrentRockMaterial % hi0)
+      CgwTT = rhow0*cw0
       ConstantsRead=.TRUE.
     END IF
     
@@ -476,13 +514,17 @@ CONTAINS
     Material => GetMaterial()
     RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
     
-    ! read element rock material specific parameters
-    ew = CurrentRockMaterial % ew(RockMaterialID)
+    ! read element rock material specific parameters    
     ks0th = CurrentRockMaterial % ks0th(RockMaterialID)
+    ew = CurrentRockMaterial % ew(RockMaterialID)
+    bs = CurrentRockMaterial % bs(RockMaterialID)
     rhos0 = CurrentRockMaterial % rhos0(RockMaterialID)
     cs0 = CurrentRockMaterial % cs0(RockMaterialID)
-    bs = CurrentRockMaterial % bs(RockMaterialID)
-
+    Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
+    eta0 =CurrentRockMaterial % eta0(RockMaterialID)
+    Kgw(1:3,1:3) =CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
+      
+    
     ! derive element rock material specific parameters
     deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     D1InElement = D1(deltaInElement,ew)
@@ -521,9 +563,14 @@ CONTAINS
       XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
            deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       ksthAtIP = ksth(ks0th,bs,T0,TemperatureAtIP)
-      KGTTAtIP = GetKGTT(ksthAtIP,kwth,kith,eta0,XiAtIP,&
+      KGTTAtIP = GetKGTT(ksthAtIP,kw0th,ki0th,eta0,XiAtIP,&
            TemperatureAtIP,PressureAtIP,PorosityAtIP)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
+      fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0)
+      fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0)
+      KgwpTAtIP = KgwpT(rhow0,fTildewTATIP,Kgw)
+      JgwDAtIP = 0.0_dp
+ 
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       StiffPQ = 0.0
@@ -531,18 +578,20 @@ CONTAINS
         DO q=1,nd
           ! advection term (C*grad(u),v)
           ! -----------------------------------
-          !IF (VeloFound) StiffPQ = StiffPQ + &
-          !     CGWTT * SUM(Velo(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          StiffPQ = StiffPQ + &
+               CGWTT * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! diffusion term ( grad(u),grad(v))
+          ! div(JGH) = KGTT_i,j dT_i/dx_j
           ! -----------------------------------
-          !STIFF(p,q) = STIFF(p,q) + Weight * R*Basis(q) * Basis(p)
+          !STIFF(p,q) = STIFF(p,q) + Weight * KGTT*Basis(q) * Basis(p)
           DO i=1,DIM
             DO J=1,DIM
               StiffPQ = StiffPQ - KGTTAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
             END DO
           END DO
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
+          
 
           ! time derivative (rho*du/dt,v): !! THIS IS OK AS IS !!!
           ! ------------------------------
@@ -590,9 +639,10 @@ CONTAINS
     FORCE = 0._dp
     LOAD = 0._dp
 
-    Flux(1:n)  = GetReal( BC,'field flux', Found )
-    Coeff(1:n) = GetReal( BC,'robin coefficient', Found )
-    Ext_t(1:n) = GetReal( BC,'external field', Found )
+    Flux(1:n)  = GetReal( BC,'Heat flux', Found )
+    Coeff(1:n) = GetReal( BC,'Robin coefficient', Found )
+    IF (.NOT.Found) Coeff(1:n) = 0.0_dp
+    Ext_t(1:n) = GetReal( BC,'External field', Found )
 
     ! Numerical integration:
     !-----------------------
