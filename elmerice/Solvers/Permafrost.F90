@@ -117,15 +117,7 @@ CONTAINS
           READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Kgw(J,K,I), Comment
         END DO
       END DO
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment
-      WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
-      CALL INFO(FunctionName,Message,Level=9)
-      WRITE(Message,'(E20.5,E20.5,E20.5,E20.5,E20.5,E20.5,E20.5)') CurrentRockMaterial % Xi0(I),&
-           CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
-           CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
-           CurrentRockMaterial % cs0(I)
-      CALL INFO(FunctionName,Message,Level=9)
-      CALL INFO(FunctionName,"------------------------------",Level=9)        
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment      
     END DO
     WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
     CALL INFO(FunctionName,Message,Level=1)
@@ -136,6 +128,30 @@ CONTAINS
     ELSE
       WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
       CALL INFO(FunctionName,Message,Level=1)
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+      CALL INFO(FunctionName,"General Constants:", Level=9)
+      WRITE(Message,'(A)') "GasConstant,Mw,DeltaT,T0,p0,rhow0,rhoi0,hw0,hi0,cw0,ci0,eps,kw0th,ki0th:"
+      CALL INFO(FunctionName,Message,Level=9)
+      WRITE(Message,'(14E12.5)') CurrentRockMaterial % GasConstant, &
+           CurrentRockMaterial % Mw, CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0,&
+           CurrentRockMaterial % p0, CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0,&           
+           CurrentRockMaterial % hw0, CurrentRockMaterial % hi0, CurrentRockMaterial % cw0,&
+           CurrentRockMaterial % ci0, CurrentRockMaterial % eps, CurrentRockMaterial % kw0th,&
+           CurrentRockMaterial % ki0th
+      CALL INFO(FunctionName,Message,Level=9)
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+      CALL INFO(FunctionName,"Material Constants:", Level=9)
+      DO I=1,NumberOfRecords
+        WRITE(Message,'(I2,A,A,A)') I,": ", CurrentRockMaterial % VariableBaseName(I),":"
+        WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
+        CALL INFO(FunctionName,Message,Level=9)
+        WRITE(Message,'(E10.5,E10.5,E10.5,E10.5,E10.5,E10.5,E10.5)') CurrentRockMaterial % Xi0(I),&
+             CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
+             CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
+             CurrentRockMaterial % cs0(I)
+        CALL INFO(FunctionName,Message,Level=9)
+      END DO
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)  
     END IF
     RETURN
     
@@ -289,8 +305,6 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName
 
-
-
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature
   !------------------------------------------------------------------------------
@@ -420,7 +434,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
  
         
       CALL LocalMatrix(  Element, N, ND+NB, NodalTemperature,&
-           NodalPorosity,NodalPressure, NodalSalinity,CurrentRockMaterial )
+           NodalPorosity,NodalPressure,NodalSalinity,CurrentRockMaterial )
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -431,7 +445,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
         n  = GetElementNOFNodes()
         nd = GetElementNOFDOFs()
         nb = GetElementNOFBDOFs()
-        !CALL LocalMatrixBC(  Element, n, nd+nb, CurrentRockMaterial )
+        CALL LocalMatrixBC(  Element, n, nd+nb )
       END IF
     END DO
 
@@ -476,7 +490,7 @@ CONTAINS
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
-
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Remove this Output:'
     
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,CgwTT
@@ -498,6 +512,32 @@ CONTAINS
       l0= (CurrentRockMaterial % hw0) - (CurrentRockMaterial % hi0)
       CgwTT = rhow0*cw0
       ConstantsRead=.TRUE.
+
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+      CALL INFO(FunctionName,"General Constants:", Level=9)
+      WRITE(Message,'(A)') "GasConstant,Mw,DeltaT,T0,p0,rhow0,rhoi0,hw0,hi0,cw0,ci0,eps,kw0th,ki0th:"
+      CALL INFO(FunctionName,Message,Level=9)
+      WRITE(Message,'(14E12.5)') CurrentRockMaterial % GasConstant, &
+           CurrentRockMaterial % Mw, CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0,&
+           CurrentRockMaterial % p0, CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0,&           
+           CurrentRockMaterial % hw0, CurrentRockMaterial % hi0, CurrentRockMaterial % cw0,&
+           CurrentRockMaterial % ci0, CurrentRockMaterial % eps, CurrentRockMaterial % kw0th,&
+           CurrentRockMaterial % ki0th
+      CALL INFO(FunctionName,Message,Level=9)
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+      CALL INFO(FunctionName,"Material Constants:", Level=9)
+      DO I=1,NumberOfRecords
+        WRITE(Message,'(I2,A,A,A)') I,": ", CurrentRockMaterial % VariableBaseName(I),":"
+        WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
+        CALL INFO(FunctionName,Message,Level=9)
+        WRITE(Message,'(E10.5,E10.5,E10.5,E10.5,E10.5,E10.5,E10.5)') CurrentRockMaterial % Xi0(I),&
+             CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
+             CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
+             CurrentRockMaterial % cs0(I)
+        CALL INFO(FunctionName,Message,Level=9)
+      END DO
+      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9) 
+      
     END IF
     
     CALL GetElementNodes( Nodes )
@@ -639,7 +679,7 @@ CONTAINS
     FORCE = 0._dp
     LOAD = 0._dp
 
-    Flux(1:n)  = GetReal( BC,'Heat flux', Found )
+    Flux(1:n)  = GetReal( BC,'Heat Flux', Found )
     Coeff(1:n) = GetReal( BC,'Robin coefficient', Found )
     IF (.NOT.Found) Coeff(1:n) = 0.0_dp
     Ext_t(1:n) = GetReal( BC,'External field', Found )
