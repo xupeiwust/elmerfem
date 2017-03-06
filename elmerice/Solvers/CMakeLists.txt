@@ -1,3 +1,8 @@
+SET(WITH_GridDataReader FALSE CACHE BOOL "Include ElmerIce GridDataReader")
+SET(WITH_ScatteredDataInterpolator FALSE CACHE BOOL "Include ElmerIce ScatteredDataInterpolator")
+MARK_AS_ADVANCED(WITH_GridDataReader)
+MARK_AS_ADVANCED(WITH_ScatteredDataInterpolator)
+
 SET(CMAKE_Fortran_MODULE_DIRECTORY
   ${PROJECT_BINARY_DIR}/fmodules CACHE PATH "Directory for Fortran modules")
 
@@ -14,7 +19,10 @@ SET(ElmerIce_SRC AIFlowSolve_nlD2.F90 AIFlowSolve_nlS2.F90
     CostSolver_Robin.F90  m1qn3.F  Grid2DInterpolator.F90  
     Optimize_m1qn3Parallel.F90  OutputStrainHeating.F90  UpdateExport.F90
     IntegrateVertically.F90 EnthalpySolver.F90 SubShelfMelt.F90
-    DummySolver.F90 Permafrost.F90)
+    ./AdjointSSA/AdjointSSA_AdjointSolver.F90 ./AdjointSSA/AdjointSSA_CostDiscSolver.F90
+    ./AdjointSSA/AdjointSSA_CostRegSolver.F90 ./AdjointSSA/AdjointSSA_SSASolver.F90
+    ./AdjointSSA/AdjointSSA_CostContSolver.F90 ./AdjointSSA/AdjointSSA_CostFluxDivSolver.F90
+    ./AdjointSSA/AdjointSSA_GradientSolver.F90 Permafrost.F90)
 
 ADD_LIBRARY(ElmerIceSolvers SHARED ${ElmerIce_SRC})
 
@@ -44,3 +52,10 @@ TARGET_LINK_LIBRARIES(ElmerIceSolvers elmersolver)
 
 INSTALL(TARGETS ElmerIceSolvers LIBRARY DESTINATION "share/elmersolver/lib"
 	    RUNTIME DESTINATION "share/elmersolver/lib")
+
+IF(WITH_GridDataReader)
+  ADD_SUBDIRECTORY(GridDataReader)
+ENDIF()
+IF(WITH_ScatteredDataInterpolator)	
+  ADD_SUBDIRECTORY(ScatteredDataInterpolator)
+ENDIF()
