@@ -204,15 +204,17 @@ CONTAINS
          + (1.0_dp - Xi0)/(1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))
   END FUNCTION Xi
   
-  RECURSIVE REAL FUNCTION XiT(B1,B2,D1,D2,Xi0,Mw,ew,delta,cw0,ci0,l0,T0,GasConstant,Temperature)
+  RECURSIVE REAL FUNCTION XiT(B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,&
+       l0,T0,GasConstant,Temperature, Pressure)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,cw0,ci0,l0,T0,GasConstant,Temperature
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,Temperature, Pressure
     !local
-    REAL(KIND=dp) :: aux1, aux2
-    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
-    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
-    XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
-         *Mw*(l0 + (cw0 - ci0)*(Temperature -T0))/(T0*GasConstant*Temperature)
+    REAL(KIND=dp) :: aux1, aux2, aux3
+    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
+    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
+    aux3 = (l0 + (cw0 - ci0)*(Temperature - T0) &
+         + (-(1.0_dp/rhoi0) + (1.0_dp/rhow0))*(Pressure - p0))/Temperature
+    XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) *Mw*aux3/(T0*GasConstant*Temperature)
   END FUNCTION XiT
 
   RECURSIVE REAL FUNCTION XiP(B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature)
@@ -220,10 +222,10 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature
     !local
     REAL(KIND=dp) :: aux1, aux2
-    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/(1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))
-    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/(1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))
+    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))**2.0_dp)
+    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))**2.0_dp)
     XiP = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
-         *Mw*((1.0_dp/rhoi0) - (1.0_dp/rhow0))/(GasConstant*Temperature)
+          *((1.0_dp/rhoi0) - (1.0_dp/rhow0))* Mw/(GasConstant*Temperature)
   END FUNCTION XiP
 
   RECURSIVE REAL FUNCTION ksth(ks0th,bs,T0,Temperature)
@@ -248,6 +250,7 @@ CONTAINS
     CGTT = (1.0_dp - eta0)*rhos0*cs0 + Xi*eta0*rhow0*cw0 &
          + (1.0_dp - Xi)*eta0*rhoi0*ci0 &
          + rhoi0*l0*eta0*XiT
+    !PRINT *,rhoi0*l0*eta0*XiT, rhoi0,l0,eta0,XiT   
   END FUNCTION CGTT
   
   RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0)
@@ -412,6 +415,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
 
       ! Nodal variable dependencies
       NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
+      !PRINT *, NodalTemperature(1:N), TemperaturePerm(Element % NodeIndexes(1:N)), Element % NodeIndexes(1:N)
       IF (ConstantPorosity) THEN
         NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
         IF (.NOT.Found) THEN
@@ -431,10 +435,9 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       ELSE
         NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
       END IF
- 
-        
-      CALL LocalMatrix(  Element, N, ND+NB, NodalTemperature,&
-           NodalPorosity,NodalPressure,NodalSalinity,CurrentRockMaterial )
+   
+      CALL LocalMatrix(  Element, N, ND+NB, NodalTemperature, NodalPressure, &
+           NodalPorosity, NodalSalinity, CurrentRockMaterial)
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -448,8 +451,6 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
         CALL LocalMatrixBC(  Element, n, nd+nb )
       END IF
     END DO
-
-
     CALL DefaultFinishBoundaryAssembly()
     CALL DefaultFinishAssembly()
     CALL DefaultDirichletBCs()
@@ -465,8 +466,8 @@ CONTAINS
 ! Assembly of the matrix entries arising from the bulk elements
 
 !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalSalinity,&
-       NodalPorosity, NodalPressure, CurrentRockMaterial )
+  SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
+       NodalPorosity, NodalSalinity, CurrentRockMaterial )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
@@ -548,7 +549,7 @@ CONTAINS
 
     BodyForce => GetBodyForce()
     IF ( ASSOCIATED(BodyForce) ) &
-         Load(1:n) = GetReal( BodyForce,'Heat source', Found )
+         LOAD(1:n) = GetReal( BodyForce,'Heat source', Found )
 
     ! read variable material parameters from CurrentRockMaterial
     Material => GetMaterial()
@@ -563,13 +564,17 @@ CONTAINS
     Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
     eta0 =CurrentRockMaterial % eta0(RockMaterialID)
     Kgw(1:3,1:3) =CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
-      
+
+    !PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
+    !     "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
     
     ! derive element rock material specific parameters
     deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     D1InElement = D1(deltaInElement,ew)
     D2InElement = 1.0_dp
     
+    !PRINT *, "deltaInElement",deltaInElement,"D1InElement",D1InElement,"D2InElement",D2InElement
+        
     ! Numerical integration:
     !-----------------------
     IP = GaussPoints( Element )
@@ -598,8 +603,8 @@ CONTAINS
       B1AtIP = B1(deltaInElement,ew,Mw,GasConstant,TemperatureAtIP)
       B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
       XiAtIP = Xi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0)
-      XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
-           deltaInElement,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP)
+      XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+           deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
       XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
            deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       ksthAtIP = ksth(ks0th,bs,T0,TemperatureAtIP)
@@ -609,36 +614,39 @@ CONTAINS
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0)
       KgwpTAtIP = KgwpT(rhow0,fTildewTATIP,Kgw)
-      JgwDAtIP = 0.0_dp
- 
+      JgwDAtIP = 0.0_dp ! TBD
+
+      !PRINT *,"KGTTAtIP",KGTTAtIP
+      !PRINT *,"CGTTAtIP",CGTTAtIP
+      
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
-      StiffPQ = 0.0
       DO p=1,nd
         DO q=1,nd
+          StiffPQ = 0.0
           ! advection term (C*grad(u),v)
+          ! C_GW^TT dT/dx_i J_gw^D_i
           ! -----------------------------------
           StiffPQ = StiffPQ + &
-               CGWTT * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+               CGWTT * SUM(JgwDAtIP(1:DIM)*dBasisdx(q,1:DIM)) * Basis(p)
 
           ! diffusion term ( grad(u),grad(v))
-          ! div(JGH) = KGTT_i,j dT_i/dx_j
+          ! div(JGH) = d(KGTT_i,j dT/dx_j)/dx_i
           ! -----------------------------------
-          !STIFF(p,q) = STIFF(p,q) + Weight * KGTT*Basis(q) * Basis(p)
           DO i=1,DIM
             DO J=1,DIM
-              StiffPQ = StiffPQ - KGTTAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
+              StiffPQ = StiffPQ + KGTTAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
             END DO
           END DO
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
           
 
-          ! time derivative (rho*du/dt,v): !! THIS IS OK AS IS !!!
+          ! time derivative (c*du/dt,v): !! THIS IS OK AS IS !!!
           ! ------------------------------
-          MASS(p,q) = MASS(p,q) + Weight * CGTTAtIP * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) + Weight * (CGTTAtIP) * Basis(q) * Basis(p)
         END DO
       END DO
-
+      ! body force
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
