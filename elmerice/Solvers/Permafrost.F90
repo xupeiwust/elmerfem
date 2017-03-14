@@ -234,14 +234,15 @@ CONTAINS
     ksth = ks0th/( 1.0_dp + bs*(Temperature - T0)/T0)
   END FUNCTION ksth
   
-  RECURSIVE FUNCTION GetKGTT(ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity)RESULT(KGTT)
+  RECURSIVE FUNCTION GetKGTT(ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity,meanfactor)RESULT(KGTT)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity
+    REAL(KIND=dp), INTENT(IN) :: ks0th,kw0th,ki0th,eta0,Xi,Temperature,Pressure,Porosity,meanfactor
     ! local
     REAL(KIND=dp) :: KGTT(3,3), factor,unittensor(3,3)
     unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
-    factor = (1.0_dp - eta0)/ks0th + Xi*eta0/kw0th + (1.0_dp - Xi)*eta0/ki0th
-    KGTT = unittensor/factor
+    factor = (1.0_dp - meanfactor)*(1.0_dp/((1.0_dp - eta0)/ks0th + Xi*eta0/kw0th + (1.0_dp - Xi)*eta0/ki0th))
+    factor = factor + meanfactor*((1.0_dp - eta0)*ks0th + Xi*eta0*kw0th + (1.0_dp - Xi)*eta0*ki0th)
+    KGTT = unittensor*factor
   END FUNCTION GetKGTT
 
   RECURSIVE REAL FUNCTION CGTT(Xi,XiT,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
@@ -299,7 +300,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, Active,iter, maxiter, istat
   INTEGER,PARAMETER :: io=20,NumberOfEntries=10
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),PorosityPerm(:),SalinityPerm(:)
-  REAL(KIND=dp) :: Norm
+  REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Temperature(:), Pressure(:), Porosity(:), Salinity(:)
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:), NodalTemperature(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
@@ -416,6 +417,10 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       ! Nodal variable dependencies
       NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
       !PRINT *, NodalTemperature(1:N), TemperaturePerm(Element % NodeIndexes(1:N)), Element % NodeIndexes(1:N)
+      meanfactor = GetConstReal(Material,"Conductivity Aritmetic Mean Weight",Found)
+      IF (.NOT.Found) THEN
+         meanfactor = 1.0_dp
+      END IF
       IF (ConstantPorosity) THEN
         NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
         IF (.NOT.Found) THEN
@@ -609,7 +614,7 @@ CONTAINS
            deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       ksthAtIP = ksth(ks0th,bs,T0,TemperatureAtIP)
       KGTTAtIP = GetKGTT(ksthAtIP,kw0th,ki0th,eta0,XiAtIP,&
-           TemperatureAtIP,PressureAtIP,PorosityAtIP)
+           TemperatureAtIP,PressureAtIP,PorosityAtIP,meanfactor)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0)
