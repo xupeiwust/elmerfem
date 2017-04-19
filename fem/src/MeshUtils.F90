@@ -5366,7 +5366,20 @@ END SUBROUTINE GetMaxDefs
         FaceCol0 = Mesh % NumberOfNodes + Mesh % NumberOfEdges
       END IF
 
-      IF( StrongLevelEdges .OR. StrongExtrudedEdges ) THEN
+      IF( StrongSkewEdges ) THEN
+         IF( PiolaVersion ) CALL Fatal('','Not implemented for piola yet!')
+         CALL AddEdgeProjectorStrongStridesGeneric()
+         ! Compute the unset edge dofs. 
+         ! Some of the dofs may have been set by the strong projector. 
+         m = 0
+         DO i=1, Mesh % NumberOfEdges
+           IF( EdgePerm(i) > 0 ) m = m + 1
+         END DO
+         IF( m > 0 ) THEN
+           SomethingUndone = .TRUE.
+           EdgeBasis = .TRUE.
+        END IF
+      ELSE IF( StrongLevelEdges .OR. StrongExtrudedEdges ) THEN
         CALL AddEdgeProjectorStrongStrides()
         ! Compute the unset edge dofs. 
         ! Some of the dofs may have been set by the strong projector. 
@@ -6426,6 +6439,628 @@ END SUBROUTINE GetMaxDefs
     !----------------------------------------------------------------------
 
 
+
+
+    !---------------------------------------------------------------------------------
+    SUBROUTINE AddEdgeProjectorStrongStridesGeneric()
+
+      INTEGER :: ind, indm, eind, eindm, k1, k2, km1, km2, sgn0, coeffi(100), &
+          ncoeff, dncoeff, ncoeff0, i1, i2, j1, j2, Nundefined, NoSkewed, SkewPart
+      TYPE(Element_t), POINTER :: Element, ElementM
+      INTEGER, POINTER :: Indexes(:), IndexesM(:)
+      TYPE(Nodes_t) :: NodesM, Nodes, NodesL 
+      INTEGER, POINTER :: EdgeMap(:,:),EdgeMapM(:,:)
+      REAL(KIND=dp) :: xm1, xm2, ym1, ym2, coeff(100), signs(100), wsum, minwsum, maxwsum, val, &
+          x1o, y1o, x2o, y2o, cskew, sedge
+      REAL(KIND=dp) :: x1, y1, x2, y2, xmin, xmax, xminm, xmaxm, ymin, ymax, yminm, ymaxm, xmean, &
+          dx,dy,Xeps
+      LOGICAL :: YConst, YConstM, XConst, XConstM, EdgeReady, Repeated, LeftCircle, &
+          SkewEdge, AtRangeLimit
+
+      INTEGER :: edgei, edge
+      REAL(KIND=dp), ALLOCATABLE :: Basis(:), BasisM(:)
+      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),dBasisdx(:,:)
+
+      REAL(KIND=dp) :: A(2,2), B(2), C(2), absA, detA, detJ, Point(3),xt,yt,zt,uvw(3)
+      REAL(KIND=dp) :: x1M, y1M, x2M, y2M, Wtemp, u, v, w, um, vm, wm, vq, uq, x0, y0, dist
+      LOGICAL :: EndFound(2)
+      REAL(KIND=dp) :: cuts(10), Err, SumS, RefS, TotSumS, TotRefS
+      INTEGER :: inds(10), NoGaussPoints, sgn, edof, ElemCode, LinCode, ElemCodeM, LinCodeM, fdof
+      INTEGER, TARGET :: IndexesL(2)
+      TYPE(Element_t) :: ElementL
+      TYPE(Element_t), POINTER :: ElementP
+      TYPE(Element_t), TARGET :: ElementLin
+      TYPE(GaussIntegrationPoints_t) :: IP
+
+      INTEGER :: ActiveHits, ElemCands, ElemHits, EdgeHits, TotHits
+      LOGICAL :: DebugElem = .FALSE.
+      
+      
+      
+      CALL Info('LevelProjector','Creating strong generic stride projector for edges',Level=10)
+
+      n = Mesh % NumberOfEdges
+      IF( n == 0 ) RETURN      
+
+      n = Mesh % MaxElementNodes
+      ALLOCATE( Nodes % x(n), Nodes % y(n), Nodes % z(n) )
+      ALLOCATE( NodesM % x(n), NodesM % y(n), NodesM % z(n) )
+      ALLOCATE( NodesL % x(2), NodesL % y(2), NodesL % z(2) )
+      ALLOCATE( Basis(n), BasisM(n) )
+      ALLOCATE( dBasisdx(n,3), WBasis(n,3), WBasisM(n,3), RotWBasis(n,3) )
+      Nodes % z = 0.0_dp
+      NodesM % z = 0.0_dp
+      NodesL % z = 0.0_dp
+      Point(3) = 0.0_dp
+     
+      ! The temporal triangle used in the numerical integration
+      ElementL % TYPE => GetElementType( 202, .FALSE. )
+      ElementL % NodeIndexes => IndexesL
+
+
+      minwsum = HUGE( minwsum ) 
+      maxwsum = 0.0_dp
+      NoSkewed = 0
+      Nundefined = 0
+      LeftCircle = .FALSE.
+      Xeps = EPSILON( Xeps )
+
+      ActiveHits = 0
+      ElemCands = 0
+      ElemHits = 0
+      EdgeHits = 0
+      TotHits = 0 
+
+      TotSumS = 0.0_dp
+      TotRefS = 0.0_dp
+      
+      
+      DO ind=1,BMesh1 % NumberOfBulkElements
+        
+        Element => BMesh1 % Elements(ind)        
+        EdgeMap => LGetEdgeMap( Element % TYPE % ElementCode / 100)
+
+        Indexes => Element % NodeIndexes
+
+        n = Element % TYPE % NumberOfNodes
+        Nodes % x(1:n) = BMesh1 % Nodes % x(Indexes(1:n))
+        Nodes % y(1:n) = BMesh1 % Nodes % y(Indexes(1:n))
+
+        ! Go through combinations of edges and find the edges for which the 
+        ! indexes are the same. 
+        DO edgei = 1,Element % TYPE % NumberOfEdges
+          
+          eind = Element % EdgeIndexes(edgei)
+          IF( EdgePerm(eind) == 0 ) CYCLE
+
+          nrow = EdgeRow0 + EdgePerm(eind) 
+          
+          ! Get the nodes of the edge
+          i1 = EdgeMap(edgei,1) 
+          i2 = EdgeMap(edgei,2)
+
+          k1 = Indexes( i1 )
+          k2 = Indexes( i2 )
+
+          ! The coordinates of the edge
+          x1 = Nodes % x(i1)
+          y1 = Nodes % y(i1)
+
+          x2 = Nodes % x(i2)
+          y2 = Nodes % y(i2)
+          
+          stot = SQRT( (x1-x2)**2 + (y1-y2)**2 ) 
+
+          SumS = 0.0_dp
+          RefS = stot
+          
+          ! Numbering of global indexes is needed to ensure correct direction 
+          ! of the edge dofs. Basically the InvPerm could be used also in serial
+          ! but the order of numbering is maintained when the reduced mesh is created. 
+          k1 = Indexes( i1 )
+          k2 = Indexes( i2 )
+          IF(Parallel) THEN
+            k1 = CurrentModel % Mesh % ParallelInfo % GlobalDOFs(InvPerm1(k1))
+            k2 = CurrentModel % Mesh % ParallelInfo % GlobalDOFs(InvPerm1(k2))
+          END IF
+          ncoeff = 0 
+
+          ncoeff0 = ncoeff
+          dncoeff = 0
+          Repeated = .FALSE.
+
+          ! If the edge might be treated in two periodic parts 
+          ! then here study whether this is the case (Nrange2 /= 0). 
+          IF( Repeating ) THEN
+            Nrange = FLOOR( (x1-XMinAll) / XRange )
+            x1 = x1 - Nrange * XRange
+            x2 = x2 - Nrange * XRange
+            
+            IF( x2 > XMaxAll ) THEN
+              Nrange2 = 1
+            ELSE IF( x2 < XMinAll ) THEN
+              Nrange2 = -1
+            ELSE
+              Nrange2 = 0
+            END IF
+          ELSE IF( FullCircle ) THEN
+            ! If we have a full circle then treat the left-hand-side
+            ! differently in order to circumvent the discontinuity of the
+            ! angle at 180 degrees. 
+            LeftCircle = ( ABS(x1) > 90.0 .AND. ABS(x2) > 90.0 )
+            IF( LeftCircle ) THEN
+              IF( x1 < 0.0_dp ) x1 = x1 + 360.0_dp
+              IF( x2 < 0.0_dp ) x2 = x2 + 360.0_dp
+            END IF
+          END IF
+
+          EdgeReady = .FALSE.
+!100       sgn0 = 1
+!          IF( AntiRepeating ) THEN
+!            IF ( MODULO(Nrange,2) /= 0 ) sgn0 = -1
+!          END IF
+          
+!          IF( SelfProject ) sgn0 = -sgn0
+          
+          xmin = MIN(x1,x2)
+          xmax = MAX(x1,x2)
+          ymin = MIN(y1,y2)
+          ymax = MAX(y1,y2)
+
+
+          ! If the mesh is not repeating there is a risk that we don't exactly hit the start 
+          ! or end of the range. Therefore grow the tolerance close to the ends. 
+!          IF(.NOT. ( Repeating .OR. FullCircle ) ) THEN
+!            IF ( xmax < XminAll + Xtol .OR. xmin > XmaxAll - Xtol ) THEN
+!              Xeps = Xtol 
+!            ELSE
+!              Xeps = EPSILON( Xeps ) 
+!            END IF
+!          END IF
+
+          
+          ! Currently a n^2 loop but it could be improved
+          !--------------------------------------------------------------------
+          DO indm=1,BMesh2 % NumberOfBulkElements
+            
+            ElementM => BMesh2 % Elements(indM)        
+            IndexesM => ElementM % NodeIndexes
+
+            nM = ElementM % TYPE % NumberOfNodes
+            neM = ElementM % TYPE % ElementCode / 100
+
+            ElemCodeM = Element % TYPE % ElementCode 
+            LinCodeM = 101 * neM
+
+            NodesM % y(1:nM) = BMesh2 % Nodes % y(IndexesM(1:nM))
+
+            yminm = MINVAL( NodesM % y(1:neM))
+            IF( yminm > ymax + Xeps ) CYCLE
+            
+            ymaxm = MAXVAL( NodesM % y(1:neM))
+            IF( ymaxm < ymin - Xeps ) CYCLE
+
+            !NodesM % x(1:nM) = ArcCoeff * BMesh2 % Nodes % x(IndexesM(1:nM))
+            NodesM % x(1:nM) = BMesh2 % Nodes % x(IndexesM(1:nM))
+                      
+            ! If we have a full circle then treat the left part differently
+!            IF( LeftCircle ) THEN
+!              IF( ALL( ABS( NodesM % x(1:n) ) - 90.0 < Xtol ) ) CYCLE
+!              DO j=1,n
+!                IF( NodesM % x(j) < 0.0_dp ) NodesM % x(j) = NodesM % x(j) + 360.0_dp
+!              END DO
+!            END IF
+
+            xminm = MINVAL( NodesM % x(1:neM) )
+            xmaxm = MAXVAL( NodesM % x(1:neM) )
+            
+            ! Eliminate this special case since it could otherwise give a faulty hit
+!            IF( FullCircle .AND. .NOT. LeftCircle ) THEN
+!              IF( xmaxm - xminm > ArcCoeff * 180.0 ) CYCLE
+!            END IF
+            
+            IF( xminm > xmax + Xeps ) CYCLE
+            IF( xmaxm < xmin - Xeps ) CYCLE
+
+            
+            k = 0
+            ElemCands = ElemCands + 1
+            EndFound = .FALSE.
+                          
+            DO iM=1,neM
+              x1M = NodesM % x(iM)
+              y1M = NodesM % y(iM)
+              i2M = iM + 1
+              IF( i2M > neM ) i2M = 1
+              x2M = NodesM % x(i2M)
+              y2M = NodesM % y(i2M)
+              
+              ! Upon solution this is tampered so it must be initialized 
+              ! before each solution. 
+              A(1,1) = x2 - x1
+              A(2,1) = y2 - y1           
+              A(1,2) = x1M - x2M
+              A(2,2) = y1M - y2M
+
+              detA = A(1,1)*A(2,2)-A(1,2)*A(2,1)
+              absA = SUM(ABS(A(1,1:2))) * SUM(ABS(A(2,1:2)))
+              
+              ! Lines are almost parallel => no intersection possible
+              ! Check the dist at the end of the line segments.
+              IF(ABS(detA) < 1.0d-8 * absA + 1.0d-20 ) CYCLE
+
+              B(1) = x1M - x1
+              B(2) = y1M - y1
+              
+              CALL InvertMatrix( A,2 )
+              C(1:2) = MATMUL(A(1:2,1:2),B(1:2))
+
+              ! C(1) is cut for the edge to integrate along
+              ! C(2) is cut for the master edge
+
+              ! Check that the hit is within the line segment
+              IF(ANY(C(1:2) < -1.0e-8) .OR. ANY(C(1:2) > 1.0d0 + 1.0e-8)) CYCLE
+              
+              ! We have a hit, two line segments can have only one hit
+              k = k + 1
+
+              ! If the point of intersection is at the end of a line-segment it
+              ! is also a corner node.
+              IF(ABS(C(1)) < 1.0d-6 ) THEN
+                EndFound(1) = .TRUE.
+              ELSE IF( ABS(C(1)-1.0_dp ) < 1.0d-6 ) THEN
+                EndFound(2) = .TRUE.
+              END IF              
+
+              cuts(k) = C(1)
+              EdgeHits = EdgeHits + 1
+            END DO
+
+            IF( DebugElem ) THEN
+              PRINT *,'EdgeHits:',k
+            END IF
+            
+            ! Check the nodes that are one of the existing nodes i.e. corner nodes
+            ! that are located inside in either element. We have to check both combinations. 
+            DO i=0,1
+              ! This corner was already determined active as the end of edge 
+              IF( EndFound(i+1) ) CYCLE
+
+              Point(1) = x1 + i*(x2-x1)
+              Point(2) = y1 + i*(y2-y1)
+              
+              ! The edge intersections should catch the sharp hits so here we can use hard criteria
+              Found = PointInElement( ElementM, NodesM, Point, uvw, LocalEps = 1.0d-8 )
+
+              IF( Found ) THEN
+                k = k + 1
+                cuts(k) = 1.0_dp * i
+                CornerHits = CornerHits + 1
+              END IF
+            END DO
+          END DO
+          
+          IF( DebugElem ) THEN
+            PRINT *,'CornerHitsM:',k
+          END IF
+
+          kmax = k          
+          IF( kmax == 0 ) GOTO 100
+          IF( kmax /= 2 ) THEN
+            PRINT *,'how come kmax is not 0 or 2:',kmax
+            GOTO 100
+          END IF
+          
+          
+          sgn0 = 1
+          IF( AntiRepeating ) THEN
+            IF ( MODULO(Nrange,2) /= 0 ) sgn0 = -1
+          END IF
+          
+          InitialHits = InitialHits + kmax
+
+        
+          IF( DebugElem ) THEN
+            PRINT *,'Cuts:',cuts(1:kmax)
+          END IF
+          
+          DO k=1,kmax
+            inds(k) = k
+          END DO
+          CALL SortR(kmax,inds,cuts)
+                  
+
+          ! Eliminate redundant corners from the polygon
+          j = 1
+          DO k=2,kmax
+            dist = ABS( cuts(j)-cuts(k) )
+            IF( dist > 1.0d-6 ) THEN
+              j = j + 1
+              IF( j /= k ) THEN
+                cuts(j) = cuts(k)
+              END IF
+            END IF
+          END DO
+          kmax = j
+
+          IF( DebugElem ) THEN
+            PRINT *,'Corners:',kmax,cut
+          END IF
+
+          IF( kmax < 2 ) GOTO 100
+
+          ElemHits = ElemHits + 1
+          ActiveHits = ActiveHits + kmax
+
+          
+          ! Deal the case with multiple corners by making 
+          ! triangulariation using one corner point.
+          ! This should be ok as the polygon is always convex.
+          DO i=1,2
+            NodesL % x(i) = x1 + cuts(i) * (x2-x1)
+            NodesL % y(i) = y1 + cuts(i) * (y2-y1)
+          END DO
+            
+          ! Use somewhat higher integration rules than the default          
+          NoGaussPoints = ListGetInteger( BC,'Mortar BC Gauss Points',Found ) 
+          IF(.NOT. Found ) NoGaussPoints = ElementL % Type % GaussPoints2
+          IP = GaussPoints( ElementL, NoGaussPoints )
+            
+            
+          ! Integration over the line segment
+          DO nip=1, IP % n 
+            stat = ElementInfo( ElementL,NodesL,IP % u(nip),&
+                IP % v(nip),IP % w(nip),detJ,Basis)
+            IF(.NOT. Stat) EXIT
+            
+            ! We will actually only use the global coordinates and the integration weight 
+            ! from the temporal mesh. 
+            
+            ! Global coordinates of the integration point
+            xt = SUM( Basis(1:2) * NodesL % x(1:2) )
+            yt = SUM( Basis(1:2) * NodesL % y(1:2) )
+            zt = 0.0_dp
+              
+            ! Integration weight for current integration point
+            Wtemp = DetJ * IP % s(nip)
+            sums = sums + Wtemp
+              
+            ! Integration point at the slave element
+            !------------------------------------------------------------
+            IF( ElemCode /= LinCode ) THEN
+              ElementLin % TYPE => GetElementType( LinCode, .FALSE. )
+              ElementLin % NodeIndexes => Element % NodeIndexes
+              ElementP => ElementLin
+              CALL GlobalToLocal( u, v, w, xt, yt, zt, ElementP, Nodes )
+            ELSE
+              CALL GlobalToLocal( u, v, w, xt, yt, zt, Element, Nodes )              
+            END IF
+                        
+            IF (PiolaVersion) THEN
+              ! Take into account that the reference elements are different:
+              IF ( ne == 3) THEN
+                uq = u
+                vq = v
+                u = -1.0d0 + 2.0d0*uq + vq
+                v = SQRT(3.0d0)*vq
+              END IF
+              IF (SecondOrder) THEN
+                stat = EdgeElementInfo( Element, Nodes, u, v, w, &
+                    DetF = DetJ, Basis = Basis, EdgeBasis = WBasis, &
+                    BasisDegree = 2, ApplyPiolaTransform = .TRUE.)
+              ELSE
+                stat = ElementInfo( Element, Nodes, u, v, w, &
+                    detJ, Basis, dBasisdx,EdgeBasis=WBasis)
+              END IF
+            ELSE
+              stat = ElementInfo( Element, Nodes, u, v, w, &
+                  detJ, Basis, dBasisdx )
+              CALL GetEdgeBasis(Element,WBasis,RotWBasis,Basis,dBasisdx)
+            END IF
+            
+            ! Integration point at the master element
+            !------------------------------------------------------------
+            IF( ElemCodeM /= LinCodeM ) THEN
+              ElementLin % TYPE => GetElementType( LinCodeM, .FALSE. )
+              ElementLin % NodeIndexes => ElementM % NodeIndexes
+              ElementP => ElementLin
+              CALL GlobalToLocal( um, vm, wm, xt, yt, zt, ElementP, NodesM )
+            ELSE
+              CALL GlobalToLocal( um, vm, wm, xt, yt, zt, ElementM, NodesM )
+            END IF
+                        
+            IF (PiolaVersion) THEN
+              ! Take into account that the reference elements are different:
+              IF ( neM == 3) THEN
+                uq = um
+                vq = vm
+                um = -1.0d0 + 2.0d0*uq + vq
+                vm = SQRT(3.0d0)*vq
+              END IF
+              IF (SecondOrder) THEN
+                stat = EdgeElementInfo( ElementM, NodesM, um, vm, wm, &
+                    DetF=detJ, Basis=BasisM, EdgeBasis=WBasisM, &
+                    BasisDegree = 2, ApplyPiolaTransform = .TRUE.)                   
+              ELSE
+                stat = ElementInfo( ElementM, NodesM, um, vm, wm, &
+                    detJ, BasisM, dBasisdx, EdgeBasis=WBasisM)
+              END IF
+            ELSE
+              stat = ElementInfo( ElementM, NodesM, um, vm, wm, &
+                  detJ, BasisM, dBasisdx )
+              CALL GetEdgeBasis(ElementM,WBasisM,RotWBasis,BasisM,dBasisdx)
+            END IF
+            
+
+            IF (SecondOrder) THEN
+              DO j=1,2*ne+nf   ! for all slave dofs
+                IF (j<=2*ne) THEN
+                  edge = 1+(j-1)/2    ! The edge to which the dof is associated
+                  edof = j-2*(edge-1) ! The edge-wise index of the dof
+                  jj = Element % EdgeIndexes(edge) 
+                  IF( EdgePerm(jj) == 0 ) CYCLE
+                  nrow = EdgeRow0 + 2*(EdgePerm(jj)-1) + edof  ! The row to be written
+                  jj = EdgeCol0 + 2*(jj-1) + edof              ! The index of the corresponding DOF
+                  Projector % InvPerm( nrow ) = jj
+                ELSE
+                  IF( Parallel ) THEN
+                    IF( Element % PartIndex /= ParEnv % MyPe ) CYCLE
+                  END IF
+                  fdof = j-2*ne ! The face-wise index of the dof
+                  nrow = FaceRow0 + nf * ( ind - 1 ) + fdof
+                  jj = FaceCol0 + nf * ( Element % ElementIndex - 1) + fdof
+                  Projector % InvPerm( nrow ) = jj
+                END IF
+
+                DO i=1,2*ne+nf ! for all slave dofs
+                  IF( i <= 2*ne ) THEN
+                    edge = 1+(i-1)/2    ! The edge to which the dof is associated
+                    edof = i-2*(edge-1) ! The edge-wise index of the dof
+                    ii = EdgeCol0 + 2*(Element % EdgeIndexes(edge) - 1) + edof
+                  ELSE
+                    fdof = i-2*ne ! The face-wise index of the dof
+                    ii = FaceCol0 + nf * ( Element % ElementIndex - 1) + fdof
+                  END IF
+
+                  val = Wtemp * SUM( WBasis(j,:) * Wbasis(i,:) ) 
+                  IF( ABS( val ) > 1.0e-12 ) THEN
+                    Nslave = Nslave + 1
+                    CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                        ii, EdgeCoeff * val ) 
+                  END IF
+                END DO
+
+                DO i=1,2*neM+nfM ! for all master dofs
+                  IF( i <= 2*neM ) THEN
+                    edge = 1+(i-1)/2    ! The edge to which the dof is associated
+                    edof = i-2*(edge-1) ! The edge-wise index of the dof
+                    ii = EdgeCol0 + 2*(ElementM % EdgeIndexes(edge) - 1) + edof
+                  ELSE
+                    fdof = i-2*neM ! The face-wise index of the dof
+                    ii = FaceCol0 + nfM * ( ElementM % ElementIndex - 1) + fdof
+                  END IF
+
+                  val = -Wtemp * sgn0 * SUM( WBasis(j,:) * WBasisM(i,:) ) 
+                  IF( ABS( val ) > 1.0e-12 ) THEN
+                    Nmaster = Nmaster + 1
+                    CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                        ii, EdgeScale * EdgeCoeff * val  ) 
+                  END IF
+                END DO
+              END DO
+
+            ELSE
+              ! Dofs are numbered as follows:
+              ! 1....number of nodes
+              ! + ( 1 ... number of edges )
+              ! + ( 1 ... 2 x number of faces )
+              !-------------------------------------------
+              DO j=1,ne+nf
+
+                IF( j <= ne ) THEN
+                  jj = Element % EdgeIndexes(j) 
+                  IF( EdgePerm(jj) == 0 ) CYCLE
+                  nrow = EdgeRow0 + EdgePerm(jj)
+                  jj = jj + EdgeCol0
+                  Projector % InvPerm( nrow ) = jj
+                ELSE
+                  IF( Parallel ) THEN
+                    IF( Element % PartIndex /= ParEnv % MyPe ) CYCLE
+                  END IF
+
+                  jj = 2 * ( ind - 1 ) + ( j - 4 )
+                  nrow = FaceRow0 + jj
+                  jj = 2 * ( Element % ElementIndex - 1) + ( j - 4 ) 
+                  Projector % InvPerm( nrow ) = FaceCol0 + jj
+                END IF
+
+                DO i=1,neM+nfM
+                  IF( i <= neM ) THEN
+                    ii = Element % EdgeIndexes(i) + EdgeCol0
+                  ELSE
+                    ii = 2 * ( Element % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
+                  END IF
+
+                  val = Wtemp * SUM( WBasis(j,:) * Wbasis(i,:) ) 
+                  IF( ABS( val ) > 1.0e-12 ) THEN
+                    Nslave = Nslave + 1
+                    CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                        ii, EdgeCoeff * val ) 
+                  END IF
+
+                  IF( i <= neM ) THEN
+                    ii = ElementM % EdgeIndexes(i) + EdgeCol0
+                  ELSE
+                    ii = 2 * ( ElementM % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
+                  END IF
+                  val = -Wtemp * sgn0 * SUM( WBasis(j,:) * WBasisM(i,:) ) 
+
+                  IF( ABS( val ) > 1.0e-12 ) THEN
+                    Nmaster = Nmaster + 1                       
+                    CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                        ii, EdgeScale * EdgeCoeff * val  ) 
+                  END IF
+                END DO
+              END DO
+            END IF
+          END DO
+
+100       CONTINUE
+!100       IF( Repeating ) THEN
+#if 0
+            IF( NRange /= NRange2 ) THEN
+              ! Rotate the sector to a new position for axial case
+              ! Or just some up the angle in the radial/2D case
+              IF( Naxial > 1 ) THEN
+
+                IF( Nrange /= Nrange2 ) THEN
+                  dAlpha = 2.0_dp * PI * (Nrange2 - Nrange ) / Naxial
+                  Nrange = Nrange2
+                END IF
+
+                DO i=1,nM
+                  x0 = NodesM % x(i)
+                  y0 = NodesM % y(i)
+                  NodesM % x(i) = COS(dAlpha) * x0 - SIN(dAlpha) * y0
+                  NodesM % y(i) = SIN(dAlpha) * x0 + COS(dAlpha) * y0
+                END DO
+              ELSE
+                Nrange = Nrange2
+                NodesM % x(1:n) = NodesM % x(1:n) + ArcRange  * (Nrange2 - Nrange1)
+              END IF
+              xminm = MINVAL( NodesM % x(1:neM))
+              xmaxm = MAXVAL( NodesM % x(1:neM))
+              GOTO 200
+            END IF
+#endif 
+ 
+            
+            TotCands = TotCands + ElemCands
+            TotHits = TotHits + ElemHits
+            TotSumS = TotSumS + SumS
+            TotRefS = TotRefS + RefS
+
+            Err = SumS / RefS
+            IF( Err > MaxErr ) THEN
+              MaxErr = Err
+              MaxErrInd = Err
+            END IF
+            IF( Err < MinErr ) THEN
+              MinErr = Err
+              MinErrInd = ind
+            END IF
+
+
+          END DO
+        END DO
+
+      END SUBROUTINE AddEdgeProjectorStrongStridesGeneric
+    !----------------------------------------------------------------------
+
+
+
+
+    
     !----------------------------------------------------------------------
     ! Create weak projector for the remaining nodes and edges.
     ! This uses the generic way to introduce the weights. The resulting 
