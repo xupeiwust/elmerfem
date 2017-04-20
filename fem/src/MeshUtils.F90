@@ -5369,16 +5369,7 @@ END SUBROUTINE GetMaxDefs
       IF( StrongSkewEdges ) THEN
          IF( PiolaVersion ) CALL Fatal('','Not implemented for piola yet!')
          CALL AddEdgeProjectorStrongStridesGeneric()
-         ! Compute the unset edge dofs. 
-         ! Some of the dofs may have been set by the strong projector. 
-         m = 0
-         DO i=1, Mesh % NumberOfEdges
-           IF( EdgePerm(i) > 0 ) m = m + 1
-         END DO
-         IF( m > 0 ) THEN
-           SomethingUndone = .TRUE.
-           EdgeBasis = .TRUE.
-        END IF
+         ! There are no unset dofs
       ELSE IF( StrongLevelEdges .OR. StrongExtrudedEdges ) THEN
         CALL AddEdgeProjectorStrongStrides()
         ! Compute the unset edge dofs. 
@@ -6453,19 +6444,19 @@ END SUBROUTINE GetMaxDefs
       REAL(KIND=dp) :: xm1, xm2, ym1, ym2, coeff(100), signs(100), wsum, minwsum, maxwsum, val, &
           x1o, y1o, x2o, y2o, cskew, sedge
       REAL(KIND=dp) :: x1, y1, x2, y2, xmin, xmax, xminm, xmaxm, ymin, ymax, yminm, ymaxm, xmean, &
-          dx,dy,Xeps, dxM, dyM
+          dx,dy,Xeps, dxM, dyM, a1, a2, b1, b2
       LOGICAL :: YConst, YConstM, XConst, XConstM, EdgeReady, Repeated, LeftCircle, &
-          SkewEdge, AtRangeLimit
+          SkewEdge, AtRangeLimit, DiagStride, SimpleBasis
 
       INTEGER :: edgei, edge
       REAL(KIND=dp), ALLOCATABLE :: Basis(:), BasisM(:)
-      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),dBasisdx(:,:)
+      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),dBasisdx(:,:),SBasis(:)
 
       REAL(KIND=dp) :: A(2,2), B(2), C(2), absA, detA, detJ, Point(3),xt,yt,zt,uvw(3)
       REAL(KIND=dp) :: x1M, y1M, x2M, y2M, Wtemp, u, v, w, um, vm, wm, vq, uq, x0, y0, dist
       LOGICAL :: EndFound(2)
       REAL(KIND=dp) :: cuts(10), Err, SumS, RefS, TotSumS, TotRefS, MinErr, MaxErr, &
-          MinCut, MaxCut, CumCut, PrevCuts(10,2)
+          MinCut, MaxCut, CumCut, PrevCuts(10,2), ProjSums(4)
       INTEGER :: inds(10), NoGaussPoints, sgn, edof, ElemCode, LinCode, ElemCodeM, LinCodeM, &
           ii, jj, iM, i2M, nM, nip, nfm, nf, fdof, ne, neM, MinErrInd, MaxErrInd, kmax, &
           nCut
@@ -6483,6 +6474,9 @@ END SUBROUTINE GetMaxDefs
       
       CALL Info('LevelProjector','Creating strong generic stride projector for edges',Level=10)
 
+      DiagStride = ListGetLogical( BC,'Diagonal generic stride')
+      SimpleBasis = ListGetLogical( BC,'Simple stride basis')
+      
       n = Mesh % NumberOfEdges
       IF( n == 0 ) RETURN      
 
@@ -6491,12 +6485,13 @@ END SUBROUTINE GetMaxDefs
       ALLOCATE( Nodes % x(n), Nodes % y(n), Nodes % z(n) )
       ALLOCATE( NodesM % x(n), NodesM % y(n), NodesM % z(n) )
       ALLOCATE( NodesL % x(2), NodesL % y(2), NodesL % z(2) )
-      ALLOCATE( Basis(n), BasisM(n) )
+      ALLOCATE( Basis(n), BasisM(n), SBasis(3) )
       ALLOCATE( dBasisdx(n,3), WBasis(n,3), WBasisM(n,3), RotWBasis(n,3) )
       Nodes % z = 0.0_dp
       NodesM % z = 0.0_dp
       NodesL % z = 0.0_dp
       Point(3) = 0.0_dp
+      Sbasis(3) = 0.0_dp
      
       ! The temporal triangle used in the numerical integration
       ElementL % TYPE => GetElementType( 202, .FALSE. )
@@ -6506,7 +6501,8 @@ END SUBROUTINE GetMaxDefs
       NoGaussPoints = ListGetInteger( BC,'Mortar BC Gauss Points',Found ) 
       IF(.NOT. Found ) NoGaussPoints = ElementL % TYPE % GaussPoints2
       IP = GaussPoints( ElementL, NoGaussPoints )
-            
+
+      PRINT *,'Integration rule:',IP % n, IP % s
 
       minwsum = HUGE( minwsum ) 
       maxwsum = 0.0_dp
@@ -6529,6 +6525,8 @@ END SUBROUTINE GetMaxDefs
       TotRefS = 0.0_dp
       MinErr = HUGE( MinErr )
       MaxErr = -HUGE( MaxErr )
+
+      ProjSums = 0.0_dp
       
       
       DO ind=1,BMesh1 % NumberOfBulkElements
@@ -6580,6 +6578,10 @@ END SUBROUTINE GetMaxDefs
           RefS = SQRT( dx**2 + dy**2 ) 
           SumS = 0.0_dp
           cumcut = 0.0_dp
+
+          SBasis(1) = dx / RefS
+          SBasis(2) = dy / RefS
+
           
           ! Numbering of global indexes is needed to ensure correct direction 
           ! of the edge dofs. Basically the InvPerm could be used also in serial
@@ -6651,6 +6653,11 @@ END SUBROUTINE GetMaxDefs
 !            END IF
 !          END IF
 
+
+          ! Remember these since we only want to integrate once over the edge
+          ncut = 0
+          PrevCuts = 0.0_dp
+
           
           ! Currently a n^2 loop but it could be improved
           !--------------------------------------------------------------------
@@ -6699,8 +6706,6 @@ END SUBROUTINE GetMaxDefs
             
             k = 0
             cuts = 0.0_dp
-            ncut = 0
-            PrevCuts = 0.0_dp
             ElemCands = ElemCands + 1
             EndFound = .FALSE.
 
@@ -6844,15 +6849,33 @@ END SUBROUTINE GetMaxDefs
 
 
             IF( ncut > 0 ) THEN
+              a1 = Cuts(2); a2 = Cuts(1)
               DO k=1,ncut
-                IF( PrevCuts(k,2) > Cuts(1) ) THEN
+                b1 = PrevCuts(k,2); b2 = PrevCuts(k,1)
+
+                PRINT *,'Cuts:',a1,a2,b1,b2
+
+                IF( b1 > a2 ) THEN
                   CONTINUE
-                ELSE IF( PrevCuts(k,1) < Cuts(2) ) THEN
+                ELSE IF( b2 < a1 ) THEN
                   CONTINUE
-                ELSE
-                  Cuts(1) = 
+                ELSE IF( b2  > a2 ) THEN
+                  a2 = MAX( a1, b1 )
+                ELSE IF( b1 < a1  ) THEN
+                  a1 = MIN( a2, b2 )
+                ELSE ! range (b1,b2) is within range (a1,a2)
+                  IF( (a2-a1) - (b2-b1) < Xeps ) THEN
+                    PRINT *,'overlapping sets:',a1,a2,b1,b2
+                    GOTO 100
+                  END IF
+                  PRINT *,'invalid case:',a1,a2,b1,b2
+                END IF
               END DO
+              PRINT *,'Final range: ',a1,a2
+              IF( a2 - a1 < Xeps ) GOTO 100
+              Cuts(2) = a1; Cuts(1) = a2
             END IF
+            
             ncut = ncut + 1
             PrevCuts(ncut,1:2) = cuts(1:2) 
             
@@ -6959,7 +6982,7 @@ END SUBROUTINE GetMaxDefs
                 END IF
               ELSE
                 stat = ElementInfo( ElementM, NodesM, um, vm, wm, &
-                    detJ, BasisM, dBasisdx )
+                    detJM, BasisM, dBasisdx )
                 CALL GetEdgeBasis(ElementM,WBasisM,RotWBasis,BasisM,dBasisdx)
               END IF
 
@@ -7027,6 +7050,20 @@ END SUBROUTINE GetMaxDefs
                 !-------------------------------------------
                 DO j=1,ne+nf
 
+
+                  ! Only test with the basis function associated with the edge
+                  IF( DiagStride .OR. SimpleBasis ) THEN
+                    IF( j /= edgei ) CYCLE
+                  END IF
+
+                  IF( SimpleBasis ) THEN
+                    IF( SUM( SBasis(1:2) * WBasis(j,1:2) ) < 0 ) THEN
+                      SBasis = -SBasis
+                    END IF
+                    PRINT *,'Simple Basis:',SBasis(1:2), WBasis(j,1:2)
+                  END IF
+                  
+                  
                   IF( j <= ne ) THEN
                     jj = Element % EdgeIndexes(j) 
                     IF( EdgePerm(jj) == 0 ) CYCLE
@@ -7043,32 +7080,48 @@ END SUBROUTINE GetMaxDefs
                     jj = 2 * ( Element % ElementIndex - 1) + ( j - 4 ) 
                     Projector % InvPerm( nrow ) = FaceCol0 + jj
                   END IF
-
-                  DO i=1,neM+nfM
-                    IF( i <= neM ) THEN
+                  
+                  DO i=1,ne+nf
+                    IF( i <= ne ) THEN
                       ii = Element % EdgeIndexes(i) + EdgeCol0
                     ELSE
                       ii = 2 * ( Element % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
                     END IF
 
-                    val = Wtemp * SUM( WBasis(j,:) * Wbasis(i,:) ) 
+                    IF( SimpleBasis ) THEN
+                      val = IP % s(nip) * DetJ * SUM( SBasis(:) * Wbasis(i,:) ) 
+                    ELSE
+                      val = Wtemp * SUM( WBasis(j,:) * Wbasis(i,:) ) 
+                    END IF
+                      
                     IF( ABS( val ) > 1.0e-12 ) THEN
+                      ProjSums(1) = ProjSums(1) + val
+                      ProjSums(2) = ProjSums(2) + ABS( val )
                       CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
                           ii, EdgeCoeff * val ) 
                     END IF
-
+                  END DO
+                    
+                  DO i=1,neM+nfM
                     IF( i <= neM ) THEN
                       ii = ElementM % EdgeIndexes(i) + EdgeCol0
                     ELSE
                       ii = 2 * ( ElementM % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
                     END IF
-                    val = -Wtemp * sgn0 * SUM( WBasis(j,:) * WBasisM(i,:) ) 
-
+                    
+                    IF( SimpleBasis ) THEN
+                      val = -IP % s(nip) * DetJ * sgn0 * SUM( SBasis(:) * WbasisM(i,:) ) 
+                    ELSE
+                      val = -Wtemp * sgn0 * SUM( WBasis(j,:) * WBasisM(i,:) ) 
+                    END IF
                     IF( ABS( val ) > 1.0e-12 ) THEN
+                      ProjSums(3) = ProjSums(3) + val
+                      ProjSums(4) = ProjSums(4) + ABS( val )
                       CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
                           ii, EdgeScale * EdgeCoeff * val  ) 
                     END IF
                   END DO
+                  
                 END DO
               END IF
             END DO
@@ -7102,9 +7155,13 @@ END SUBROUTINE GetMaxDefs
             END IF
 #endif 
 
+            ! Done this edge?
+            IF( cumcut > 1.0 - Xeps ) EXIT
+            
           END DO
 
-          PRINT *,'cumcut:',cumcut
+          PRINT *,'sums:',sums/refs
+          
           
           
           TotCands = TotCands + ElemCands
@@ -7112,7 +7169,7 @@ END SUBROUTINE GetMaxDefs
           TotSumS = TotSumS + SumS
           TotRefS = TotRefS + RefS
 
-          Err = SumS / RefS
+          Err = cumcut - 1.0_dp
           IF( Err > MaxErr ) THEN
             MaxErr = Err
             MaxErrInd = ind
@@ -7125,7 +7182,16 @@ END SUBROUTINE GetMaxDefs
 
           END DO
         END DO
-
+        
+        PRINT *,'min cumcut error:',MinErr,MinErrInd
+        PRINT *,'max cumcut error:',MaxErr,MaxErrInd
+        PRINT *,'slave sum:',ProjSums(1)
+        PRINT *,'slave abs sum:',ProjSums(2)
+        PRINT *,'master sum:',ProjSums(3)
+        PRINT *,'master abs sum:',ProjSums(4)
+        PRINT *,'edge lengths for test functions:',totsums
+        
+        
       END SUBROUTINE AddEdgeProjectorStrongStridesGeneric
     !----------------------------------------------------------------------
 
