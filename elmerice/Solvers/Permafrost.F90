@@ -248,7 +248,7 @@ CONTAINS
     REAL(KIND=dp) :: aux1, aux2, aux3
     aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
     aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
-    aux3 = (l0 + (cw0 - ci0)*(Temperature - T0) &
+    aux3 = (l0 + (cw0 - ci0)*(Temperature - T0) & ! this l0 is small L and 0 - don't change
          + (-(1.0_dp/rhoi0) + (1.0_dp/rhow0))*(Pressure - p0))/Temperature
     XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) *Mw*aux3/(T0*GasConstant*Temperature)
   END FUNCTION XiT
@@ -258,8 +258,8 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature
     !local
     REAL(KIND=dp) :: aux1, aux2
-    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25*B1*B1 + D1))**2.0_dp)
-    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25*B2*B2 + D2))**2.0_dp)
+    aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
+    aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
     XiP = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
           *((1.0_dp/rhoi0) - (1.0_dp/rhow0))* Mw/(GasConstant*Temperature)
   END FUNCTION XiP
@@ -313,7 +313,7 @@ CONTAINS
 
 
 !-----------------------------------------------------------------------------
-!> 
+!> heat transfer equation for enhanced permafrost model
 !------------------------------------------------------------------------------
 SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
@@ -341,7 +341,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
        NodalGWflux(:,:), NodalTemperature(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-       NoDarcy=.FALSE.,ConstantPorosity=.FALSE., NoSalinity=.FALSE., NoGWflux=.FALSE.
+      ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoGWflux=.TRUE.,NoPressure=.TRUE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName
@@ -384,12 +384,12 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   END IF
   PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
   IF (.NOT.ASSOCIATED(PressureVar)) THEN
-    CALL WARN(SolverName,'Pressure Variable not found. Switching Darcy flow terms off.')
-    NoDarcy = .TRUE.
     NULLIFY(Pressure)
+    NoPressure = .TRUE.
   ELSE
     Pressure => PressureVar % Values
     PressurePerm => PressureVar % Perm
+    NoPressure = .FALSE.
   END IF
   
   PorosityName = ListGetString(Params, &
@@ -430,6 +430,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   ELSE
     Salinity => SalinityVar % Values
     SalinityPerm => SalinityVar % Perm
+    NoSalinity=.FALSE.
   END IF
   
   GWfluxName = ListGetString(Params, &
@@ -448,6 +449,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   ELSE
     GWflux => GWfluxVar % Values
     GWfluxPerm => GWfluxVar % Perm
+    NoGWflux = .FALSE.
   END IF
   ! Nonlinear iteration loop:
   !--------------------------
@@ -485,7 +487,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       ELSE
         NodalPorosity(1:N) = Porosity(PorosityPerm(Element % NodeIndexes(1:N)))
       END IF
-      IF (NoDarcy) THEN
+      IF (NoPressure) THEN
         NodalPressure(1:N) = 0.0_dp
       ELSE
         NodalPressure(1:N) = Pressure(PressurePerm(Element % NodeIndexes(1:N)))
