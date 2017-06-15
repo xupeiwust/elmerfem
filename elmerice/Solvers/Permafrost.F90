@@ -290,25 +290,52 @@ CONTAINS
     !PRINT *,rhoi0*l0*eta0*XiT, rhoi0,l0,eta0,XiT   
   END FUNCTION CGTT
   
-  RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0)
+  RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0
-    fTildewT = 0.0_dp ! TBD
+    REAL(KIND=dp), INTENT(IN) :: B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0
+    REAL(KIND=dp) :: aux1, aux2, aux3
+    IF (Xi > Xi0) THEN
+      fTildewT = 0.0_dp
+    ELSE
+      aux1 = (l0/T0) + ((cw0  - ci0)*(Temperature  - T0)/T0)
+      aux2 = 1.0_dp + B1/(SQRT(B1*B1 + 4.0_dp*D1))
+      aux3 = ew/(ew + delta)
+      fTildewT = 0.5_dp * aux3 * aux2 * aux1
+    END IF
   END FUNCTION fTildewT
-  
-  RECURSIVE REAL FUNCTION  fTildewp(B1,D1,delta,ew,rhow0,rhoi0)
+
+  RECURSIVE REAL FUNCTION  fTildewp(B1,D1,delta,ew,rhow0,rhoi0,Xi,Xi0)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: B1,D1,delta,ew,rhow0,rhoi0 
-    fTildewp = 0.0_dp ! TBD
+    REAL(KIND=dp), INTENT(IN) :: B1,D1,delta,ew,rhow0,rhoi0,Xi,Xi0
+    REAL(KIND=dp) :: aux1, aux2, aux3
+    IF (Xi > Xi0) THEN
+      fTildewp = 0.0_dp
+    ELSE
+      aux1 = (1.0_dp/rhoi0) - (1.0_dp/rhow0)
+      aux2 = 1.0_dp + B1/(SQRT(B1*B1 + 4.0_dp*D1))
+      aux3 = ew/(ew + delta)
+      fTildewp = 0.5_dp * aux3 * aux2 * aux1
+    END IF
   END FUNCTION fTildewp
 
-  RECURSIVE REAL FUNCTION KgwpT(rhow0,fTildewTATIP,Kgw)
-   IMPLICIT NONE
-   REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewTATIP,Kgw(3,3)
-       KgwpT = 0.0_dp ! TBD
-  END FUNCTION KgwpT
+  RECURSIVE FUNCTION GetKgwpT(rhow0,fTildewT,Kgw)RESULT(KgwpT)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewT,Kgw(3,3)
+    REAL(KIND=dp) :: KgwpT(3,3), factor,unittensor(3,3)
+    unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
+    factor = rhow0*fTildewT
+    KgwpT = unittensor*factor
+  END FUNCTION GetKgwpT
   
-  END MODULE PermafrostMaterials
+  RECURSIVE FUNCTION GetKgwpp(rhow0,fTildewp,Kgw)RESULT(Kgwpp)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewp,Kgw(3,3)
+    REAL(KIND=dp) :: Kgwpp(3,3), factor,unittensor(3,3)
+    unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
+    factor = (1.0_dp + rhow0*fTildewp)
+    Kgwpp = unittensor*factor
+  END FUNCTION GetKgwpp
+END MODULE PermafrostMaterials
 
 
 
@@ -341,7 +368,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
        NodalGWflux(:,:), NodalTemperature(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-      ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoGWflux=.TRUE.,NoPressure=.TRUE.
+       ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoGWflux=.TRUE.,NoPressure=.TRUE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName
@@ -391,7 +418,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
     PressurePerm => PressureVar % Perm
     NoPressure = .FALSE.
   END IF
-  
+
   PorosityName = ListGetString(Params, &
        'Porosity Variable', Found )
   IF (.NOT.Found) THEN
@@ -432,7 +459,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
     SalinityPerm => SalinityVar % Perm
     NoSalinity=.FALSE.
   END IF
-  
+
   GWfluxName = ListGetString(Params, &
        'Groundwater Flux Variable', Found )
   IF (.NOT.Found) THEN
@@ -476,7 +503,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       !PRINT *, NodalTemperature(1:N), TemperaturePerm(Element % NodeIndexes(1:N)), Element % NodeIndexes(1:N)
       meanfactor = GetConstReal(Material,"Conductivity Aritmetic Mean Weight",Found)
       IF (.NOT.Found) THEN
-         meanfactor = 1.0_dp
+        meanfactor = 1.0_dp
       END IF
       IF (ConstantPorosity) THEN
         NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
@@ -529,13 +556,13 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
     !--------------------
     Norm = DefaultSolve()
     IF( Solver % Variable % NonlinConverged == 1 ) EXIT
-    
+
   END DO
 
 CONTAINS
-! Assembly of the matrix entries arising from the bulk elements
+  ! Assembly of the matrix entries arising from the bulk elements
 
-!------------------------------------------------------------------------------
+  !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, NodalGWflux, CurrentRockMaterial )
     !------------------------------------------------------------------------------
@@ -562,7 +589,7 @@ CONTAINS
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Remove this Output:'
-    
+
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,CgwTT
     !------------------------------------------------------------------------------
@@ -608,9 +635,9 @@ CONTAINS
         CALL INFO(FunctionName,Message,Level=9)
       END DO
       CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9) 
-      
+
     END IF
-    
+
     CALL GetElementNodes( Nodes )
     MASS  = 0._dp
     STIFF = 0._dp
@@ -624,7 +651,7 @@ CONTAINS
     ! read variable material parameters from CurrentRockMaterial
     Material => GetMaterial()
     RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
-    
+
     ! read element rock material specific parameters    
     ks0th = CurrentRockMaterial % ks0th(RockMaterialID)
     ew = CurrentRockMaterial % ew(RockMaterialID)
@@ -637,14 +664,14 @@ CONTAINS
 
     !PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
     !     "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
-    
+
     ! derive element rock material specific parameters
     deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     D1InElement = D1(deltaInElement,ew)
     D2InElement = 1.0_dp
-    
+
     !PRINT *, "deltaInElement",deltaInElement,"D1InElement",D1InElement,"D2InElement",D2InElement
-        
+
     ! Numerical integration:
     !-----------------------
     IP = GaussPoints( Element )
@@ -669,7 +696,7 @@ CONTAINS
       DO I=1,DIM
         JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
       END DO
-           
+
       ! functions at IP
       deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,l0,cw0,ci0,rhow0,rhoi0,GasConstant,&
            TemperatureAtIP,PressureAtIP)
@@ -684,14 +711,14 @@ CONTAINS
       KGTTAtIP = GetKGTT(ksthAtIP,kw0th,ki0th,eta0,XiAtIP,&
            TemperatureAtIP,PressureAtIP,PorosityAtIP,meanfactor)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
-      fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0)
-      fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0)
-      KgwpTAtIP = KgwpT(rhow0,fTildewTATIP,Kgw)
-      
+      !fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiPAtIP,Xi0)
+      !fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiPAtIP,Xi0)
+      !KgwpTAtIP = KgwpT(rhow0,fTildewTATIP,Kgw)
+
 
       !PRINT *,"KGTTAtIP",KGTTAtIP
       !PRINT *,"CGTTAtIP",CGTTAtIP
-      
+
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       DO p=1,nd
@@ -729,16 +756,16 @@ CONTAINS
     CALL DefaultUpdateEquations(STIFF,FORCE)
     !------------------------------------------------------------------------------
   END SUBROUTINE LocalMatrix
-!------------------------------------------------------------------------------
+  !------------------------------------------------------------------------------
 
 
-! Assembly of the matrix entries arising from the Neumann and Robin conditions
-!------------------------------------------------------------------------------
+  ! Assembly of the matrix entries arising from the Neumann and Robin conditions
+  !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixBC( Element, n, nd )
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
     REAL(KIND=dp) :: Flux(n), Coeff(n), Ext_t(n), F,C,Ext, Weight
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,LoadAtIP
     REAL(KIND=dp) :: STIFF(nd,nd), FORCE(nd), LOAD(n)
@@ -750,7 +777,7 @@ CONTAINS
 
     TYPE(Nodes_t) :: Nodes
     SAVE Nodes
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
     BC => GetBC()
     IF (.NOT.ASSOCIATED(BC) ) RETURN
 
@@ -773,7 +800,7 @@ CONTAINS
       ! Basis function values & derivatives at the integration point:
       !--------------------------------------------------------------
       stat = ElementInfo( Element, Nodes, IP % U(t), IP % V(t), &
-              IP % W(t), detJ, Basis, dBasisdx )
+           IP % W(t), detJ, Basis, dBasisdx )
 
       Weight = IP % s(t) * DetJ
 
@@ -798,14 +825,14 @@ CONTAINS
       FORCE(1:nd) = FORCE(1:nd) + Weight * (F + C*Ext) * Basis(1:nd)
     END DO
     CALL DefaultUpdateEquations(STIFF,FORCE)
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
   END SUBROUTINE LocalMatrixBC
-!------------------------------------------------------------------------------
+  !------------------------------------------------------------------------------
 
-! Perform static condensation in case bubble dofs are present
-!------------------------------------------------------------------------------
+  ! Perform static condensation in case bubble dofs are present
+  !------------------------------------------------------------------------------
   SUBROUTINE LCondensate( N, Nb, K, F )
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
     USE LinearAlgebra
     INTEGER :: N, Nb
     REAL(KIND=dp) :: K(:,:),F(:),Kbb(Nb,Nb), &
@@ -827,9 +854,9 @@ CONTAINS
 
     F(1:n) = F(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
     K(1:n,1:n) = K(1:n,1:n) - MATMUL( Klb, MATMUL( Kbb, Kbl ) )
-!------------------------------------------------------------------------------
+    !------------------------------------------------------------------------------
   END SUBROUTINE LCondensate
-!------------------------------------------------------------------------------  
+  !------------------------------------------------------------------------------  
 END SUBROUTINE PermafrostHeatEquation
-      
-    
+
+
