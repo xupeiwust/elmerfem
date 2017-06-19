@@ -287,7 +287,6 @@ CONTAINS
     CGTT = (1.0_dp - eta0)*rhos0*cs0 + Xi*eta0*rhow0*cw0 &
          + (1.0_dp - Xi)*eta0*rhoi0*ci0 &
          + rhoi0*l0*eta0*XiT
-    !PRINT *,rhoi0*l0*eta0*XiT, rhoi0,l0,eta0,XiT   
   END FUNCTION CGTT
   
   RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0)
@@ -471,12 +470,13 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   END IF
   GWfluxVar => VariableGet(Solver % Mesh % Variables,GWfluxName)
   IF (.NOT.ASSOCIATED(GWfluxVar)) THEN
-    CALL WARN(SolverName,'Groundwater flux Variable not found. Switching Groundwater flux off')
+    CALL WARN(SolverName,'Groundwater flux Variable not found. Using Pressure and Temperature to compute flux')
     NoGWflux = .TRUE.
   ELSE
     GWflux => GWfluxVar % Values
     GWfluxPerm => GWfluxVar % Perm
     NoGWflux = .FALSE.
+    CALL INFO(SolverName,'Groundwater flux Variable not found. Using this as prescribed groundwater flux',Level=4)
   END IF
   ! Nonlinear iteration loop:
   !--------------------------
@@ -534,7 +534,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       END IF
 
       CALL LocalMatrix(  Element, N, ND+NB, NodalTemperature, NodalPressure, &
-           NodalPorosity, NodalSalinity, NodalGWflux, CurrentRockMaterial)
+           NodalPorosity, NodalSalinity, NodalGWflux, NoGWflux, CurrentRockMaterial)
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -564,37 +564,47 @@ CONTAINS
 
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
-       NodalPorosity, NodalSalinity, NodalGWflux, CurrentRockMaterial )
+       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, CurrentRockMaterial )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
     TYPE(RockMaterial_t) :: CurrentRockMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
+    LOGICAL :: ComputeGWFlux
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
-    REAL(KIND=dp) :: JgwDAtIP(3),KgwpTAtIP, KgwppAtIP, fTildewTAtIP,fTildewpAtIP !  JgwD stuff
+    REAL(KIND=dp) :: JgwDAtIP(3),KgwpTAtIP(3,3), KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgw(3,3)  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0,p0,rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,CgwTT    ! constants read only once
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,GWfluxAtIP(3),StiffPQ
+    REAL(KIND=DP) :: gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),pFluxAtIP(3),gFlux(3),Gravity(3)
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
+    REAL(KIND=dp), POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
     LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Remove this Output:'
-
+    
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,CgwTT
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       DIM = CoordinateSystemDimension()
+      gWork => ListGetConstRealArray( Model % Constants,'Gravity',Found)
+      IF (.NOT.Found) THEN
+        Gravity = 0.0
+        CALL WARN(SolverName,'Gravity not found in Constants section. Setting to zero')
+      ELSE
+        Gravity = gWork(1:3,1)*gWork(4,1)
+      END IF
       GasConstant= CurrentRockMaterial % GasConstant
       Mw= CurrentRockMaterial % MW
       DeltaT= CurrentRockMaterial % DeltaT
@@ -659,8 +669,8 @@ CONTAINS
     rhos0 = CurrentRockMaterial % rhos0(RockMaterialID)
     cs0 = CurrentRockMaterial % cs0(RockMaterialID)
     Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
-    eta0 =CurrentRockMaterial % eta0(RockMaterialID)
-    Kgw(1:3,1:3) =CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
+    eta0 = CurrentRockMaterial % eta0(RockMaterialID)
+    Kgw(1:3,1:3) = CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
 
     !PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
     !     "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
@@ -693,9 +703,7 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
-      DO I=1,DIM
-        JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
-      END DO
+
 
       ! functions at IP
       deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,l0,cw0,ci0,rhow0,rhoi0,GasConstant,&
@@ -711,6 +719,26 @@ CONTAINS
       KGTTAtIP = GetKGTT(ksthAtIP,kw0th,ki0th,eta0,XiAtIP,&
            TemperatureAtIP,PressureAtIP,PorosityAtIP,meanfactor)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
+      IF (ComputeGWFlux) THEN
+        DO I=1,DIM
+          JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
+        END DO
+      ELSE
+        fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
+        fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
+        KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,Kgw)
+        KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,Kgw)
+        DO i=1,DIM
+          gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
+          gradPAtIP(i) =  SUM(NodalPressure(1:N) * dBasisdx(1:N,i))
+        END DO
+        DO i=1,DIM
+          fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+          gFlux(i) = rhow0 * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
+          pFluxAtIP(i) =  SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
+          JgwDAtIP(i) = gFlux(i) - fluxTAtIP(i) - pFluxAtIP(i)
+        END DO
+      END IF
       !fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiPAtIP,Xi0)
       !fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiPAtIP,Xi0)
       !KgwpTAtIP = KgwpT(rhow0,fTildewTATIP,Kgw)
@@ -1036,14 +1064,7 @@ SUBROUTINE PermafrostGroundWaterFlow( Model,Solver,dt,TransientSimulation )
       ELSE
         NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
       END IF
-!!$      IF (NoGWflux) THEN
-!!$        NodalGWflux(1:3,1:N) = 0.0_dp
-!!$      ELSE
-!!$        DO I=1,GWfluxVar % DOFs
-!!$          NodalGWflux(I,1:N) = &
-!!$               GWflux(GWfluxVar % DOFs * GWfluxPerm(Element % NodeIndexes(1:N)) - I)
-!!$        END DO
-!!$      END IF
+
 
       CALL LocalMatrix(  Element, N, ND+NB, NodalPressure, NodalTemperature, &
            NodalPorosity, NodalSalinity, NodalGWflux, CurrentRockMaterial)
@@ -1068,14 +1089,17 @@ SUBROUTINE PermafrostGroundWaterFlow( Model,Solver,dt,TransientSimulation )
     !--------------------
     Norm = DefaultSolve()
     IF( Solver % Variable % NonlinConverged == 1 ) EXIT
-
+    !IF (.NOT.NoGWflux) THEN
+    !  CALL ComputeGWFlux(GWfluxVar,
+    !END IF
+    
   END DO
 
 CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
 
   !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
+  SUBROUTINE LocalMatrix( Element, n, nd,  NodalPressure, NodalTemperature, &
        NodalPorosity, NodalSalinity, NodalGWflux, CurrentRockMaterial )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
@@ -1084,7 +1108,7 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
     !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: KgwppAtIP(3,3),KgwpTAtIP(3,3),gradTAtIP(3),fluxTAtIP(3),gFlux(3) ! needed in equation
+    REAL(KIND=dp) :: KgwppAtIP(3,3),KgwpTAtIP(3,3),gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),gFlux(3) ! needed in equation
     REAL(KIND=dp) :: XiAtIP,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: fTildewTAtIP, fTildewpAtIP !  JgwD stuff
@@ -1092,8 +1116,9 @@ CONTAINS
     REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgw(3,3)  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, DeltaT, T0,p0,rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,CgwTT, Gravity(3)    ! constants read only once
-    REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
-         TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,StiffPQ
+    REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,StiffPQ
+    REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
+         
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
     REAL(Kind=dp) , POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
@@ -1181,8 +1206,8 @@ CONTAINS
     rhos0 = CurrentRockMaterial % rhos0(RockMaterialID)
     cs0 = CurrentRockMaterial % cs0(RockMaterialID)
     Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
-    eta0 =CurrentRockMaterial % eta0(RockMaterialID)
-    Kgw(1:3,1:3) =CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
+    eta0 = CurrentRockMaterial % eta0(RockMaterialID)
+    Kgw(1:3,1:3) = CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
 
     !PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
     !     "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
@@ -1212,8 +1237,8 @@ CONTAINS
 
       ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
       TemperatureAtIP = SUM( Basis(1:N) * NodalTemperature(1:N) )
-      PRINT *, NodalTemperature(1:N),N
-      STOP
+      !PRINT *, NodalTemperature(1:N),N
+     
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
@@ -1223,23 +1248,15 @@ CONTAINS
       deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,l0,cw0,ci0,rhow0,rhoi0,GasConstant,&
            TemperatureAtIP,PressureAtIP)
       B1AtIP = B1(deltaInElement,ew,Mw,GasConstant,TemperatureAtIP)
-      PRINT *,"B1(",deltaInElement,ew,Mw,GasConstant,TemperatureAtIP,")"
+      !PRINT *,"B1(",deltaInElement,ew,Mw,GasConstant,TemperatureAtIP,")"
       B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
       XiAtIP = Xi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0)
-      !XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
-      !     deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
-      !XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
-      !     deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
-      !ksthAtIP = ksth(ks0th,bs,T0,TemperatureAtIP)
-      !KGTTAtIP = GetKGTT(ksthAtIP,kw0th,ki0th,eta0,XiAtIP,&
-      !     TemperatureAtIP,PressureAtIP,PorosityAtIP,meanfactor)
-      !CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
       KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,Kgw)
       KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,Kgw)
       
-      PRINT *,"ftildewp(",B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0,")"
+      !PRINT *,"ftildewp(",B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0,")"
 
       !PRINT *,"Kgw",Kgw
       !PRINT *,"KgwppAtIP",KgwppAtIP
@@ -1255,8 +1272,7 @@ CONTAINS
           ! -----------------------------------
           DO i=1,DIM
             DO j=1,DIM
-              !StiffPQ = StiffPQ + KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
-              StiffPQ = StiffPQ + 5.4738d-04 * dBasisdx(p,j)* dBasisdx(q,i)
+              StiffPQ = StiffPQ + KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
             END DO
           END DO
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
@@ -1265,17 +1281,17 @@ CONTAINS
        
       ! body force
       DO i=1,DIM
-        gradTAtIP(i) =  SUM(Temperature(1:nd)*dBasisdx(1:nd,i))
+        gradTAtIP(i) =  SUM(NodalTemperature(1:nd)*dBasisdx(1:nd,i))
       END DO
       DO i=1,DIM
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
         gFlux(i) = rhow0 * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
       END DO
-     ! DO p=1,nd     
-     !   FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
-     !   FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
-     ! END DO
-     ! FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      DO p=1,nd     
+        FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
+        FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
+      END DO
+      FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
