@@ -50,147 +50,163 @@ MODULE PermafrostMaterials
 
 CONTAINS
 
-  FUNCTION ReadPermafrostRockMaterial( Element,Params,CurrentRockMaterial ) RESULT(NumberOfRecords)
+  FUNCTION ReadPermafrostRockMaterial(Params,CurrentRockMaterial ) RESULT(NumberOfRecords)
     IMPLICIT NONE
-    TYPE(Element_t), POINTER :: Element
     TYPE(ValueList_t), POINTER :: Params
-    TYPE(RockMaterial_t) :: CurrentRockMaterial
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(RockMaterial_t), TARGET :: LocalRockMaterial
     Integer :: NumberOfRecords
-    
-    INTEGER :: i,j,k,l, t, active, DIM, ok
+
+    INTEGER :: i,j,k,l, t, active, DIM, ok,InitialNumberOfRecords
     INTEGER,parameter :: io=20,NumberOfEntries=10
-    LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.
-    CHARACTER(LEN=MAX_NAME_LEN) ::  MaterialFileName, Comment
+    LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE., DataRead=.FALSE.
+    CHARACTER(LEN=MAX_NAME_LEN) ::  MaterialFileName, NewMaterialFileName, Comment
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='ReadPermafrostRockMaterial'
 
-    SAVE AllocationsDone
+    SAVE AllocationsDone,DataRead,InitialNumberOfRecords,LocalRockMaterial,MaterialFileName
 
-    DIM = CoordinateSystemDimension()
-    !------------------------------------------------------------------------------
-    ! Inquire and open file
-    !------------------------------------------------------------------------------
-    MaterialFileName = GetString( Params, 'Rock Material File', Found )
-    IF (.NOT.Found) &
-         CALL FATAL(FunctionName," 'Rock Material File' keyword not found - you have to specify an input file!")
-    NumberOfRecords = GetInteger( Params, 'Records in File', Found )
-    IF (.NOT.Found) &
-         CALL FATAL(FunctionName," 'Records in File' keyword not found - you have to specify an integer!")
-        OPEN(unit = io, file = TRIM(MaterialFileName), status = 'old',iostat = ok)
-    IF (ok /= 0) THEN
-      WRITE(message,'(A,A)') 'Unable to open file ',TRIM(MaterialFileName)
-      CALL FATAL(Trim(FunctionName),Trim(message))
-    END IF
-    WRITE (Message,'(A,I2,A,A)') "Attempting read ",NumberOfRecords," from data file ",TRIM(MaterialFileName)
-    CALL INFO(FunctionName,Message,level=9)
-    !------------------------------------------------------------------------------
-    ! Allocate and read stuff
-    !------------------------------------------------------------------------------
-    !M = Model % Mesh % NumberOfNodes
-    IF (AllocationsDone) THEN
-      DEALLOCATE(&
-           CurrentRockMaterial % ks0th,&
-           CurrentRockMaterial % ew,&
-           CurrentRockMaterial % bs,&
-           CurrentRockMaterial % rhos0,&
-           CurrentRockMaterial % cs0,&
-           CurrentRockMaterial % Xi0,&
-           CurrentRockMaterial % eta0,&
-           CurrentRockMaterial % hs0,&
-           CurrentRockMaterial % VariableBaseName)
-    END IF
-    ALLOCATE(&
-         CurrentRockMaterial % ks0th(NumberOfRecords),&
-         CurrentRockMaterial % ew(NumberOfRecords),&
-         CurrentRockMaterial % bs(NumberOfRecords),&
-         CurrentRockMaterial % rhos0(NumberOfRecords),&
-         CurrentRockMaterial % cs0(NumberOfRecords),&
-         CurrentRockMaterial % Xi0(NumberOfRecords),&
-         CurrentRockMaterial % eta0(NumberOfRecords),&
-         CurrentRockMaterial % hs0(NumberOfRecords),&
-         CurrentRockMaterial % Kgw(3,3,NumberOfRecords),&
-         CurrentRockMaterial % VariableBaseName(NumberOfRecords),&
-         STAT=OK)
-    AllocationsDone = .TRUE.
-    IF (OK /= 0) &
-         CALL FATAL(FunctionName, 'Allocation Error of input data array')
-    !------------------------------------------------------------------------------
-    ! Read in information from material file
-    ! General constants
-    !  GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
-    !     hw0,hi0,cw0,ci0,eps,kw0th,ki0th
-    !------------------------------------------------------------------------------
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % GasConstant, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Mw, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % DeltaT,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % T0,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % p0,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhow0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhoi0,Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hw0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hi0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % cw0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ci0, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % eps, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % kw0th, Comment
-    READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ki0th, Comment
-
-    ! for each material
-    !       ks0th(:),ew(:),b(:),rhos0(:),cs0(:)
-    DO I=1,NumberOfRecords
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % VariableBaseName(I)
-      WRITE(Message,'(A,I2,A,A)') "Input for Variable No.",I,": ", CurrentRockMaterial % VariableBaseName(I)
-      CALL INFO(FunctionName,Message,Level=9)
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Xi0(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % eta0(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ks0th(I), Comment          
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % ew(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % bs(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % rhos0(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % cs0(I), Comment
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment
-      DO J=1,3
-        DO K=1,3
-          READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % Kgw(J,K,I), Comment
-        END DO
-      END DO
-      READ (io, *, END=10, IOSTAT=OK, ERR=30) CurrentRockMaterial % hs0(I), Comment      
-    END DO
-    WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
-    CALL INFO(FunctionName,Message,Level=1)
-10  CLOSE(io)
-    IF (I < NumberOfRecords) THEN
-      WRITE(Message,'(I3,A,I3)') I,"records read, which is smaller than given number ", NumberOfRecords
-      CALL FATAL(FunctionName,Message)
+    IF (DataRead) THEN
+      NewMaterialFileName = GetString( Params, 'Rock Material File', Found )
+      IF (NewMaterialFileName /= MaterialFileName) THEN
+        WRITE (Message, '(A,A,A,A)') NewMaterialFileName,' does not match existing datafile ', MaterialFileName,'. Exiting!'
+        CALL FATAL(FunctionName,Message)
+      END IF
+      PRINT *, "Deja Vu"
+      NumberOfRecords = InitialNumberOfRecords
+      CurrentRockMaterial => LocalRockMaterial
+      RETURN
     ELSE
+      DIM = CoordinateSystemDimension()
+      !------------------------------------------------------------------------------
+      ! Inquire and open file
+      !------------------------------------------------------------------------------
+      MaterialFileName = GetString( Params, 'Rock Material File', Found )
+      IF (.NOT.Found) &
+           CALL FATAL(FunctionName," 'Rock Material File' keyword not found - you have to specify an input file!")
+      NumberOfRecords = GetInteger( Params, 'Records in File', Found )
+      IF (.NOT.Found) &
+           CALL FATAL(FunctionName," 'Records in File' keyword not found - you have to specify an integer!")
+      OPEN(unit = io, file = TRIM(MaterialFileName), status = 'old',iostat = ok)
+      IF (ok /= 0) THEN
+        WRITE(Message,'(A,A)') 'Unable to open file ',TRIM(MaterialFileName)
+        CALL FATAL(Trim(FunctionName),Trim(message))
+      END IF
+      WRITE (Message,'(A,I2,A,A)') "Attempting read ",NumberOfRecords," from data file ",TRIM(MaterialFileName)
+      CALL INFO(FunctionName,Message,level=9)
+      InitialNumberOfRecords = NumberOfRecords
+
+      !------------------------------------------------------------------------------
+      ! Allocate and read stuff
+      !------------------------------------------------------------------------------
+      !M = Model % Mesh % NumberOfNodes
+      IF (AllocationsDone) THEN
+        DEALLOCATE(&
+             LocalRockMaterial % ks0th,&
+             LocalRockMaterial % ew,&
+             LocalRockMaterial % bs,&
+             LocalRockMaterial % rhos0,&
+             LocalRockMaterial % cs0,&
+             LocalRockMaterial % Xi0,&
+             LocalRockMaterial % eta0,&
+             LocalRockMaterial % hs0,&
+             LocalRockMaterial % VariableBaseName)
+      END IF
+      ALLOCATE(&
+           LocalRockMaterial % ks0th(NumberOfRecords),&
+           LocalRockMaterial % ew(NumberOfRecords),&
+           LocalRockMaterial % bs(NumberOfRecords),&
+           LocalRockMaterial % rhos0(NumberOfRecords),&
+           LocalRockMaterial % cs0(NumberOfRecords),&
+           LocalRockMaterial % Xi0(NumberOfRecords),&
+           LocalRockMaterial % eta0(NumberOfRecords),&
+           LocalRockMaterial % hs0(NumberOfRecords),&
+           LocalRockMaterial % Kgw(3,3,NumberOfRecords),&
+           LocalRockMaterial % VariableBaseName(NumberOfRecords),&
+           STAT=OK)
+      AllocationsDone = .TRUE.
+      DataRead = .TRUE.
+      IF (OK /= 0) &
+           CALL FATAL(FunctionName, 'Allocation Error of input data array')
+      !------------------------------------------------------------------------------
+      ! Read in information from material file
+      ! General constants
+      !  GasConstant, Mw, DeltaT, T0, p0, rhow0,rhoi0,&
+      !     hw0,hi0,cw0,ci0,eps,kw0th,ki0th
+      !------------------------------------------------------------------------------
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % GasConstant, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Mw, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % DeltaT,Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % T0,Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % p0,Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % rhow0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % rhoi0,Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % hw0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % hi0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % cw0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % ci0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % eps, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % kw0th, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % ki0th, Comment
+
+      ! for each material
+      !       ks0th(:),ew(:),b(:),rhos0(:),cs0(:)
+      DO I=1,NumberOfRecords
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % VariableBaseName(I)
+        WRITE(Message,'(A,I2,A,A)') "Input for Variable No.",I,": ", LocalRockMaterial % VariableBaseName(I)
+        CALL INFO(FunctionName,Message,Level=9)
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Xi0(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % eta0(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % ks0th(I), Comment          
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % ew(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % bs(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % rhos0(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % cs0(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % hs0(I), Comment
+        DO J=1,3
+          DO K=1,3
+            READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Kgw(J,K,I), Comment
+          END DO
+        END DO
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % hs0(I), Comment      
+      END DO
       WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
       CALL INFO(FunctionName,Message,Level=1)
-      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
-      CALL INFO(FunctionName,"General Constants:", Level=9)
-      WRITE(Message,'(A)') "GasConstant,Mw,DeltaT,T0,p0,rhow0,rhoi0,hw0,hi0,cw0,ci0,eps,kw0th,ki0th:"
-      CALL INFO(FunctionName,Message,Level=9)
-      WRITE(Message,'(14E12.5)') CurrentRockMaterial % GasConstant, &
-           CurrentRockMaterial % Mw, CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0,&
-           CurrentRockMaterial % p0, CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0,&           
-           CurrentRockMaterial % hw0, CurrentRockMaterial % hi0, CurrentRockMaterial % cw0,&
-           CurrentRockMaterial % ci0, CurrentRockMaterial % eps, CurrentRockMaterial % kw0th,&
-           CurrentRockMaterial % ki0th
-      CALL INFO(FunctionName,Message,Level=9)
-      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
-      CALL INFO(FunctionName,"Material Constants:", Level=9)
-      DO I=1,NumberOfRecords
-        WRITE(Message,'(I2,A,A,A)') I,": ", CurrentRockMaterial % VariableBaseName(I),":"
-        WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
+10    CLOSE(io)
+      IF (I < NumberOfRecords) THEN
+        WRITE(Message,'(I3,A,I3)') I,"records read, which is smaller than given number ", NumberOfRecords
+        CALL FATAL(FunctionName,Message)
+      ELSE
+        CurrentRockMaterial => LocalRockMaterial
+        WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
+        CALL INFO(FunctionName,Message,Level=1)
+        CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+        CALL INFO(FunctionName,"General Constants:", Level=9)
+        WRITE(Message,'(A)') "GasConstant,Mw,DeltaT,T0,p0,rhow0,rhoi0,hw0,hi0,cw0,ci0,eps,kw0th,ki0th:"
         CALL INFO(FunctionName,Message,Level=9)
-        WRITE(Message,'(E10.5,E10.5,E10.5,E10.5,E10.5,E10.5,E10.5)') CurrentRockMaterial % Xi0(I),&
-             CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
-             CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
-             CurrentRockMaterial % cs0(I)
+        WRITE(Message,'(14E12.5)') CurrentRockMaterial % GasConstant, &
+             CurrentRockMaterial % Mw, CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0,&
+             CurrentRockMaterial % p0, CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0,&           
+             CurrentRockMaterial % hw0, CurrentRockMaterial % hi0, CurrentRockMaterial % cw0,&
+             CurrentRockMaterial % ci0, CurrentRockMaterial % eps, CurrentRockMaterial % kw0th,&
+             CurrentRockMaterial % ki0th
         CALL INFO(FunctionName,Message,Level=9)
-      END DO
-      CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)  
+        CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
+        CALL INFO(FunctionName,"Material Constants:", Level=9)
+        DO I=1,NumberOfRecords
+          WRITE(Message,'(I2,A,A,A)') I,": ", CurrentRockMaterial % VariableBaseName(I),":"
+          WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
+          CALL INFO(FunctionName,Message,Level=9)
+          WRITE(Message,'(E10.5,E10.5,E10.5,E10.5,E10.5,E10.5,E10.5)') CurrentRockMaterial % Xi0(I),&
+               CurrentRockMaterial % eta0(I), CurrentRockMaterial % Ks0th(I), &
+               CurrentRockMaterial % ew(I),CurrentRockMaterial % bs(I),CurrentRockMaterial % rhos0(I),&
+               CurrentRockMaterial % cs0(I)
+          CALL INFO(FunctionName,Message,Level=9)
+        END DO
+        CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)  
+      END IF
+      RETURN
     END IF
-    RETURN
-    
+
 30  CALL WARN(FunctionName,"I/O error! Last successfully read variable:")
     CALL WARN(FunctionName,Comment)
     CALL FATAL(FunctionName,"Stopping simulation")    
@@ -258,6 +274,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature
     !local
     REAL(KIND=dp) :: aux1, aux2
+    IF (Temperature .LE. 0.0_dp) CALL FATAL("Permafrost (XiP)","(sub-)Zero Temperature detected")
     aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
     aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
     XiP = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) &
@@ -358,7 +375,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   TYPE(Element_t),POINTER :: Element
   TYPE(ValueList_t), POINTER :: Params, Material
   TYPE(Variable_t), POINTER :: PressureVar,PorosityVar,SalinityVar,GWfluxVar
-  TYPE(RockMaterial_t) :: CurrentRockMaterial
+  TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, Active,iter, maxiter, istat
   INTEGER,PARAMETER :: io=20,NumberOfEntries=10
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),PorosityPerm(:),SalinityPerm(:),GWfluxPerm(:)
@@ -372,12 +389,12 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName
 
-  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,&
+  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,NumberOfRecords,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalGWflux,NodalTemperature
   !------------------------------------------------------------------------------
   Params => GetSolverParams()
   IF (FirstTime) THEN
-    NumberOfRecords =  ReadPermafrostRockMaterial( Element,Params,CurrentRockMaterial )
+    NumberOfRecords =  ReadPermafrostRockMaterial( Params,CurrentRockMaterial )
     IF (NumberOfRecords < 1) CALL FATAL(SolverName,'No Rock Material specified')
     FirstTime = .FALSE.
   END IF
@@ -560,7 +577,7 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
   END DO
 
 CONTAINS
-  ! Assembly of the matrix entries arising from the bulk elements
+  ! Assembly of the matrix entries arising from the bulk elements for Heat Transfer Equation
 
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
@@ -672,8 +689,8 @@ CONTAINS
     eta0 = CurrentRockMaterial % eta0(RockMaterialID)
     Kgw(1:3,1:3) = CurrentRockMaterial % Kgw(1:3,1:3,RockMaterialID)
 
-    !PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
-    !     "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
+!    PRINT *, "ks0th", ks0th,"ew", ew, "bs",bs, "rhos0", rhos0, "cs0", cs0,&
+!         "Xi0",Xi0, "eta0",eta0,"Kgw", Kgw(1:3,1:3)
 
     ! derive element rock material specific parameters
     deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
@@ -720,24 +737,33 @@ CONTAINS
            TemperatureAtIP,PressureAtIP,PorosityAtIP,meanfactor)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
       IF (ComputeGWFlux) THEN
-        DO I=1,DIM
+        DO I=1,3
           JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
         END DO
       ELSE
         fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
         fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
         KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,Kgw)
+        PRINT *, fTildewTATIP, rhow0
         KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,Kgw)
+        gradTAtIP = 0.0_dp
+        gradPAtIP(i) = 0.0_dp
         DO i=1,DIM
           gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
           gradPAtIP(i) =  SUM(NodalPressure(1:N) * dBasisdx(1:N,i))
         END DO
-        DO i=1,DIM
-          fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          gFlux(i) = rhow0 * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
-          pFluxAtIP(i) =  SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
-          JgwDAtIP(i) = gFlux(i) - fluxTAtIP(i) - pFluxAtIP(i)
+        DO i=1,3
+          fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:3)*gradTAtIP(1:3))
+          gFlux(i) = rhow0 * SUM(Kgw(i,1:3)*Gravity(1:3))
+          pFluxAtIP(i) =  SUM(KgwppAtIP(i,1:3)*gradPAtIP(1:3))
+          !JgwDAtIP(i) = gFlux(i) - fluxTAtIP(i) - pFluxAtIP(i)
+          JgwDAtIP(i) = gFlux(i) !- pFluxAtIP(i)
+          !JgwDAtIP(i) = 0.0_dp
         END DO
+        PRINT *,"pFluxAtIP(1:DIM) =", pFluxAtIP(1:3)
+        PRINT *,"KgwppAtIP=", KgwppAtIP(1:3,1:3)
+!        PRINT *,"fluxTAtIP(1:DIM) =", fluxTAtIP(1:DIM)
+!        PRINT *,"gFlux(1:DIM) =", gFlux(1:DIM) 
       END IF
       !fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiPAtIP,Xi0)
       !fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiPAtIP,Xi0)
@@ -907,7 +933,7 @@ SUBROUTINE PermafrostGroundWaterFlow( Model,Solver,dt,TransientSimulation )
   TYPE(Element_t),POINTER :: Element
   TYPE(ValueList_t), POINTER :: Params, Material
   TYPE(Variable_t), POINTER :: TemperatureVar,PorosityVar,SalinityVar,GWfluxVar
-  TYPE(RockMaterial_t) :: CurrentRockMaterial
+  TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, Active,iter, maxiter, istat
   INTEGER,PARAMETER :: io=20,NumberOfEntries=10
   INTEGER,POINTER :: PressurePerm(:), TemperaturePerm(:),PorosityPerm(:),SalinityPerm(:),GWfluxPerm(:)
@@ -926,7 +952,7 @@ SUBROUTINE PermafrostGroundWaterFlow( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
   Params => GetSolverParams()
   IF (FirstTime) THEN
-    NumberOfRecords =  ReadPermafrostRockMaterial( Element,Params,CurrentRockMaterial )
+    NumberOfRecords =  ReadPermafrostRockMaterial( Params,CurrentRockMaterial )
     IF (NumberOfRecords < 1) CALL FATAL(SolverName,'No Rock Material specified')
     FirstTime = .FALSE.
   END IF
@@ -1287,10 +1313,10 @@ CONTAINS
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
         gFlux(i) = rhow0 * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
       END DO
-      DO p=1,nd     
-        FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
-        FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
-      END DO
+!      DO p=1,nd     
+!        FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
+!        FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
+!      END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
