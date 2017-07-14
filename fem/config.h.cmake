@@ -137,4 +137,10 @@
 
 #cmakedefine CONTIG ${FC_CONTIG}
 
+
+/* Have these defined only for debugging or optimization purposes */
+/* #define DEVEL_LISTCOUNTER */
+/* #define DEVEL_KEYWORDMISSES */
+
+
 #endif

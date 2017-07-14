@@ -1,4 +1,4 @@
-!/*****************************************************************************/
+!*****************************************************************************/
 ! *
 ! *  Elmer, A Finite Element Software for Multiphysical Problems
 ! *
@@ -171,6 +171,8 @@ CONTAINS
 
      Mesh % InvPerm => NULL()
 
+     Mesh % MinFaceDOFs = 1000
+     Mesh % MinEdgeDOFs = 1000
      Mesh % MaxFaceDOFs = 0
      Mesh % MaxEdgeDOFs = 0
      Mesh % MaxBDOFs = 0
@@ -1873,7 +1875,7 @@ END SUBROUTINE GetMaxDefs
  !> Function to load mesh from disk.
  !------------------------------------------------------------------------------
  FUNCTION LoadMesh2( Model, MeshDirPar, MeshNamePar,&
-     BoundariesOnly, NumProcs,MyPE, Def_Dofs ) RESULT( Mesh )
+     BoundariesOnly, NumProcs,MyPE, Def_Dofs, mySolver ) RESULT( Mesh )
    !------------------------------------------------------------------------------
    USE PElementMaps, ONLY : GetRefPElementNodes
 
@@ -1881,7 +1883,7 @@ END SUBROUTINE GetMaxDefs
 
    CHARACTER(LEN=*) :: MeshDirPar,MeshNamePar
    LOGICAL :: BoundariesOnly    
-   INTEGER, OPTIONAL :: numprocs,mype,Def_Dofs(:,:)
+   INTEGER, OPTIONAL :: numprocs,mype,Def_Dofs(:,:), mySolver
    TYPE(Mesh_t),  POINTER :: Mesh
    TYPE(Model_t) :: Model
    !------------------------------------------------------------------------------    
@@ -2069,6 +2071,8 @@ END SUBROUTINE GetMaxDefs
      IF ( BoundariesOnly ) Mesh % NumberOfBulkElements = 0
 
      Mesh % MaxElementDOFs  = 0
+     Mesh % MinEdgeDOFs     = 1000
+     Mesh % MinFaceDOFs     = 1000
      Mesh % MaxEdgeDOFs     = 0
      Mesh % MaxFaceDOFs     = 0
      Mesh % MaxBDOFs        = 0
@@ -2350,6 +2354,7 @@ END SUBROUTINE GetMaxDefs
      LOGICAL :: NeedEdges, Found, FoundDef0, FoundDef, FoundEq, GotIt, MeshDeps, &
                 FoundEqDefs, FoundSolverDefs(Model % NumberOfSolvers), FirstOrderElements
      TYPE(Element_t), POINTER :: Element
+     TYPE(Element_t) :: DummyElement
      TYPE(ValueList_t), POINTER :: Vlist
      INTEGER :: inDOFs(10,6)
      CHARACTER(MAX_NAME_LEN) :: ElementDef0, ElementDef
@@ -2415,17 +2420,24 @@ END SUBROUTINE GetMaxDefs
           IF(FoundEqDefs) ElementDef0 = ListGetString(Vlist,'Element',FoundDef0 )
 
           DO solver_id=1,Model % NumberOfSolvers
+
+            IF(PRESENT(mySolver)) THEN
+              IF ( Solver_id /= mySolver ) CYCLE
+            ELSE
+              IF (ListCheckPresent(Model % Solvers(Solver_id) % Values, 'Mesh')) CYCLE
+            END IF
+
             FoundDef = .FALSE.
             IF(FoundSolverDefs(solver_id)) &
                 ElementDef = ListGetString(Vlist,'Element{'//TRIM(i2s(solver_id))//'}',FoundDef)
  
             IF ( FoundDef ) THEN
-              CALL GetMaxDefs( Model, Mesh, Element, ElementDef, solver_id, body_id, Indofs )
+              CALL GetMaxDefs( Model, Mesh, DummyElement, ElementDef, solver_id, body_id, Indofs )
             ELSE
               IF(.NOT. FoundDef0.AND.FoundSolverDefs(Solver_id)) &
                  ElementDef0 = ListGetString(Model % Solvers(solver_id) % Values,'Element',GotIt)
 
-              CALL GetMaxDefs( Model, Mesh, Element, ElementDef0, solver_id, body_id, Indofs )
+              CALL GetMaxDefs( Model, Mesh, DummyElement, ElementDef0, solver_id, body_id, Indofs )
 
               IF(.NOT. FoundDef0.AND.FoundSolverDefs(Solver_id)) ElementDef0 = ' '
             END IF
@@ -2458,6 +2470,12 @@ END SUBROUTINE GetMaxDefs
            IF( FoundEqDefs.AND.body_id/=body_id0 ) ElementDef0 = ListGetString(Vlist,'Element',FoundDef0 )
 
            DO solver_id=1,Model % NumberOfSolvers
+             IF(PRESENT(mySolver)) THEN
+               IF ( Solver_id /= mySolver ) CYCLE
+             ELSE
+               IF (ListCheckPresent(Model % Solvers(Solver_id) % Values, 'Mesh')) CYCLE
+             END IF
+
              FoundDef = .FALSE.
              IF (FoundSolverDefs(solver_id)) &
                 ElementDef = ListGetString(Vlist,'Element{'//TRIM(i2s(solver_id))//'}',FoundDef)
@@ -2731,14 +2749,18 @@ END SUBROUTINE GetMaxDefs
      ! Create parallel numbering of faces
      CALL SParFaceNumbering(Mesh)
      DO i=1,Mesh % NumberOfFaces
+       Mesh % MinFaceDOFs = MIN(Mesh % MinFaceDOFs,Mesh % Faces(i) % BDOFs)
        Mesh % MaxFaceDOFs = MAX(Mesh % MaxFaceDOFs,Mesh % Faces(i) % BDOFs)
      END DO
+     IF(Mesh % MinFaceDOFs > Mesh % MaxFaceDOFs) Mesh % MinFaceDOFs = Mesh % MaxFaceDOFs
 
      ! Create parallel numbering for edges
      CALL SParEdgeNumbering(Mesh)
      DO i=1,Mesh % NumberOfEdges
+       Mesh % MinEdgeDOFs = MIN(Mesh % MinEdgeDOFs,Mesh % Edges(i) % BDOFs)
        Mesh % MaxEdgeDOFs = MAX(Mesh % MaxEdgeDOFs,Mesh % Edges(i) % BDOFs)
      END DO
+     IF(Mesh % MinEdgeDOFs > Mesh % MaxEdgeDOFs) Mesh % MinEdgeDOFs = Mesh % MaxEdgeDOFs
 
      ! Set max element dofs here (because element size may have changed
      ! when edges and faces have been set). This is the absolute worst case.
@@ -2860,8 +2882,10 @@ END SUBROUTINE GetMaxDefs
           END IF
 
           ! Get maximum dof for edges
+          Mesh % MinEdgeDOFs = MIN(Edge % BDOFs, Mesh % MinEdgeDOFs)
           Mesh % MaxEdgeDOFs = MAX(Edge % BDOFs, Mesh % MaxEdgeDOFs)
        END DO
+       IF ( Mesh % MinEdgeDOFs > Mesh % MaxEdgeDOFs ) Mesh % MinEdgeDOFs = MEsh % MaxEdgeDOFs
 
        ! Iterate each face of element
        DO j=1,Element % TYPE % NumberOfFaces
@@ -2887,9 +2911,11 @@ END SUBROUTINE GetMaxDefs
           END IF
              
           ! Get maximum dof for faces
+          Mesh % MinFaceDOFs = MIN(Face % BDOFs, Mesh % MinFaceDOFs)
           Mesh % MaxFaceDOFs = MAX(Face % BDOFs, Mesh % MaxFaceDOFs)
        END DO
     END DO
+    IF ( Mesh % MinFaceDOFs > Mesh % MaxFaceDOFs ) Mesh % MinFaceDOFs = MEsh % MaxFaceDOFs
 
     ! Set local edges for boundary elements
     DO i=Mesh % NumberOfBulkElements + 1, &
@@ -13271,6 +13297,8 @@ END SUBROUTINE FindNeighbourNodes
     NewMesh % NumberOfEdges = 0
     NewMesh % NumberOfFaces = 0
     NewMesh % MaxBDOFs = Mesh % MaxBDOFs
+    NewMesh % MinEdgeDOFs = Mesh % MinEdgeDOFs
+    NewMesh % MinFaceDOFs = Mesh % MinFaceDOFs
     NewMesh % MaxEdgeDOFs = Mesh % MaxEdgeDOFs
     NewMesh % MaxFaceDOFs = Mesh % MaxFaceDOFs
     NewMesh % MaxElementDOFs = Mesh % MaxElementDOFs

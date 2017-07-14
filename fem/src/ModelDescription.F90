@@ -1354,18 +1354,18 @@ CONTAINS
             ! This is intended to be activated when new keywords are checked 
             ! Generally it can be set false
             !---------------------------------------------------------------
-            IF(.FALSE.) THEN
-              OPEN( 10,File='../SOLVER.KEYWORDS.byname',&
-                  STATUS='UNKNOWN',POSITION='APPEND' )
-              WRITE( 10,'(A,T40,A)') TRIM(Name),TRIM(str)
-              CLOSE(10)
+#ifdef DEVEL_KEYWORDMISSES
+            OPEN( 10,File='../SOLVER.KEYWORDS.byname',&
+                STATUS='UNKNOWN',POSITION='APPEND' )
+            WRITE( 10,'(A,T40,A)') TRIM(Name),TRIM(str)
+            CLOSE(10)
 
-              i = INDEX( str,':' )
-              OPEN( 10,File='../SOLVER.KEYWORDS.bysection',&
-                  STATUS='UNKNOWN',POSITION='APPEND' )
-              WRITE( 10,'(A,T22,A)') str(1:i)//TRIM(TYPE)//':',"'"//TRIM(Name)//"'"
-              CLOSE(10 )
-            END IF
+            i = INDEX( str,':' )
+            OPEN( 10,File='../SOLVER.KEYWORDS.bysection',&
+                STATUS='UNKNOWN',POSITION='APPEND' )
+            WRITE( 10,'(A,T22,A)') str(1:i)//TRIM(TYPE)//':',"'"//TRIM(Name)//"'"
+            CLOSE(10 )
+#endif
           END IF
        ELSE IF ( ASSOCIATED( Val ) ) THEN
          ! Difference between types 'string' and 'file' is just that 
@@ -2138,8 +2138,7 @@ CONTAINS
       ElementDef = ListGetString( Solver % Values, 'Element', stat )
    
       IF ( .NOT. stat ) THEN
-        IF ( ListGetLogical( Solver % Values, &
-             'Discontinuous Galerkin', stat ) ) THEN
+        IF ( ListGetLogical( Solver % Values, 'Discontinuous Galerkin', stat ) ) THEN
            Solver % Def_Dofs(:,:,4) = 0
            IF ( .NOT. GotMesh ) Def_Dofs(:,4) = MAX(Def_Dofs(:,4),0 )
            i=i+1
@@ -2399,10 +2398,10 @@ CONTAINS
 
         IF ( Single ) THEN
           Model % Solvers(s) % Mesh => &
-              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,1,0,def_dofs )
+              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,1,0,def_dofs, s )
         ELSE
           Model % Solvers(s) % Mesh => &
-              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,numprocs,mype,Def_Dofs )
+              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,numprocs,mype,Def_Dofs, s )
         END IF
         Model % Solvers(s) % Mesh % OutputActive = .TRUE.
 
