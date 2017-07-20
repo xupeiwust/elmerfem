@@ -920,7 +920,7 @@ END SUBROUTINE PermafrostHeatEquation
 !-----------------------------------------------------------------------------
 !> Solver for groundwater flow of the enhanced permafrost model
 !------------------------------------------------------------------------------
-SUBROUTINE PermafrostGroundWaterFlow( Model,Solver,dt,TransientSimulation )
+SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
   USE DefUtils
   USE PermaFrostMaterials
@@ -1317,10 +1317,10 @@ CONTAINS
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
         gFlux(i) = rhow0 * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
       END DO
-!      DO p=1,nd     
+      DO p=1,nd     
 !        FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
-!        FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
-!      END DO
+        FORCE(p) = FORCE(p) + Weight * SUM(dBasisdx(p,1:DIM)*gFlux(1:DIM))
+      END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
@@ -1430,7 +1430,7 @@ CONTAINS
     !------------------------------------------------------------------------------
   END SUBROUTINE LCondensate
   !------------------------------------------------------------------------------  
-END SUBROUTINE PermafrostGroundWaterFlow
+END SUBROUTINE PermafrostGroundwaterFlow
 
 !-----------------------------------------------------------------------------
 !> Solver for groundwater flow of the enhanced permafrost model
