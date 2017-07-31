@@ -843,6 +843,7 @@ CONTAINS
           JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
         END DO
       ELSE
+        STOP
         fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
         fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
         KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
@@ -885,7 +886,7 @@ CONTAINS
           ! groundwater advection term (C*grad(u),v)
           ! C_GW^TT dT/dx_i J_gw^D_i
           ! -----------------------------------
-          StiffPQ = StiffPQ - &
+          StiffPQ = StiffPQ + &
                CGWTT * SUM(JgwDAtIP(1:DIM)*dBasisdx(q,1:DIM)) * Basis(p)
 
           ! diffusion term ( grad(u),grad(v))
@@ -1194,7 +1195,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
         n  = GetElementNOFNodes()
         nd = GetElementNOFDOFs()
         nb = GetElementNOFBDOFs()
-        PRINT *, "N=",N,"ND=",ND, "NB=", NB
+        !PRINT *, "N=",N,"ND=",ND, "NB=", NB
         CALL LocalMatrixBCDarcy(  Element, n, nd+nb )
       END IF
     END DO
@@ -1333,14 +1334,6 @@ CONTAINS
       !END DO
       KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
       KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
-      !PRINT *,"KgwAtIP",KgwAtIP(1,1),'KgwpTAtIP',KgwpTAtIP(1,1),"KgwppAtIP",KgwppAtIP(1,1),&
-      !     "fTildewpATIP",fTildewpATIP,"XiAtIP",XiAtIP,"qexp",qexp,"rhow0",rhow0,"Gravity",Gravity(2
-      !PRINT *,"KgwAtIP",KgwAtIP,"Gravity",Gravity
-      
-      !PRINT *,"ftildewp(",B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0,")"
-
-      !PRINT *,"Kgw",Kgw
-      !PRINT *,"KgwppAtIP",KgwppAtIP
 
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
@@ -1490,16 +1483,15 @@ CONTAINS
         END DO
         ngFlux =  SUM(gFlux(1:DIM)*Normal(1:DIM))
         PressureAtIP = SUM(Pressure(1:n)*Basis(1:n))
+        !PRINT *,"PressureAtIP",PressureAtIP
         C = 1000.0_dp ! super high transfer coefficient to ensure pressure value in weak formulation
-        PRINT *,"nd=",nd,"n=",n
+        !PRINT *,"nd=",nd,"n=",n
         DO p=1,nd
           DO q=1,nd
             STIFF(p,q) = STIFF(p,q) + Weight * C * Basis(q) * Basis(p)
           END DO
-          !FORCE(1:n) =  FORCE(1:n) + Weight * C * PressureAtIP * Basis(1:n)
-          FORCE(1:nd) = FORCE(1:nd) + Weight * C * PressureAtIP * Basis(1:nd)
-          !FORCE(1:nd) = FORCE(1:nd) + Weight * ngflux * Basis(1:nd)
         END DO
+        FORCE(1:nd) = FORCE(1:nd) + Weight * C * PressureAtIP * Basis(1:nd)
       END IF
     END DO
     CALL DefaultUpdateEquations(STIFF,FORCE)
@@ -1828,7 +1820,7 @@ CONTAINS
         END DO
 
         DO i=1,dim
-          Coeff = -1.0_dp * Weight * (FluxpAtIP(i) + gFlux(i) + fluxTAtIP(i))
+          Coeff = 1.0_dp * Weight * (FluxpAtIP(i) + gFlux(i) + fluxTAtIP(i))
           FORCE(i,1:nd) = FORCE(i,1:nd) + Coeff * Basis(1:nd)
         END DO
       END DO
