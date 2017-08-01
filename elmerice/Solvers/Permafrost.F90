@@ -365,7 +365,8 @@ CONTAINS
     ! local
     REAL(KIND=dp) :: KGTT(3,3), factor,unittensor(3,3)
     unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
-    factor = (1.0_dp - meanfactor)*(1.0_dp/((1.0_dp - eta0)/ks0th + Xi*eta0/kw0th + (1.0_dp - Xi)*eta0/ki0th))
+    factor = (1.0_dp - meanfactor)*&
+         (1.0_dp/((1.0_dp - eta0)/ks0th + Xi*eta0/kw0th + (1.0_dp - Xi)*eta0/ki0th))
     factor = factor + meanfactor*((1.0_dp - eta0)*ks0th + Xi*eta0*kw0th + (1.0_dp - Xi)*eta0*ki0th)
     KGTT = unittensor*factor
   END FUNCTION GetKGTT
@@ -643,9 +644,13 @@ SUBROUTINE PermafrostHeatEquation( Model,Solver,dt,TransientSimulation )
       ! Nodal variable dependencies
       NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
       !PRINT *, NodalTemperature(1:N), TemperaturePerm(Element % NodeIndexes(1:N)), Element % NodeIndexes(1:N)
-      meanfactor = GetConstReal(Material,"Conductivity Aritmetic Mean Weight",Found)
+      meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",Found)
       IF (.NOT.Found) THEN
+        CALL INFO(SolverName,'"Conductivity Arithmetic Mean Weight" not found. Using defaul unity value.',Level=9)
         meanfactor = 1.0_dp
+      ELSE
+        WRITE (Message,'(A,F8.2)') '"Conductivity Arithmetic Mean Weight" found and set to ', meanfactor
+        CALL INFO(SolverName,Message,Level=9)
       END IF
       IF (ConstantPorosity) THEN
         NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
@@ -876,18 +881,18 @@ CONTAINS
 
 
       !PRINT *,"KGTTAtIP",KGTTAtIP
-      !PRINT *,"CGTTAtIP",CGTTAtIP
+      !PRINT *,"CGTTAtIP",CGTTAtIP, "CgwTT", CgwTT
 
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       DO p=1,nd
         DO q=1,nd
           StiffPQ = 0.0
-          ! groundwater advection term (C*grad(u),v)
+          ! groundwater advection term (C*gr
           ! C_GW^TT dT/dx_i J_gw^D_i
           ! -----------------------------------
           StiffPQ = StiffPQ + &
-               CGWTT * SUM(JgwDAtIP(1:DIM)*dBasisdx(q,1:DIM)) * Basis(p)
+                CgwTT * Basis(p) * SUM(JgwDAtIP(1:DIM)*dBasisdx(q,1:DIM)) 
 
           ! diffusion term ( grad(u),grad(v))
           ! div(JGH) = d(KGTT_i,j dT/dx_j)/dx_i
@@ -898,10 +903,9 @@ CONTAINS
             END DO
           END DO
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
+          
 
-          ! 
-
-          ! time derivative (c*du/dt,v): !! THIS IS OK AS IS !!!
+          ! time derivative (cgtt*dT/dt,v): !! THIS IS OK AS IS !!!
           ! ------------------------------
           MASS(p,q) = MASS(p,q) + Weight * (CGTTAtIP) * Basis(q) * Basis(p)
         END DO
@@ -909,7 +913,7 @@ CONTAINS
       ! body force
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
-
+    !PRINT *,"TransientSimulation",TransientSimulation
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
     CALL LCondensate( nd-nb, nb, STIFF, FORCE )
     CALL DefaultUpdateEquations(STIFF,FORCE)
