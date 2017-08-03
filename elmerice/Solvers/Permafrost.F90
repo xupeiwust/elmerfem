@@ -2081,8 +2081,6 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
 
-      NodalTemperature(1:N) = 0.0_dp
-      !PRINT *,Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
       CALL ReadVars(N)
       
       CALL LocalMatrix(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
