@@ -111,6 +111,7 @@ CONTAINS
     CALL INFO(FunctionName,Message,Level=9)
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
     CALL INFO(FunctionName,"Material Constants:", Level=9)
+    ! Read in material specific values
     DO I=1,NumberOfRecords
       WRITE(Message,'(I2,A,A,A)') I,": ", CurrentRockMaterial % VariableBaseName(I),":"
       WRITE(Message,'(A)') "Xi0,eta0,Ks0th,Xi0,ew,b,rhos0,cs0:"
@@ -177,10 +178,10 @@ CONTAINS
     TYPE(RockMaterial_t), TARGET :: LocalRockMaterial
     Integer :: NumberOfRecords
 
-    INTEGER :: i,j,k,l, t, active, DIM, ok,InitialNumberOfRecords
-    INTEGER,parameter :: io=20,NumberOfEntries=10
-    LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE., DataRead=.FALSE.
-    CHARACTER(LEN=MAX_NAME_LEN) ::  MaterialFileName, NewMaterialFileName, Comment
+    INTEGER :: i,j,k,l, n,t, active, DIM, ok,InitialNumberOfRecords, EntryNumber
+    INTEGER,parameter :: io=20
+    LOGICAL :: Found, fexist, FirstTime=.TRUE., AllocationsDone=.FALSE., DataRead=.FALSE.
+    CHARACTER(LEN=MAX_NAME_LEN) ::  MaterialFileName, NewMaterialFileName, str, Comment
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='ReadPermafrostRockMaterial'
 
     SAVE AllocationsDone,DataRead,InitialNumberOfRecords,LocalRockMaterial,MaterialFileName
@@ -199,12 +200,43 @@ CONTAINS
       !------------------------------------------------------------------------------
       ! Inquire and open file
       !------------------------------------------------------------------------------
+      ! give preference to a defined material database
       MaterialFileName = GetString( Params, 'Rock Material File', Found )
-      IF (.NOT.Found) &
-           CALL FATAL(FunctionName," 'Rock Material File' keyword not found - you have to specify an input file!")
-      !NumberOfRecords = GetInteger( Params, 'Records in File', Found )
-      !IF (.NOT.Found) &
-      !     CALL FATAL(FunctionName," 'Records in File' keyword not found - you have to specify an integer!")
+      IF (.NOT.Found) THEN
+        CALL INFO(FunctionName," 'Rock Material File' keyword not found - looking for default DB!")
+        fexist = .FALSE.
+#ifdef USE_ISO_C_BINDINGS
+        str = 'ELMER_LIB'
+#else
+        str = 'ELMER_LIB'//CHAR(0)
+#endif
+        CALL envir( str,MaterialFileName,k ) 
+        IF ( k > 0  ) THEN
+          MaterialFileName = MaterialFileName(1:k) // '/permafrostmaterialdb.dat'
+          INQUIRE(FILE=TRIM(MaterialFileName), EXIST=fexist)
+        END IF
+        IF (.NOT. fexist) THEN
+#ifdef USE_ISO_C_BINDINGS
+          str = 'ELMER_HOME'
+#else
+          str = 'ELMER_HOME'//CHAR(0)
+#endif
+          CALL envir( str,MaterialFileName,k ) 
+          IF ( k > 0 ) THEN
+            MaterialFileName = MaterialFileName(1:k) // '/share/elmersolver/lib/' // 'permafrostmaterialdb.dat'
+            INQUIRE(FILE=TRIM(MaterialFileName), EXIST=fexist)
+          END IF
+          IF ((.NOT. fexist) .AND. k>0) THEN
+            MaterialFileName = MaterialFileName(1:k) // '/permafrostmaterialdb.dat'
+            INQUIRE(FILE=TRIM(MaterialFileName), EXIST=fexist)
+          END IF
+        END IF
+        IF (.NOT. fexist) THEN
+          CALL Fatal('CheckKeyWord', 'permafrostmaterialdb.dat not found')
+        END IF
+      END IF
+
+      ! if we are still here, we open the file (what ever it may be)
       OPEN(unit = io, file = TRIM(MaterialFileName), status = 'old',iostat = ok)
       IF (ok /= 0) THEN
         WRITE(Message,'(A,A)') 'Unable to open file ',TRIM(MaterialFileName)
@@ -286,7 +318,12 @@ CONTAINS
       ! for each material
       !       ks0th(:),ew(:),b(:),rhos0(:),cs0(:)
       DO I=1,NumberOfRecords
-        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % VariableBaseName(I)
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % VariableBaseName(I), EntryNumber
+        IF (EntryNumber /= I) THEN
+          WRITE(Message,'(I3,A,I3)') "Entry number", EntryNumber, "does not match expected number ",I
+          CLOSE(io)
+          CALL FATAL(FunctionName,Message)
+        END IF
         WRITE(Message,'(A,I2,A,A)') "Input for Variable No.",I,": ", LocalRockMaterial % VariableBaseName(I)
         CALL INFO(FunctionName,Message,Level=9)
         READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Xi0(I), Comment
@@ -544,7 +581,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   TYPE(Variable_t), POINTER :: TemperatureVar,PorosityVar,SalinityVar!,GWfluxVar
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, Active,iter, maxiter, istat
-  INTEGER,PARAMETER :: io=20,NumberOfEntries=10
+  INTEGER,PARAMETER :: io=20
   INTEGER,POINTER :: PressurePerm(:), TemperaturePerm(:),PorosityPerm(:),SalinityPerm(:)!,GWfluxPerm(:)
   REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Pressure(:), Temperature(:), Porosity(:), Salinity(:)!,GWflux(:)
@@ -1503,7 +1540,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   TYPE(Variable_t), POINTER :: PressureVar,PorosityVar,SalinityVar,GWfluxVar1,GWfluxVar2,GWfluxVar3
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, active,iter, maxiter, istat
-  INTEGER,PARAMETER :: io=20,NumberOfEntries=10
+  INTEGER,PARAMETER :: io=20
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),&
        PorosityPerm(:),SalinityPerm(:),GWfluxPerm1(:),&
        GWfluxPerm2(:),GWfluxPerm3(:)
@@ -2060,7 +2097,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   TYPE(Variable_t), POINTER :: PressureVar,PorosityVar,SalinityVar,TemperatureVar
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, active,iter, maxiter, istat
-  INTEGER,PARAMETER :: io=20,NumberOfEntries=10
+  INTEGER,PARAMETER :: io=20
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),&
        PorosityPerm(:),SalinityPerm(:),WaterContentPerm(:)
   REAL(KIND=dp) :: Norm, meanfactor
@@ -2368,7 +2405,7 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
   TYPE(Variable_t), POINTER :: PressureVar,PorosityVar,TemperatureVar,GWfluxVar1,GWfluxVar2,GWfluxVar3
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRecords, active,iter, maxiter, istat
-  INTEGER,PARAMETER :: io=20,NumberOfEntries=10
+  INTEGER,PARAMETER :: io=20
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),&
        PorosityPerm(:),SalinityPerm(:),GWfluxPerm1(:),&
        GWfluxPerm2(:),GWfluxPerm3(:)
