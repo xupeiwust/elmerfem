@@ -188,6 +188,39 @@ CONTAINS
 
     IF (DataRead) THEN
       NewMaterialFileName = GetString( Params, 'Rock Material File', Found )
+      IF (.NOT.Found) THEN
+        CALL INFO(FunctionName," 'Rock Material File' keyword not found - looking for default DB!")
+        fexist = .FALSE.
+#ifdef USE_ISO_C_BINDINGS
+        str = 'ELMER_LIB'
+#else
+        str = 'ELMER_LIB'//CHAR(0)
+#endif
+        CALL envir( str,NewMaterialFileName,k ) 
+        IF ( k > 0  ) THEN
+          NewMaterialFileName = NewMaterialFileName(1:k) // '/permafrostmaterialdb.dat'
+          INQUIRE(FILE=TRIM(NewMaterialFileName), EXIST=fexist)
+        END IF
+        IF (.NOT. fexist) THEN
+#ifdef USE_ISO_C_BINDINGS
+          str = 'ELMER_HOME'
+#else
+          str = 'ELMER_HOME'//CHAR(0)
+#endif
+          CALL envir( str,NewMaterialFileName,k ) 
+          IF ( k > 0 ) THEN
+            NewMaterialFileName = NewMaterialFileName(1:k) // '/share/elmersolver/lib/' // 'permafrostmaterialdb.dat'
+            INQUIRE(FILE=TRIM(NewMaterialFileName), EXIST=fexist)
+          END IF
+          IF ((.NOT. fexist) .AND. k>0) THEN
+            NewMaterialFileName = NewMaterialFileName(1:k) // '/permafrostmaterialdb.dat'
+            INQUIRE(FILE=TRIM(NewMaterialFileName), EXIST=fexist)
+          END IF
+        END IF
+        IF (.NOT. fexist) THEN
+          CALL Fatal('CheckKeyWord', 'permafrostmaterialdb.dat not found')
+        END IF
+      END IF
       IF (NewMaterialFileName /= MaterialFileName) THEN
         WRITE (Message, '(A,A,A,A)') NewMaterialFileName,' does not match existing datafile ', MaterialFileName,'. Exiting!'
         CALL FATAL(FunctionName,Message)
@@ -320,9 +353,15 @@ CONTAINS
       DO I=1,NumberOfRecords
         READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % VariableBaseName(I), EntryNumber
         IF (EntryNumber /= I) THEN
-          WRITE(Message,'(I3,A,I3)') "Entry number", EntryNumber, "does not match expected number ",I
+          WRITE(Message,'(A,I3,A,I3)') &
+               "Entry number", EntryNumber, "does not match expected number ",I
           CLOSE(io)
           CALL FATAL(FunctionName,Message)
+        ELSE
+          WRITE(Message,'(A,A,A,I3,A)')&
+               "Material ", TRIM(LocalRockMaterial % VariableBaseName(I)),&
+               " entry number ", EntryNumber, " will be read in"
+           CALL INFO(FunctionName,Message,Level=3)
         END IF
         WRITE(Message,'(A,I2,A,A)') "Input for Variable No.",I,": ", LocalRockMaterial % VariableBaseName(I)
         CALL INFO(FunctionName,Message,Level=9)
