@@ -1074,7 +1074,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   ScaleSystem = ListGetLogical( Material , 'Scale System', Found )
   IF (.NOT.Found) ScaleSystem=.FALSE.
   IF (ScaleSystem) THEN
-    CALL INFO('PermafrostConductivity','Applying Mpa-m-a scaling',Level=9)
+    CALL INFO('PermafrostConductivity','Applying MPa-m-a scaling',Level=9)
     Cond = Cond * factor
   END IF
   !write (*,*) Depth, Kr, Kw, phir, phiw, pordepth, Kr**phir * Ki**(pordepth-phiw) * Kw**phiw
@@ -1111,7 +1111,7 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   !REAL(KIND=dp) :: pordepth            ! Porosity as a function of depth
   ! r = rock, w = water, i = ice
   !REAL(KIND=dp) :: phir, phiw          ! Volume fractions
-  REAL(KIND=dp) :: rhor, rhow, rhoi    ! Densities 
+  REAL(KIND=dp) :: rhor, rhow, rhoi     ! Densities 
   !REAL(KIND=dp) :: Cr, Cw, Ci          ! Heat capacities
   !REAL(KIND=dp) :: L                   ! Latent heat
   !REAL(KIND=dp) :: Tpmp                ! Melting point temperature of ice

@@ -43,9 +43,9 @@ MODULE PermafrostMaterials
   TYPE RockMaterial_t
      INTEGER :: NumberOfRecords
      REAL(KIND=dp), ALLOCATABLE :: ks0th(:),ew(:),bs(:),rhos0(:),&
-          cs0(:),Xi0(:),eta0(:),hs0(:),Kgwh0(:,:,:),qexp(:)
+          cs0(:),Xi0(:),eta0(:),hs0(:),Kgwh0(:,:,:),qexp(:),alphaL(:),alphaT(:)
      REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         hw0,hi0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1
+         hw0,hi0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1
      CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   END TYPE RockMaterial_t
 
@@ -53,14 +53,14 @@ CONTAINS
     
   FUNCTION ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
        NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-       l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity) RESULT(Constantsread)
+       l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity) RESULT(Constantsread)
     !------------------------------------------------------------------------------
     TYPE(Model_t) :: Model
     CHARACTER(LEN=MAX_NAME_LEN) :: FunctionName
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     INTEGER :: DIM, NumberOfRecords
     REAL(KIND=dp) :: GasConstant, Mw, Mc,DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity(3)
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity(3)
     LOGICAL :: Constantsread
     !------------------------------------------------------------------------------
     REAL(KIND=dp), POINTER :: gWork(:,:)
@@ -92,6 +92,7 @@ CONTAINS
     ki0th= CurrentRockMaterial % ki0th
     kc0th= CurrentRockMaterial % kc0th
     mu0 = CurrentRockMaterial % mu0
+    Dm0 = CurrentRockMaterial % Dm0
     dw1 = CurrentRockMaterial % dw1
     dw2 = CurrentRockMaterial % dw2
     dc0 = CurrentRockMaterial % dc0  
@@ -104,9 +105,9 @@ CONTAINS
     CALL INFO(FunctionName,"General Constants:", Level=9)
     WRITE(Message,'(A)') "GasConstant,Mw,Mc,DeltaT,T0,p0,rhow0,rhoi0,rhoc0,hw0,hi0,cw0,ci0"
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,'(A)') "eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1:"
+    WRITE(Message,'(A)') "eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1:"
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,'(23E12.5)') CurrentRockMaterial % GasConstant, &
+    WRITE(Message,'(24E12.5)') CurrentRockMaterial % GasConstant, &
          CurrentRockMaterial % Mw, CurrentRockMaterial % Mc, &
          CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0, CurrentRockMaterial % p0,&
          CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0, CurrentRockMaterial % rhoc0,&
@@ -114,8 +115,8 @@ CONTAINS
          CurrentRockMaterial % cw0,CurrentRockMaterial % ci0, CurrentRockMaterial % cc0,&
          CurrentRockMaterial % eps, CurrentRockMaterial % kw0th,&
          CurrentRockMaterial % ki0th, CurrentRockMaterial % kc0th, CurrentRockMaterial % mu0,&
-         CurrentRockMaterial % dw1, CurrentRockMaterial % dw2, CurrentRockMaterial % dc0, &
-         CurrentRockMaterial % dc1
+         CurrentRockMaterial % Dm0, CurrentRockMaterial % dw1, CurrentRockMaterial % dw2, &
+         CurrentRockMaterial % dc0, CurrentRockMaterial % dc1
     CALL INFO(FunctionName,Message,Level=9)
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
     CALL INFO(FunctionName,"Material Constants:", Level=9)
@@ -135,7 +136,7 @@ CONTAINS
   END FUNCTION ReadPermafrostRockMaterialConstants
   
   SUBROUTINE ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-       ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,GasConstant, Mw,Mc,&
+       ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,GasConstant, Mw,Mc,&
        DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
     IMPLICIT NONE
     TYPE(Element_t) :: Element
@@ -144,7 +145,7 @@ CONTAINS
          l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity(3) ! constants that need to have been set
     INTEGER :: RockMaterialID
     REAL(KIND=dp), INTENT(OUT) :: meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(1:3,1:3),qexp
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(1:3,1:3),qexp,alphaL,alphaT
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     LOGICAL :: Found
     TYPE(ValueList_t), POINTER :: Material
@@ -173,6 +174,8 @@ CONTAINS
     eta0 = CurrentRockMaterial % eta0(RockMaterialID)
     Kgwh0(1:3,1:3) = CurrentRockMaterial % Kgwh0(1:3,1:3,RockMaterialID)
     qexp = CurrentRockMaterial % qexp(RockMaterialID)
+    alphaL = CurrentRockMaterial % alphaL(RockMaterialID)
+    alphaT = CurrentRockMaterial % alphaT(RockMaterialID)
     ! derive element rock material specific parameters
     deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     D1InElement = D1(deltaInElement,ew)
@@ -308,6 +311,8 @@ CONTAINS
              LocalRockMaterial % hs0,&
              LocalRockMaterial % Kgwh0, &
              LocalRockMaterial % qexp, &
+             LocalRockMaterial % alphaL, &
+             LocalRockMaterial % alphaT, &
              LocalRockMaterial % VariableBaseName)
       END IF
       ALLOCATE(&
@@ -321,6 +326,8 @@ CONTAINS
            LocalRockMaterial % hs0(NumberOfRecords),&
            LocalRockMaterial % Kgwh0(3,3,NumberOfRecords),&
            LocalRockMaterial % qexp(NumberOfRecords), &
+           LocalRockMaterial % alphaL(NumberOfRecords), &
+           LocalRockMaterial % alphaT(NumberOfRecords), &
            LocalRockMaterial % VariableBaseName(NumberOfRecords),&
            STAT=OK)
       AllocationsDone = .TRUE.
@@ -334,7 +341,7 @@ CONTAINS
       ! Read in information from material file
       ! General constants
       !  GasConstant, Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,rhos0
-      !     hw0,hi0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1
+      !     hw0,hi0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1
       !------------------------------------------------------------------------------
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % GasConstant, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Mw, Comment
@@ -355,6 +362,7 @@ CONTAINS
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % ki0th, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % kc0th, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % mu0, Comment
+      READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Dm0, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % dw1, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % dw2, Comment
       READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % dc0, Comment
@@ -390,7 +398,9 @@ CONTAINS
             READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % Kgwh0(J,K,I), Comment
           END DO
         END DO
-        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % qexp(I), Comment      
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % qexp(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % alphaL(I), Comment
+        READ (io, *, END=10, IOSTAT=OK, ERR=30) LocalRockMaterial % alphaT(I), Comment
       END DO
       WRITE(Message,'(A,I2,A,A)') "Read ",NumberOfRecords," rock material records from file ", TRIM(MaterialFileName)
       CALL INFO(FunctionName,Message,Level=1)
@@ -606,6 +616,40 @@ CONTAINS
     factor = (1.0_dp + rhow0*fTildewp)
     Kgwpp = Kgw*factor
   END FUNCTION GetKgwpp
+  
+  RECURSIVE FUNCTION GetKc(alphaL,alphaT,Dm0,Xi,absJgwD,eL,Porosity)RESULT(Kc)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: alphaL,alphaT,Dm0,Xi,absJgwD,eL(3),Porosity
+    REAL(KIND=dp) :: Kc(3,3), unittensor(3,3), aux
+    INTEGER :: I,J
+    unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
+    IF (Porosity .LE. 0.0_dp) &
+         CALL FATAL("GetKc","Negative/Zero Porosity detected")
+    IF (Xi .LE. 0.0_dp) &
+         CALL FATAL("GetKc","Negative/Zero water content detected")
+    aux = absJgwD/(Porosity * Xi)
+    Kc = 0.0_dp
+    DO I=1,3
+      DO J=1,3
+        Kc(I,J) = Kc(I,J) + Dm0 * unittensor(I,J) &
+             + aux*((alphaL - alphaT)*eL(I)*eL(J)  + alphaT * unittensor(I,J))
+      END DO
+    END DO       
+  END FUNCTION GetKc
+  
+  RECURSIVE FUNCTION GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,Kc,Temperature,Salinity,Pressure)RESULT(KcXcXc)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: T0,rhoc0,dw1,dw2,dc0,dc1,Kc(3,3),Temperature,Salinity,Pressure
+    REAL(KIND=dp) :: KcXcXc(3,3), aux, relSalinity
+    
+    aux = rhoc0 * Temperature/(T0 * rhoc0)
+    KcXcXc(1:3,1:3) = aux * Kc(1:3,1:3)
+    IF (Salinity .GE. 1.0_dp) &
+         CALL FATAL("GetKcXcXc","(Larger than) unity Salinity detected")
+    relSalinity = Salinity/(1.0_dp - Salinity)
+    aux = 1.0_dp + ((dw1 + dc1)/dc0) * relSalinity + 2.0_dp * (dw2/dc0) * relSalinity**2.0_dp
+    KcXcXc(1:3,1:3) = aux * Kc(1:3,1:3)    
+  END FUNCTION GetKcXcXc
 END MODULE PermafrostMaterials
 
 
@@ -828,9 +872,9 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: fTildewTAtIP, fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity(3)    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity(3)    ! constants read only once
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,StiffPQ
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
          
@@ -853,7 +897,7 @@ CONTAINS
       !     l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
       ConstantsRead = ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -869,7 +913,7 @@ CONTAINS
 
     ! read variable material parameters from CurrentRockMaterial
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
          GasConstant, Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)    
     
     ! Numerical integration:
@@ -974,9 +1018,9 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc,DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          ngFlux
     REAL(KIND=DP) :: gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),pFluxAtIP(3),gFlux(3),Gravity(3),Normal(3)
@@ -985,7 +1029,7 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='PermafrostGroundwaterFlow (LocalMatrixBCDarcy)'
     
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT, Gravity
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT, Gravity
     !------------------------------------------------------------------------------
     BC => GetBC()
     IF (.NOT.ASSOCIATED(BC) ) RETURN
@@ -1016,11 +1060,11 @@ CONTAINS
     IF(.NOT.ConstantsRead) THEN
       ConstantsRead = ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
     END IF
     ! read variable material parameters from CurrentRockMaterial
     CALL ReadPermafrostRockMaterialVariables(ParentElement,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
          GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
     
     ! Numerical integration:
@@ -1244,21 +1288,21 @@ CONTAINS
     TYPE(ValueList_t), POINTER :: Material
     REAL(KIND=dp), POINTER :: Conductivity(:,:,:)=>NULL()
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT, Gravity(3)    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT, Gravity(3)    ! constants read only once
     REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),MinKgw,gradTAtIP(3),gradPAtIP(3),&
          fluxTAtIP(3),fluxpAtIP(3),gFlux(3) ! needed in equation
     REAL(KIND=dp) :: XiAtIP,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: fTildewTAtIP, fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: meanfactor,ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: meanfactor,ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp), ALLOCATABLE :: NodalTemperature(:), NodalSalinity(:), NodalPressure(:),NodalPorosity(:)
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='PermafrostGroundwaterFlux (BulkAssembly)'
     
     SAVE Conductivity, Nodes, ConstantsRead,DIM,&
          GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity,&
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity,&
          NumberOfRecords,CurrentRockMaterial,FirstTime
 
     n = 2 * MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
@@ -1287,7 +1331,7 @@ CONTAINS
         !     l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
         ConstantsRead = ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
       END IF
 
       CALL GetElementNodes( Nodes )
@@ -1314,7 +1358,7 @@ CONTAINS
 
       ! read variable material parameters from CurrentRockMaterial
       CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-           ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+           ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
            GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
 
       ! Integrate local stresses:
@@ -1870,9 +1914,9 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          GWfluxAtIP(3),StiffPQ, meanfactor
@@ -1887,14 +1931,14 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
 !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity
 !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       dim = CoordinateSystemDimension()
       ConstantsRead = &
            ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
       
     END IF 
 
@@ -1910,7 +1954,7 @@ CONTAINS
 
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
          GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
     
     ! Numerical integration:
@@ -2220,9 +2264,9 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
     REAL(KIND=dp) :: Basis(n),dBasisdx(n,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          GWfluxAtIP(3),StiffPQ, meanfactor
@@ -2237,14 +2281,14 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
 !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity
 !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       dim = CoordinateSystemDimension()
       ConstantsRead = &
            ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
     END IF 
 
     CALL GetElementNodes( Nodes )
@@ -2255,7 +2299,7 @@ CONTAINS
 
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
          GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
     
     ! Numerical integration:
@@ -2765,13 +2809,14 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT    ! constants read only once
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP, TemperatureTimeDerAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          GWfluxAtIP(3),StiffPQ, meanfactor,AbsJgwDAtIP, gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),&
-         pFluxAtIP(3),gFlux(3),Gravity(3),el(3),MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
+         pFluxAtIP(3),gFlux(3),Gravity(3),el(3),MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n),&
+         KcAtIP(3,3), KcXcXcAtIP(3,3)
     REAL(KIND=dp), POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
     LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
@@ -2781,14 +2826,14 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
 !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity
 !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       dim = CoordinateSystemDimension()
       ConstantsRead = &
            ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            NumberOfRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
+           l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,CgwTT,Gravity)
     END IF 
 
     CALL GetElementNodes( Nodes )
@@ -2803,7 +2848,7 @@ CONTAINS
 
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,deltaInElement,D1InElement,D2InElement,&
+         ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,deltaInElement,D1InElement,D2InElement,&
          GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,CgwTT,Gravity)
     
     ! Numerical integration:
@@ -2829,8 +2874,10 @@ CONTAINS
       ! functions at IP
       deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
            TemperatureAtIP,PressureAtIP,SalinityAtIP)
+      B1AtIP = B1(deltaInElement,ew,Mw,GasConstant,TemperatureAtIP)
+      B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
       CGTTAtIP = CGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,cw0,ci0,cs0,l0,eta0)
-
+      
       ! compute advection term
       IF (.NOT.ComputeGWFlux .AND. .NOT.NoGWFlux) THEN
         DO I=1,3
@@ -2862,9 +2909,13 @@ CONTAINS
       END IF
 
       AbsJgwDAtIP = SQRT(SUM(JgwDAtIP(1:DIM)*JgwDAtIP(1:DIM)))
-      el = 0.0_dp
+      eL = 0.0_dp
       IF (AbsJgwDAtIP > 0.0_dp) &
-        el(1:DIM) = JgwDAtIP(1:DIM)/AbsJgwDAtIP
+           eL(1:DIM) = JgwDAtIP(1:DIM)/AbsJgwDAtIP
+      
+      XiAtIP = Xi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0)
+      KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
+      KcXcXcAtIP = GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
       
       Weight = IP % s(t) * DetJ
 
