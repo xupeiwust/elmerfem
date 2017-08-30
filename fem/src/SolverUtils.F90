@@ -14133,11 +14133,13 @@ CONTAINS
    !---------------------------------------------------------
    SUBROUTINE GenerateConstraintMatrix( Model, Solver )
 
+     IMPLICIT NONE
+     
      TYPE(Model_t) :: Model
      TYPE(Solver_t) :: Solver
 
      INTEGER, POINTER :: Perm(:)
-     INTEGER :: i,j,j2,k,k2,l,dofs,maxperm,permsize,bc_ind,constraint_ind,row,col,col2,mcount,bcount,kk
+     INTEGER :: i,j,j2,k,k2,k20,l,dofs,maxperm,permsize,bc_ind,constraint_ind,row,col,col2,mcount,bcount,kk
      TYPE(Matrix_t), POINTER :: Atmp,Btmp, Ctmp
      LOGICAL :: AllocationsDone, CreateSelf, ComplexMatrix, TransposePresent, Found, &
          SetDof, SomeSet, SomeSkip, SumProjectors, NewRow, SumThis
@@ -14146,17 +14148,20 @@ CONTAINS
      TYPE(ValueList_t), POINTER :: BC
      TYPE(MortarBC_t), POINTER :: MortarBC
      REAL(KIND=dp) :: wsum, Scale
-     INTEGER :: rowoffset, arows, sumrow, EliminatedRows, NeglectedRows, sumrow0, k20
+     INTEGER :: rowoffset, arows, sumrow, sumrow0, EliminatedRows, NeglectedRows
      CHARACTER(LEN=MAX_NAME_LEN) :: Str
-     LOGICAL :: ThisIsMortar, Reorder
+     LOGICAL :: ThisIsMortar, Reorder, ReorderRow
      LOGICAL :: AnyPriority
      INTEGER :: Priority, PrevPriority
      INTEGER, ALLOCATABLE :: BCOrdering(:), BCPriority(:)
      LOGICAL :: NeedToGenerate 
 
-     LOGICAL :: HaveMortarDiag, LumpedDiag
+     LOGICAL :: HaveMortarDiag, LumpedDiag, LumpedAbsDiag
      REAL(KIND=dp) :: MortarDiag
 
+
+     
+     SAVE BCPriority, BCOrdering, SumPerm, SumCount
 
      
      ! Should we genarete the matrix
@@ -14260,7 +14265,7 @@ CONTAINS
        ALLOCATE( SumPerm( dofs * permsize ) )
        SumPerm = 0
        ALLOCATE( SumCount( arows ) )
-       SumCount = 0
+       SumCount = 0       
      END IF
 
      
@@ -14297,15 +14302,18 @@ CONTAINS
 
      MortarDiag = ListGetCReal( Solver % Values,'Mortar Diag',HaveMortarDiag )
      LumpedDiag = ListGetLogical( Solver % Values,'Lumped Diag',Found )
+     LumpedAbsDiag = ListGetLogical( Solver % Values,'Lumped Abs Diag',Found )
      
 
-100  sumrow = 0
+100  CONTINUE
+
+     sumrow = 0
      k2 = 0
      rowoffset = 0
      Priority = -1
      PrevPriority = -1
      sumrow0 = 0
-     k20 = 0
+     k20 = 0 
      
      TransposePresent = .FALSE.
      Ctmp => Solver % ConstraintMatrix
@@ -14375,7 +14383,7 @@ CONTAINS
              END IF
            END IF
          END DO
-         
+
          ! By default all components are applied mortar BC and some are turned off.
          ! If the user does the opposite then the default for other components is True. 
          IF( SomeSet .AND. .NOT. ALL(SetDefined) ) THEN
@@ -14390,7 +14398,7 @@ CONTAINS
            END IF
          END IF
        END IF
-
+       
        TransposePresent = TransposePresent .OR. ASSOCIATED(Atmp % Child)
        IF( TransposePresent ) THEN
          CALL Info('GenerateConstraintMatrix','Transpose matrix is present')
@@ -14407,6 +14415,9 @@ CONTAINS
        ! Assume the mortar matrices refer to unordered mesh dofs
        ! and existing ConstraintMatrix to already ordered entities. 
        Reorder = ThisIsMortar
+       ReorderRow = Reorder
+
+       ReorderRow = .FALSE.
        
        
        IF( Dofs == 1 ) THEN         
@@ -14427,7 +14438,7 @@ CONTAINS
                  IF( .NOT. MortarBC % Active(i) ) CYCLE
                END IF
              END IF
-             
+
              ! Use InvPerm if it is present
              IF( ASSOCIATED( Atmp % InvPerm ) ) THEN
                k = Atmp % InvPerm(i)
@@ -14437,7 +14448,7 @@ CONTAINS
                k = i
              END IF
              
-             IF( Reorder ) THEN
+             IF( ReorderRow ) THEN
                IF( Perm(k) == 0 ) CYCLE
              END IF
              
@@ -14459,7 +14470,6 @@ CONTAINS
          IF( ASSOCIATED( MortarBC % Diag ) .OR. HaveMortarDiag ) THEN
            IF( .NOT. ASSOCIATED( MortarBC % Perm ) ) THEN                   
              k = MAXVAL( Atmp % Cols )
-             PRINT *,'creating mortar perm of size: ',k
              ALLOCATE( MortarBC % Perm(k) )
              MortarBC % Perm = 0
              DO k=1,SIZE(Atmp % InvPerm )
@@ -14472,6 +14482,7 @@ CONTAINS
          
          DO i=1,Atmp % NumberOfRows           
 
+           
            IF( Atmp % Rows(i) >= Atmp % Rows(i+1) ) CYCLE ! skip empty rows
 
            ! If the mortar boundary is not active at this round don't apply it
@@ -14488,7 +14499,7 @@ CONTAINS
              k = i
            END IF
 
-           IF( Reorder ) THEN
+           IF( ReorderRow ) THEN
              kk = Perm(k) 
              IF( kk == 0 ) CYCLE
            ELSE
@@ -14541,8 +14552,11 @@ CONTAINS
                    ! Look if the component refers to the slave
                    IF( MortarBC % Perm( col ) > 0 ) THEN
                      Scale = MortarBC % SlaveScale 
-                     wsum = wsum + Atmp % Values(k) 
-                   ELSE
+                     IF( LumpedAbsDiag ) THEN
+                       wsum = wsum + ABS( Atmp % Values(k) ) 
+                     ELSE
+                       wsum = wsum + Atmp % Values(k)                       
+                     END IF
                      Scale = MortarBC % MasterScale
                    END IF
                  ELSE
@@ -14582,7 +14596,11 @@ CONTAINS
            IF( CreateSelf ) THEN
              k2 = k2 + 1
              IF( AllocationsDone ) THEN
-               Btmp % Cols(k2) = Perm( Atmp % InvPerm(i) )
+               IF( ReorderRow ) THEN
+                 Btmp % Cols(k2) = Perm( Atmp % InvPerm(i) )
+               ELSE
+                 Btmp % Cols(k2) = Atmp % InvPerm(i)
+               END IF
                Btmp % Values(k2) = MortarBC % SlaveScale * wsum
              ELSE               
                IF( SumThis) SumCount(row) = SumCount(row) + 1
@@ -14599,7 +14617,7 @@ CONTAINS
                  LumpedDiag = MortarBC % LumpedDiag
                END IF
               
-               IF( LumpedDiag ) THEN
+               IF( LumpedDiag .OR. LumpedAbsDiag ) THEN
                  k2 = k2 + 1
                  IF( AllocationsDone ) THEN
                    Btmp % Cols(k2) = row + arows 
@@ -14609,7 +14627,9 @@ CONTAINS
                    ! For Galerkin projector the is weight/coeff 
                    Btmp % Values(k2) = Btmp % Values(k2) - 0.5_dp * MortarDiag * wsum
                  ELSE
-                   IF( SumThis) SumCount(row) = SumCount(row) + 1
+                   IF( SumThis) THEN
+                     SumCount(row) = SumCount(row) + 1
+                   END IF
                  END IF
                ELSE
                  IF( .NOT. ASSOCIATED( MortarBC % Perm ) ) THEN                   
@@ -14647,7 +14667,11 @@ CONTAINS
                      Btmp % Cols(k2) = l + arows + rowoffset
                      Btmp % Values(k2) = Btmp % Values(k2) - 0.5_dp * Atmp % Values(k) * MortarDiag
                    ELSE
-                     IF( SumThis) SumCount(row) = SumCount(row) + 1
+
+                     IF( SumThis ) THEN
+                       SumCount(row) = SumCount(row) + 1
+                     END IF
+
                    END IF
                  END DO
                END IF
@@ -14703,7 +14727,7 @@ CONTAINS
                k = i
              END IF
 
-             IF( Reorder ) THEN
+             IF( ReorderRow ) THEN
                kk = Perm(k)
                IF( kk == 0 ) CYCLE
              ELSE
@@ -14711,9 +14735,6 @@ CONTAINS
              END IF
 
              IF( SumThis ) THEN
-               IF( Dofs*(k-1)+j > SIZE(SumPerm) ) THEN
-                 PRINT *,'bad1'
-               END IF
                NewRow = ( SumPerm(Dofs*(k-1)+j) == 0 )
                IF( NewRow ) THEN
                  sumrow = sumrow + 1                
@@ -14848,7 +14869,7 @@ CONTAINS
                    LumpedDiag = MortarBC % LumpedDiag
                  END IF
 
-                 IF( LumpedDiag ) THEN
+                 IF( LumpedDiag .OR. LumpedAbsDiag ) THEN
                    k2 = k2 + 1
                    IF( AllocationsDone ) THEN
                      Btmp % Cols(k2) = row + arows
@@ -14922,7 +14943,7 @@ CONTAINS
        CALL Info('GenerateConstraintMatrix','Allocating '//&
            TRIM(I2S(sumrow))//' rows and '//TRIM(I2S(k2))//' nonzeros',&
            Level=6)
-
+       
        Btmp => AllocateMatrix()
        ALLOCATE( Btmp % RHS(sumrow), Btmp % Rows(sumrow+1), &
            Btmp % Cols(k2), Btmp % Values(k2), &
@@ -14940,20 +14961,21 @@ CONTAINS
          ALLOCATE(Btmp % TValues(k2))
          Btmp % Tvalues = 0._dp
        END IF
-
+       
        IF( SumProjectors ) THEN
          Btmp % Rows(sumrow0+1) = k20+1 
          DO i=sumrow0+2,sumrow+1
            Btmp % Rows(i) = Btmp % Rows(i-1) + SumCount(i-1)
          END DO
-         SumPerm = 0
-         DEALLOCATE( SumCount ) 
        END IF
-
+       
        AllocationsDone = .TRUE.
 
+       CALL Info('GenerateConstraintMatrix','Now redoing everything, this time for real',Level=10)
+       
        GOTO 100
      END IF
+
      
      CALL Info('GenerateConstraintMatrix','Used '//&
          TRIM(I2S(sumrow))//' rows and '//TRIM(I2S(k2))//' nonzeros',&
@@ -14973,6 +14995,20 @@ CONTAINS
 
      Solver % Matrix % ConstraintMatrix => Btmp     
      Solver % MortarBCsChanged = .FALSE.
+    
+     DEALLOCATE( ActiveComponents, SetDefined )
+     
+     IF( AnyPriority ) THEN
+       DEALLOCATE( BCPriority, BCOrdering )
+     END IF
+          
+     IF( SumProjectors ) THEN
+       DEALLOCATE( SumPerm )
+     END IF
+
+     !IF( SumProjectors ) THEN
+     !  DEALLOCATE( SumCount )
+     !END IF
      
      CALL Info('GenerateConstraintMatrix','Finished creating constraint matrix',Level=12)
 

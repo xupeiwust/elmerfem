@@ -4866,7 +4866,7 @@ END SUBROUTINE GetMaxDefs
     LOGICAL ::  StrongNodes, StrongLevelEdges, StrongExtrudedEdges, StrongSkewEdges
     LOGICAL :: Found, Parallel, SelfProject, EliminateUnneeded, SomethingUndone, &
         EdgeBasis, PiolaVersion, GenericIntegrator, Rotational, Cylindrical, IntGalerkin, &
-        CreateDual, HaveMaxDistance
+        CreateDual, HaveMaxDistance, Btest
     REAL(KIND=dp) :: XmaxAll, XminAll, YminAll, YmaxAll, Xrange, Yrange, &
         RelTolX, RelTolY, XTol, YTol, RadTol, MaxSkew1, MaxSkew2, SkewTol, &
         ArcCoeff, EdgeCoeff, NodeCoeff, MaxDistance
@@ -4888,6 +4888,9 @@ END SUBROUTINE GetMaxDefs
       RETURN
     END IF
 
+    Btest = ListGetLogical( CurrentModel % Simulation,&
+        'Mortar B test',Found )
+    
     EdgeCoeff = ListGetConstReal( BC,'Projector Edge Multiplier',Found )
     IF( .NOT. Found ) EdgeCoeff = ListGetConstReal( CurrentModel % Simulation,&
         'Projector Edge Multiplier',Found )
@@ -5076,6 +5079,8 @@ END SUBROUTINE GetMaxDefs
     InvPerm1 => BMesh1 % InvPerm
     InvPerm2 => BMesh2 % InvPerm
 
+    PRINT *,'InvPerm:',InvPerm1
+    
     ! Create a list matrix that allows for unspecified entries in the matrix 
     ! structure to be introduced.
     Projector => AllocateMatrix()
@@ -5137,12 +5142,14 @@ END SUBROUTINE GetMaxDefs
         'Use Piola Transform', Found)
     SecondOrder = ListGetLogical( CurrentModel % Solver % Values, &
         'Quadratic Approximation', Found)
+    
 
+    
     ! At the 1st stage determine the maximum size of the projector
     ! If the strong projector is used then the numbering is done as we go
     ! this way we can eliminate unneeded rows. 
     ! For the weak projector there is no need to eliminate rows. 
-    IF( DoNodes ) THEN      
+    IF( DoNodes .OR. Btest ) THEN      
       ALLOCATE( NodePerm( Mesh % NumberOfNodes ) )
       NodePerm = 0
 
@@ -5255,7 +5262,11 @@ END SUBROUTINE GetMaxDefs
       
       CALL Info('LevelProjector',&
           'Number of active nodes in projector: '//TRIM(I2S(m)),Level=8)
-      EdgeRow0 = m
+      IF( DoNodes ) THEN
+        EdgeRow0 = m
+      ELSE
+        EdgeRow0 = 0
+      END IF
       
       IF( CreateDual ) THEN
         m = 0
@@ -5456,6 +5467,10 @@ END SUBROUTINE GetMaxDefs
     m = COUNT( Projector % InvPerm  == 0 ) 
     IF( m > 0 ) THEN
       CALL Warn('LevelProjector','Projector % InvPerm not set in for dofs: '//TRIM(I2S(m)))
+    END IF
+    m = COUNT( Projector % InvPerm  > 0 ) 
+    IF( m > 0 ) THEN
+      CALL Info('LevelProjector','Projector % InvPerm set in for dofs: '//TRIM(I2S(m)),Level=8)
     END IF
 
     CALL Info('LevelProjector','Projector created',Level=10)
@@ -6477,7 +6492,7 @@ END SUBROUTINE GetMaxDefs
           xminm,yminm,DetJ,Wtemp,q,ArcTol,u,v,w,um,vm,wm,val,Overlap,RefArea,dArea,&
           SumOverlap,SumArea,qleft, qright, qleft2, qright2, MaxErr,Err,phi(10)
       REAL(KIND=dp), ALLOCATABLE :: Basis(:), BasisM(:)
-      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),dBasisdx(:,:)
+      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),dBasisdx(:,:),RotWBasis(:,:)
       LOGICAL :: LeftCircle, Stat
       TYPE(Mesh_t), POINTER :: Mesh
 
@@ -6916,14 +6931,14 @@ END SUBROUTINE GetMaxDefs
       REAL(KIND=dp) :: TotRefArea, TotSumArea, TotTrueArea
       REAL(KIND=dp), ALLOCATABLE :: Basis(:), BasisM(:)
       REAL(KIND=dp), POINTER :: Alpha(:), AlphaM(:)
-      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),dBasisdx(:,:)
+      REAL(KIND=dp), ALLOCATABLE :: WBasis(:,:),WBasisM(:,:),RotWbasis(:,:),RotWBasisM(:,:),dBasisdx(:,:)
       LOGICAL :: LeftCircle, Stat, CornerFound(4), CornerFoundM(4), PosAngle
       TYPE(Mesh_t), POINTER :: Mesh
       TYPE(Variable_t), POINTER :: TimestepVar
 
       ! These are used temporarely for debugging purposes
       INTEGER :: SaveInd, MaxSubElem, MaxSubTriangles, DebugInd, Nslave, Nmaster
-      LOGICAL :: SaveElem, DebugElem, SaveErr
+      LOGICAL :: SaveElem, DebugElem, SaveErr, Btest
       CHARACTER(LEN=20) :: FileName
 
       REAL(KIND=dp) :: Area
@@ -6937,6 +6952,9 @@ END SUBROUTINE GetMaxDefs
       DebugInd = ListGetInteger( BC,'Level Projector Debug Element Index',Found )
       SaveErr = ListGetLogical( BC,'Level Projector Save Fraction',Found)
 
+      Btest = ListGetLogical( CurrentModel % Simulation,'Mortar B test',Found )
+
+      
       
       TimestepVar => VariableGet( Mesh % Variables,'Timestep',ThisOnly=.TRUE. )
       Timestep = NINT( TimestepVar % Values(1) )
@@ -6967,7 +6985,7 @@ END SUBROUTINE GetMaxDefs
         
       IF( EdgeBasis ) THEN 
         n = 12 ! Hard-coded size sufficient for second-order edge elements
-        ALLOCATE( WBasis(n,3), WBasisM(n,3), RotWBasis(n,3), STAT=AllocStat )
+        ALLOCATE( WBasis(n,3), WBasisM(n,3), RotWBasis(n,3), RotWBasisM(n,3), STAT=AllocStat )
         IF( AllocStat /= 0 ) CALL Fatal('AddProjectorWeakGeneric','Allocation error 3')
       END IF
         
@@ -7750,7 +7768,7 @@ END SUBROUTINE GetMaxDefs
                 ELSE
                   stat = ElementInfo( ElementM, NodesM, um, vm, wm, &
                       detJ, BasisM, dBasisdx )
-                  CALL GetEdgeBasis(ElementM,WBasisM,RotWBasis,BasisM,dBasisdx)
+                  CALL GetEdgeBasis(ElementM,WBasisM,RotWBasisM,BasisM,dBasisdx)
                 END IF
               ELSE
                 stat = ElementInfo( ElementM, NodesM, um, vm, wm, detJ, BasisM )
@@ -7813,7 +7831,7 @@ END SUBROUTINE GetMaxDefs
                 END DO
               END IF
 
-              IF( DoEdges ) THEN
+              IF( DoEdges .AND. .NOT. Btest ) THEN
                 IF (SecondOrder) THEN
 
                   DO j=1,2*ne+nf   ! for all slave dofs
@@ -7927,9 +7945,73 @@ END SUBROUTINE GetMaxDefs
                   END DO
                 END IF
               END IF
-            END DO
-          END DO
 
+
+
+
+              IF( DoEdges .AND. Btest ) THEN
+                IF (SecondOrder) THEN
+                  CALL fatal('','not done yet for btest!')
+                ELSE                  
+                  DO j=1,n 
+                    jj = Indexes(j)                                    
+                    
+                    nrow = NodePerm(InvPerm1(jj))
+                    IF( nrow == 0 ) CYCLE
+                    
+                    Projector % InvPerm(nrow) = InvPerm1(jj)
+                    TrueArea = TrueArea + val
+
+                    DO i=1,neM+nfM
+                      IF( i <= neM ) THEN
+                        ii = Element % EdgeIndexes(i) + EdgeCol0
+                      ELSE
+                        ii = 2 * ( Element % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
+                      END IF
+
+                      val = Wtemp * Basis(j) * RotWBasis(i,3)
+                      
+                      
+                      IF( ABS( val ) > 1.0e-12 ) THEN
+                        Nslave = Nslave + 1
+                        CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                            ii, EdgeCoeff * val ) 
+                      END IF
+
+                      IF( i <= neM ) THEN
+                        ii = ElementM % EdgeIndexes(i) + EdgeCol0
+                      ELSE
+                        ii = 2 * ( ElementM % ElementIndex - 1 ) + ( i - 4 ) + FaceCol0
+                      END IF
+                      val = -Wtemp * sgn0 * Basis(j) * RotWBasisM(i,3)
+
+                      IF( ABS( val ) > 1.0e-12 ) THEN
+                        Nmaster = Nmaster + 1                       
+                        CALL List_AddToMatrixElement(Projector % ListMatrix, nrow, &
+                            ii, EdgeScale * EdgeCoeff * val  ) 
+                      END IF
+                    END DO
+                    
+                  END DO
+                END IF
+              END IF
+                
+
+
+            END DO
+          END DO  ! integration over virtial triangles
+
+
+
+
+
+
+
+
+
+
+
+          
 100       IF( Repeating ) THEN
             IF( NRange /= NRange2 ) THEN
               ! Rotate the sector to a new position for axial case
@@ -7998,7 +8080,7 @@ END SUBROUTINE GetMaxDefs
           NodesT % x, NodesT % y, NodesT % z, &
           Basis, BasisM, dBasisdx )
       IF( EdgeBasis ) THEN
-        DEALLOCATE( WBasis, WBasisM, RotWBasis )
+        DEALLOCATE( WBasis, WBasisM, RotWBasis, RotWBasisM )
       END IF
       IF(BiOrthogonalBasis) THEN
         DEALLOCATE(CoeffBasis, MASS )
@@ -19199,7 +19281,7 @@ CONTAINS
           END IF
         END DO
       END DO
-    END DO
+    END DO 
 
     CALL Info('MinimalElementalSet','Independent dofs in elemental field: '//TRIM(I2S(l)),Level=7)
     CALL Info('MinimalElementalSet','Redundant dofs in elemental field: '//TRIM(I2S(NoElimNodes)),Level=7)     
