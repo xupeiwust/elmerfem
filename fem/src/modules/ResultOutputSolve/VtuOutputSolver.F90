@@ -44,11 +44,11 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   INTEGER, SAVE :: nTime = 0
   LOGICAL :: GotIt, Hit, Parallel, FixedMesh, DG, DN
   CHARACTER(MAX_NAME_LEN) :: FilePrefix
-  CHARACTER(MAX_NAME_LEN) :: BaseFile, VtuFile, PvtuFile, PvdFile, DataSetFile
+  CHARACTER(MAX_NAME_LEN) :: BaseFile, VtuFile, Pvtufile, PvdFile, DataSetFile
   TYPE(Mesh_t), POINTER :: Mesh
   TYPE(Variable_t), POINTER :: Var
   INTEGER :: i, j, k, l, n, m, Partitions, Part, ExtCount, FileindexOffSet, MeshDim, PrecBits, &
-             PrecSize, IntSize, FileIndex
+             PrecSize, IntSize, FileIndex, GeomId
   CHARACTER(MAX_NAME_LEN) :: Dir
   LOGICAL :: Visited = .FALSE.
   REAL(KIND=dp) :: DoubleWrk
@@ -56,18 +56,19 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
 
   LOGICAL :: MaskExists, BinaryOutput, AsciiOutput, SinglePrec, NoFileindex, &
       SkipHalo, SaveOnlyHalo, IsHalo, IsBoundaryElement
-  CHARACTER(MAX_NAME_LEN) :: Str, MaskName
+  CHARACTER(MAX_NAME_LEN) :: Str, MaskName, GroupName
   TYPE(Variable_t), POINTER :: MaskVar
   INTEGER, POINTER :: MaskPerm(:), InvFieldPerm(:), NodeIndexes(:)
   INTEGER, ALLOCATABLE, TARGET :: NodePerm(:), InvNodePerm(:), InvDgPerm(:), DgPerm(:)
-  INTEGER :: NumberOfGeomNodes, NumberOfDofNodes, NumberOfElements, ParallelNodes, ParallelElements, Sweep
+  INTEGER :: NumberOfGeomNodes, NumberOfDofNodes, NumberOfElements, ParallelNodes, ParallelElements, Sweep, GroupId
   TYPE(Element_t), POINTER :: CurrentElement, LeftElem, RightElem
   TYPE(ValueList_t),POINTER :: Params
   INTEGER :: MaxModes, MaxModes2, BCOffset, ElemFirst, ElemLast, LeftIndex, RightIndex, discontMesh
   INTEGER, POINTER :: ActiveModes(:), ActiveModes2(:), Indexes(:)
   LOGICAL :: GotActiveModes, GotActiveModes2, EigenAnalysis, ConstraintAnalysis, &
       WriteIds, SaveBoundariesOnly, SaveBulkOnly, SaveLinear, &
-      GotMaskName, NoPermutation, SaveElemental, SaveNodal, GotMaskCond
+      GotMaskName, NoPermutation, SaveElemental, SaveNodal, GotMaskCond, &
+      TimeCollection, GroupCollection
   LOGICAL, ALLOCATABLE :: ActiveElem(:)
   INTEGER, ALLOCATABLE :: BodyVisited(:),GeometryBodyMap(:),GeometryBCMap(:)
   REAL(KIND=dp), ALLOCATABLE :: MaskCond(:)
@@ -83,13 +84,22 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   DG = GetLogical( Params,'Discontinuous Galerkin',GotIt)
   DN = GetLogical( Params,'Discontinuous Bodies',GotIt)
 
+  IF( DG .OR. DN ) THEN    
+    IF(.NOT. CheckAnyElementalField() ) THEN
+      CALL Info('VtuOutputSolver','No elemental fields, omitting discontinuity creation!',Level=6)
+      DG = .FALSE. 
+      DN = .FALSE.
+    END IF
+  END IF
+
+  
   ExtCount = GetInteger( Params,'Output Count',GotIt)
   IF( GotIt ) THEN
     nTime = ExtCount
   ELSE
     nTime = nTime + 1
   END IF
-
+  
   FileIndexOffset = GetInteger( Params,'Fileindex offset',GotIt)
   FileIndex = nTime + FileIndexOffset
 
@@ -100,6 +110,12 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     AsciiOutput = GetLogical( Params,'Ascii Output',GotIt)
     BinaryOutput = .NOT. AsciiOutput
   END IF
+
+  IF( BinaryOutput ) THEN
+    BufferSize = GetInteger( Params,'Binary Output Buffer Size',GotIt)
+    IF( .NOT. GotIt ) BufferSize = MAX( NumberOfDofNodes, NumberOfElements )
+  END IF
+
   
   SaveElemental = GetLogical( Params,'Save Elemental Fields',GotIt)
   IF(.NOT. GotIt) SaveElemental = .TRUE.
@@ -141,6 +157,141 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
 
   FixedMesh = ListGetLogical(Params,'Fixed Mesh',GotIt)
 
+  TimeCollection = GetLogical( Params,'Vtu Time Collection', GotIt ) 
+  IF( TimeCollection .AND. NoFileIndex ) THEN
+    CALL Warn('VtuOutputSolver','Vtu time collection cannot work without file indexes')
+    NoFileIndex = .FALSE.
+  END IF
+    
+  GroupCollection = GetLogical( Params,'Vtu Group Collection', GotIt ) 
+  
+
+
+  BaseFile = FilePrefix
+  IF ( .NOT. FileNameQualified(FilePrefix) ) THEN
+    Dir = GetString( Params,'Output Directory',GotIt) 
+    IF( GotIt ) THEN
+      IF( LEN_TRIM(Dir) > 0 ) THEN
+        BaseFile = TRIM(Dir)// '/' //TRIM(FilePrefix)
+        CALL MakeDirectory( TRIM(Dir) // CHAR(0) )
+      END IF
+    ELSE 
+      BaseFile = TRIM(OutputPath) // '/' // TRIM(Mesh % Name) // '/' //TRIM(FilePrefix)
+    END IF
+  END IF
+  CALL Info('VtuOutputSolver','Full filename base is: '//TRIM(Basefile), Level=10 )
+
+
+  ! Check whether we need to consider Eigenmodes or constraint modes
+  !---------------------------------------------------------------------------------  
+  ActiveModes => ListGetIntegerArray( Params,'Active EigenModes',GotActiveModes ) 
+  IF( GotActiveModes ) THEN
+    MaxModes = SIZE( ActiveModes )
+  ELSE
+    MaxModes = GetInteger( Params,'Number of EigenModes',GotIt)
+    IF(.NOT. GotIt) MaxModes = GetInteger( Params,'Eigen System Values',GotIt)
+    IF(.NOT. GotIt) THEN
+      DO i=1,Model % NumberOfSolvers
+        MaxModes = MAX( MaxModes, &
+            GetInteger( Model % Solvers(i) % Values,'Eigen System Values', GotIt ) )
+        MaxModes = MAX( MaxModes, &
+            GetInteger( Model % Solvers(i) % Values,'Harmonic System Values', GotIt ) )       
+        IF( ListGetLogical( Model % Solvers(i) % Values,'Save Scanning Modes',GotIt ) ) THEN
+          MaxModes = MAX( MaxModes, &
+              GetInteger( Model % Solvers(i) % Values,'Scanning Loops', GotIt ) )
+        END IF
+      END DO
+    END IF     
+  END IF
+  IF( MaxModes > 0 ) THEN
+    CALL Info('VtuOutputSolver','Maximum number of eigen/harmonic modes: '//TRIM(I2S(MaxModes)),Level=7)
+  END IF
+
+  ActiveModes2 => ListGetIntegerArray( Params,'Active Constraint Modes',GotActiveModes2 ) 
+  IF( GotActiveModes2 ) THEN
+    MaxModes2 = SIZE( ActiveModes2 )
+  ELSE
+    MaxModes2 = 0
+    DO i=1,Model % NumberOfSolvers
+      IF( .NOT. ASSOCIATED( Model % Solvers(i) % Variable ) ) CYCLE
+      MaxModes2 = MAX( MaxModes2, &
+          Model % Solvers(i) % Variable % NumberOfConstraintModes )
+    END DO
+  END IF
+  IF( MaxModes2 > 0 ) THEN
+    CALL Info('VtuOutputSolver','Maximum number of constraint modes: '//TRIM(I2S(MaxModes2)),Level=7)
+  END IF
+
+  ! This activates the solution of the modes one for each file
+  EigenAnalysis = ListGetLogical( Params,'Eigen Analysis',GotIt) .OR. &
+      ListGetLogical( Params,'Constraint Modes Analysis',GotIt) 
+  IF( EigenAnalysis ) THEN
+    CALL Info('VtuOutputSolver','Saving each mode to different file')
+    FileIndex = 1
+  END IF
+
+  
+  ! Determine how to index the bodies and boundaries
+  !-----------------------------------------------------------------------
+  BcOffset = 0
+  WriteIds = GetLogical( Params,'Save Geometry Ids',GotIt)  
+  IF( WriteIds ) THEN
+    ! Create the mapping for body ids, default is unity mapping
+    ALLOCATE( GeometryBodyMap( CurrentModel % NumberOfBodies ) )
+    j = ListGetInteger( Params,'Default Body Id',GotIt )
+    IF( GotIt ) THEN
+      GeometryBodyMap = j
+    ELSE
+      DO i=1,CurrentModel % NumberOfBodies
+        GeometryBodyMap(i) = i
+      END DO
+    END IF
+
+    ! User given mapping
+    DO i=1,CurrentModel % NumberOfBodies
+      j = ListGetInteger( CurrentModel % Bodies(i) % Values,'Geometry Id',GotIt)
+      IF( GotIt ) GeometryBodyMap(i) = j
+    END DO
+
+    ! Create mapping for bc ids, default is unity mapping with offset
+    ALLOCATE( GeometryBCMap( CurrentModel % NumberOfBCs ) )
+    j = ListGetInteger( Params,'Default BC Id',GotIt )
+    IF( GotIt ) THEN
+      GeometryBCMap = j
+    ELSE
+      ! Determine a default offset
+      BCOffset = ListGetInteger( Params,'BC Id Offset',GotIt )
+      IF( .NOT. GotIt ) THEN
+        IF( ElemFirst <= Mesh % NumberOfBulkElements ) THEN
+          BCOffset = 100
+          DO WHILE( BCOffset <= Model % NumberOfBodies ) 
+            BCOffset = 10 * BCOffset
+          END DO
+          CALL Info('VtuOutputSolver','Setting offset for boundary entities: '&
+              //TRIM(I2S(BCOffset)),Level=6)
+        END IF
+      END IF
+      DO i=1,CurrentModel % NumberOfBCs
+        GeometryBCMap(i) = i + BCOffSet
+      END DO
+    END IF
+
+    ! User given bc mapping
+    DO i=1,CurrentModel % NumberOfBCs
+      j = ListGetInteger( CurrentModel % BCs(i) % Values,'Geometry Id',GotIt)
+      IF( GotIt ) GeometryBCMap(i) = j
+    END DO
+  END IF
+
+
+  GroupId = 0
+      
+200 CONTINUE
+  IF( GroupCollection ) THEN
+    GroupId = GroupId + 1
+    CALL Info('VtuOutputSolver','Saving group '//TRIM(I2S(GroupId))//' to file',Level=8)
+  END IF
+    
   !------------------------------------------------------------------------------
   ! Initialize stuff for masked saving
   !------------------------------------------------------------------------------
@@ -195,13 +346,17 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     ElemFirst = HUGE( ElemFirst )
     ElemLast = 0 
 
-    ALLOCATE(NodePerm(Mesh % NumberOfNodes))
+    IF( .NOT. ALLOCATED( NodePerm ) ) THEN
+      ALLOCATE(NodePerm(Mesh % NumberOfNodes))
+    END IF
     NodePerm = 0
 
-    ALLOCATE(ActiveElem(Mesh % NumberOfBulkElements + & 
-        Mesh % NumberOfBoundaryElements))
+    IF( .NOT. ALLOCATED( ActiveElem ) ) THEN
+      ALLOCATE(ActiveElem(Mesh % NumberOfBulkElements + & 
+          Mesh % NumberOfBoundaryElements))
+    END IF
     ActiveElem = .FALSE.
-
+      
     ! Count the true number of elements and mark the 1st and last element
     !-----------------------------------------------------------------------
     DO i=1,Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
@@ -217,6 +372,16 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
       CurrentElement => Mesh % Elements(i)
       Model % CurrentElement => CurrentElement
 
+      IF( GroupCollection ) THEN
+        IF( .NOT. IsBoundaryElement ) THEN
+          IF( CurrentElement % BodyId /= GroupId ) CYCLE
+        ELSE
+          IF( .NOT. ASSOCIATED( CurrentElement % BoundaryInfo ) ) CYCLE
+          IF( CurrentElement % BoundaryInfo % Constraint /= &
+              GroupId - CurrentModel % NumberOfBodies ) CYCLE
+        END IF
+      END IF
+      
       IF( GetElementFamily( CurrentElement ) == 1 ) CYCLE          
       
       IF( SkipHalo .OR. SaveOnlyHalo ) THEN
@@ -342,20 +507,10 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   END IF
 
 
-  NumberOfDofNodes = 0
-
-  IF( DG .OR. DN ) THEN    
-    IF(.NOT. CheckAnyElementalField() ) THEN
-      CALL Info('VtuOutputSolver','No elemental fields, omitting discontinuity creation!',Level=6)
-      DG = .FALSE. 
-      DN = .FALSE.
-    END IF
-  END IF
-
-
-
+  
   ! If we have a discontinuous mesh then create the permutation vectors to deal with the discontinuities.
   IF( DG .OR. DN ) THEN
+    NumberOfDofNodes = 0
     NoPermutation = .FALSE.
 
     IF( DN ) THEN      
@@ -432,6 +587,8 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
       IF( Sweep == 1 ) THEN
         CALL Info('VtuOutputSolver','Independent dofs in discontinuous mesh: '//TRIM(I2S(l)),Level=10)
         NumberOfDofNodes = l
+        IF( ALLOCATED( InvNodePerm ) ) DEALLOCATE( InvNodePerm )
+        IF( ALLOCATED( InvDgPerm) ) DEALLOCATE( InvDgPerm ) 
         ALLOCATE( InvNodePerm(l), InvDgPerm(l) ) 
         InvNodePerm = 0
         InvDgPerm = 0
@@ -439,13 +596,13 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     END DO
 
     IF( DN ) DEALLOCATE( BodyVisited ) 
-
   ELSE
     NoPermutation = ( NumberOfGeomNodes == Mesh % NumberOfNodes )    
     IF( NoPermutation ) THEN
       DEALLOCATE( NodePerm ) 
     ELSE
       CALL Info('VtuOutputSolver','Not saving all nodes, creating permutation!',Level=12)
+      IF( ALLOCATED( InvNodePerm ) ) DEALLOCATE( InvNodePerm ) 
       ALLOCATE( InvNodePerm( NumberOfGeomNodes ) ) 
       InvNodePerm = 0
       j = 0
@@ -478,138 +635,37 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     CALL Info('VtuOutputSolver',Message,Level=6)
   END IF
 
-  IF( BinaryOutput ) THEN
-    BufferSize = GetInteger( Params,'Binary Output Buffer Size',GotIt)
-    IF( .NOT. GotIt ) BufferSize = MAX( NumberOfDofNodes, NumberOfElements )
-  END IF
-
-  BaseFile = FilePrefix
-  IF ( .NOT. FileNameQualified(FilePrefix) ) THEN
-    Dir = GetString( Params,'Output Directory',GotIt) 
-    IF( GotIt ) THEN
-      IF( LEN_TRIM(Dir) > 0 ) THEN
-        BaseFile = TRIM(Dir)// '/' //TRIM(FilePrefix)
-        CALL MakeDirectory( TRIM(Dir) // CHAR(0) )
-      END IF
-    ELSE 
-      BaseFile = TRIM(OutputPath) // '/' // TRIM(Mesh % Name) // '/' //TRIM(FilePrefix)
-    END IF
-  END IF
-  CALL Info('VtuOutputSolver','Full filename base is: '//TRIM(Basefile), Level=10 )
-
-
-  ActiveModes => ListGetIntegerArray( Params,'Active EigenModes',GotActiveModes ) 
-  IF( GotActiveModes ) THEN
-    MaxModes = SIZE( ActiveModes )
-  ELSE
-    MaxModes = GetInteger( Params,'Number of EigenModes',GotIt)
-    IF(.NOT. GotIt) MaxModes = GetInteger( Params,'Eigen System Values',GotIt)
-    IF(.NOT. GotIt) THEN
-      DO i=1,Model % NumberOfSolvers
-        MaxModes = MAX( MaxModes, &
-            GetInteger( Model % Solvers(i) % Values,'Eigen System Values', GotIt ) )
-        MaxModes = MAX( MaxModes, &
-            GetInteger( Model % Solvers(i) % Values,'Harmonic System Values', GotIt ) )       
-        IF( ListGetLogical( Model % Solvers(i) % Values,'Save Scanning Modes',GotIt ) ) THEN
-          MaxModes = MAX( MaxModes, &
-              GetInteger( Model % Solvers(i) % Values,'Scanning Loops', GotIt ) )
-        END IF
-      END DO
-    END IF     
-  END IF
-  IF( MaxModes > 0 ) THEN
-    CALL Info('VtuOutputSolver','Maximum number of eigen/harmonic modes: '//TRIM(I2S(MaxModes)),Level=7)
-  END IF
-
-  ActiveModes2 => ListGetIntegerArray( Params,'Active Constraint Modes',GotActiveModes2 ) 
-  IF( GotActiveModes2 ) THEN
-    MaxModes2 = SIZE( ActiveModes2 )
-  ELSE
-    MaxModes2 = 0
-    DO i=1,Model % NumberOfSolvers
-      IF( .NOT. ASSOCIATED( Model % Solvers(i) % Variable ) ) CYCLE
-      MaxModes2 = MAX( MaxModes2, &
-          Model % Solvers(i) % Variable % NumberOfConstraintModes )
-    END DO
-  END IF
-  IF( MaxModes2 > 0 ) THEN
-    CALL Info('VtuOutputSolver','Maximum number of constraint modes: '//TRIM(I2S(MaxModes2)),Level=7)
-  END IF
-
-  ! This activates the solution of the modes one for each file
-  EigenAnalysis = ListGetLogical( Params,'Eigen Analysis',GotIt) .OR. &
-      ListGetLogical( Params,'Constraint Modes Analysis',GotIt) 
-  IF( EigenAnalysis ) THEN
-    CALL Info('VtuOutputSolver','Saving each mode to different file')
-    FileIndex = 1
-  END IF
-
-  BcOffset = 0
-  WriteIds = GetLogical( Params,'Save Geometry Ids',GotIt)  
-  IF( WriteIds ) THEN
-    ! Create the mapping for body ids, default is unity mapping
-    ALLOCATE( GeometryBodyMap( CurrentModel % NumberOfBodies ) )
-    j = ListGetInteger( Params,'Default Body Id',GotIt )
-    IF( GotIt ) THEN
-      GeometryBodyMap = j
-    ELSE
-      DO i=1,CurrentModel % NumberOfBodies
-        GeometryBodyMap(i) = i
-      END DO
-    END IF
-
-    ! User given mapping
-    DO i=1,CurrentModel % NumberOfBodies
-      j = ListGetInteger( CurrentModel % Bodies(i) % Values,'Geometry Id',GotIt)
-      IF( GotIt ) GeometryBodyMap(i) = j
-    END DO
-    !PRINT *,'GeometryBodyMap:',GeometryBodyMap
-
-    ! Create mapping for bc ids, default is unity mapping with offset
-    ALLOCATE( GeometryBCMap( CurrentModel % NumberOfBCs ) )
-    j = ListGetInteger( Params,'Default BC Id',GotIt )
-    IF( GotIt ) THEN
-      GeometryBCMap = j
-    ELSE
-      ! Determine a default offset
-      BCOffset = ListGetInteger( Params,'BC Id Offset',GotIt )
-      IF( .NOT. GotIt ) THEN
-        IF( ElemFirst <= Mesh % NumberOfBulkElements ) THEN
-          BCOffset = 100
-          DO WHILE( BCOffset <= Model % NumberOfBodies ) 
-            BCOffset = 10 * BCOffset
-          END DO
-          CALL Info('VtuOutputSolver','Setting offset for boundary entities: '&
-              //TRIM(I2S(BCOffset)),Level=6)
-        END IF
-      END IF
-      DO i=1,CurrentModel % NumberOfBCs
-        GeometryBCMap(i) = i + BCOffSet
-      END DO
-    END IF
-
-    ! User given bc mapping
-    DO i=1,CurrentModel % NumberOfBCs
-      j = ListGetInteger( CurrentModel % BCs(i) % Values,'Geometry Id',GotIt)
-      IF( GotIt ) GeometryBCMap(i) = j
-    END DO
-    !PRINT *,'GeometryBcMap:',GeometryBcMap
-
-  END IF
   
 
  100   CONTINUE
 
-  IF(Parallel) THEN
-    IF( NoFileindex ) THEN
-      WRITE( PvtuFile,'(A,".pvtu")' ) TRIM(BaseFile)
-    ELSE IF( FileIndex < 10000 ) THEN
-      WRITE( PvtuFile,'(A,I4.4,".pvtu")' ) TRIM(BaseFile),FileIndex
-    ELSE   
-      WRITE( PvtuFile,'(A,I0,".pvtu")' ) TRIM(BaseFile),FileIndex
+  ! Generate the base name without the partition
+  !--------------------------------------------------------------------
+  VtuFile = TRIM(BaseFile)
+  
+  IF( GroupCollection ) THEN
+    IF( GroupId <= CurrentModel % NumberOfBodies ) THEN
+      GroupName = ListGetString( CurrentModel % Bodies(GroupId) % Values,"Name")
+    ELSE
+      j = GroupId - CurrentModel % NumberOfBodies
+      GroupName = ListGetString( CurrentModel % BCs(j) % Values,"Name")
     END IF
+    VtuFile = TRIM(VtuFile)//"_"//TRIM(GroupName)
+  END IF
+  
+  IF( NoFileindex ) THEN
+    CONTINUE
+  ELSE IF( FileIndex < 10000 ) THEN
+    WRITE( VtuFile,'(A,A,I4.4)') TRIM(VtuFile),"_t",FileIndex
+  ELSE
+    WRITE( VtuFile,'(A,A,I0)' ) TRIM(VtuFile),"_t",FileIndex
+  END IF
+
+  IF(Parallel) THEN
+    PvtuFile = TRIM( VtuFile )//".pvtu"
     CALL Info('VtuOutputSolver','Writing the pvtu file: '//TRIM(PvtuFile), Level=10)
-    CALL WritePvtuFile( PvtuFile, Model )
+    CALL WritePvtuFile( VtuFile, Model )
+
     CALL Info('VtuOutputSolver','Finished writing pvtu file',Level=12)
   END IF
 
@@ -617,26 +673,13 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   ! Write the Vtu file with all the data
   !--------------------------------------------------------------------------
   IF( NumberOfDofNodes > 0 ) THEN
-    IF ( Parallel ) THEN
-      IF( NoFileindex ) THEN
-        WRITE( VtuFile,'(A,I4.4,A,".vtu")' ) TRIM(BaseFile),Part+1,"par"
-      ELSE IF( FileIndex < 10000 ) THEN
-        WRITE( VtuFile,'(A,I4.4,A,I4.4,".vtu")' ) TRIM(BaseFile),Part+1,"par",&
-            FileIndex
-      ELSE
-        WRITE( VtuFile,'(A,I4.4,A,I0,".vtu")' ) TRIM(BaseFile),Part+1,"par",&
-            FileIndex
-      END IF
-    ELSE
-      IF( NoFileindex ) THEN
-        WRITE( VtuFile,'(A,".vtu")' ) TRIM(BaseFile)
-      ELSE IF( FileIndex < 10000 ) THEN
-        WRITE( VtuFile,'(A,I4.4,".vtu")' ) TRIM(BaseFile),FileIndex
-      ELSE
-        WRITE( VtuFile,'(A,I0,".vtu")' ) TRIM(BaseFile),FileIndex
-      END IF
+    
+    IF( Parallel ) THEN
+      WRITE( VtuFile,'(A,A,I4.4)') TRIM(VtuFile),"_par",Part+1
     END IF
-
+    
+    VtuFile = TRIM(VtuFile)//".vtu"
+    
     CALL Info('VtuOutputSolver','Writing the vtu file: '//TRIM(VtuFile),Level=7)
     CALL WriteVtuFile( VtuFile, Model, FixedMesh )
     CALL Info('VtuOutputSolver','Finished writing vtu file',Level=12)
@@ -644,18 +687,16 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
 
   ! For transient simulation write a holder for the timesteps
   !-----------------------------------------------------------
-  IF( GetLogical( Params,'Vtu Time Collection', GotIt ) ) THEN
-    IF( TransientSimulation .AND. .NOT. NoFileIndex ) THEN
-      WRITE( PvdFile,'(A,".pvd")' ) TRIM(BaseFile)
-      IF( Parallel ) THEN
-        DataSetFile = PvtuFile
-      ELSE
-        DataSetFile = VtuFile
-      END IF
-      CALL Info('VtuOutputSolver','Writing the pvd file: '//TRIM(DataSetFile),Level=10)
-      CALL WritePvdFile( PvdFile, DataSetFile, FileIndex, Model )
-      CALL Info('VtuOutputSolver','Finished writing pvd file',Level=12)     
+  IF( TimeCollection .OR. GroupCollection ) THEN
+    WRITE( PvdFile,'(A,".pvd")' ) TRIM(BaseFile)
+    IF( Parallel ) THEN
+      DataSetFile = PvtuFile
+    ELSE
+      DataSetFile = VtuFile
     END IF
+    CALL Info('VtuOutputSolver','Writing the pvd file: '//TRIM(DataSetFile),Level=10)
+    CALL WritePvdFile( PvdFile, DataSetFile, FileIndex, Model )
+    CALL Info('VtuOutputSolver','Finished writing pvd file',Level=12)     
   END IF
 
 
@@ -663,6 +704,13 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     FileIndex = FileIndex + 1
     IF( FileIndex <= MaxModes + MaxModes2 ) GOTO 100
   END IF
+
+  IF( GroupCollection ) THEN
+    IF( GroupId < CurrentModel % NumberOfBodies + CurrentModel % NumberOfBCs ) THEN
+      GOTO 200 
+    END IF
+  END IF
+
 
   IF( NumberOfDofNodes > 0 ) THEN
     IF( .NOT. NoPermutation ) THEN
@@ -1883,13 +1931,13 @@ CONTAINS
     INTEGER :: nTime, RecLen = 0
     TYPE(Model_t) :: Model     
     INTEGER, PARAMETER :: VtuUnit = 58
-    INTEGER :: n
+    INTEGER :: n, nLine = 0
     REAL(KIND=dp) :: time
     CHARACTER :: lf
-    CHARACTER(LEN=MAX_NAME_LEN) :: Str
+    CHARACTER(LEN=MAX_NAME_LEN) :: Str, ShortName
     LOGICAL :: Found
 
-    SAVE RecLen
+    SAVE RecLen, nLine
 
     lf = CHAR(10)
 
@@ -1901,42 +1949,53 @@ CONTAINS
       time = time - GetTimestepSize()
     END IF
 
-
-    IF( nTime == 1 .OR. Reclen == 0 ) THEN
+    n = INDEX( DataSetFile,'/',Back=.TRUE.) 
+    IF( n == 0 ) THEN
+      ShortName = DataSetFile
+    ELSE
+      ShortName = DataSetFile(n+1:)
+    END IF
+    
+    IF( nLine == 0 ) THEN
       ! Find the maximum record length (modulo four)
       WRITE( Str,'(A)') '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian"><Collection>'
       n = LEN_TRIM( Str ) 
-
-      WRITE( Str,'(A,ES16.7,A)') '<DataSet timestep="',time,&
-        '" group="" part="0" file="'//TRIM(DataSetFile)//'"/>'
-      n = MAX( LEN_TRIM( Str ), n ) 
       
-      RecLen = ((n/4)+1)*4
-    END IF
+      WRITE( Str,'(A,ES16.7,A,I6,A)') '<DataSet timestep="',time,&
+        '" group="" part="',GroupId,'" file="'//TRIM(ShortName)//'"/>'
+      n = MAX( LEN_TRIM( Str ), n ) 
 
-    IF( nTime == 1 ) THEN
+      ! Just long enough
+      RecLen = ((n/4)+5)*4
+      
       OPEN( UNIT=VtuUnit, FILE=PvdFile, form = 'formatted', STATUS='REPLACE', &
           ACCESS='DIRECT', ACTION='WRITE', RECL=RecLen)
 
       IF ( LittleEndian() ) THEN
-        WRITE( VtuUnit,'(A)',REC=1) '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian"><Collection>'//lf
+        WRITE( VtuUnit,'(A)',REC=1) '<VTKFile type="Collection" version="0.1" byte_order="LittleEndian"><Collection>'
       ELSE
-        WRITE( VtuUnit,'(A)',REC=1) '<VTKFile type="Collection" version="0.1" byte_order="BigEndian"><Collection>'//lf
+        WRITE( VtuUnit,'(A)',REC=1) '<VTKFile type="Collection" version="0.1" byte_order="BigEndian"><Collection>'
       END IF     
+      nLine = 1
     ELSE
       OPEN( UNIT=VtuUnit, FILE=PvdFile, form = 'formatted', STATUS='OLD', &
           ACCESS='DIRECT', ACTION='READWRITE', RECL=RecLen)     
     END IF
 
-    WRITE( VtuUnit,'(A,ES12.3,A)',REC=nTime+1) '<DataSet timestep="',time,&
-        '" group="" part="0" file="'//TRIM(DataSetFile)//'"/>'//lf
-    WRITE( VtuUnit,'(A)',REC=nTime+2) '</Collection></VTKFile>'//lf
+    nLine = nLine + 1
+    WRITE( VtuUnit,'(A,ES12.3,A,I6,A)',REC=nLine) lf//'<DataSet timestep="',time,&
+        '" group="" part="',GroupId,'" file="'//TRIM(ShortName)//'"/>'
+    WRITE( VtuUnit,'(A)',REC=nLine+1) lf//'</Collection></VTKFile>'
 
     CLOSE( VtuUnit )
 
+    Visited = .TRUE.
+    
   END SUBROUTINE WritePvdFile
 
 
+
+  
   SUBROUTINE WritePvtuFile( VtuFile, Model )
     CHARACTER(LEN=*), INTENT(IN) :: VtuFile
     TYPE(Model_t) :: Model 
@@ -1945,7 +2004,7 @@ CONTAINS
     CHARACTER(LEN=512) :: str
     INTEGER :: i,j,k,dofs,Rank,cumn,n,dim,vari,sdofs
     CHARACTER(LEN=1024) :: Txt, ScalarFieldName, VectorFieldName, TensorFieldName, &
-        FieldName, FullName, ShortName
+        FieldName, FullName, ShortName, PvtuFile
     LOGICAL :: ScalarsExist, VectorsExist, Found, VeloFlag, ComponentVector, &
                AllActive, ThisActive, L
     LOGICAL, POINTER :: ActivePartition(:)
@@ -1997,7 +2056,8 @@ CONTAINS
     CALL Info('WritePvtuFile','List of active partitions was composed',Level=12)
 
 
-    OPEN( UNIT=VtuUnit, FILE=VtuFile, form = 'formatted', STATUS='UNKNOWN' )
+    PVtuFile = TRIM( VtuFile )//".pvtu"
+    OPEN( UNIT=VtuUnit, FILE=PvtuFile, form = 'formatted', STATUS='UNKNOWN' )
     dim = 3
 
     IF ( LittleEndian() ) THEN
@@ -2258,28 +2318,20 @@ CONTAINS
  
     ! Write the pieces to the file 
     !-------------------------------------
-    j = INDEX( FilePrefix,'/') 
+    j = INDEX( VtuFile,'/',Back=.TRUE.) 
     IF( j == 0 ) THEN
-      ShortName = FilePrefix
+      ShortName = VtuFile
     ELSE
-      ShortName = FilePrefix(j+1:)
+      ShortName = VtuFile(j+1:)
     END IF
 
     DO i=1,Partitions
       IF(.NOT. AllActive ) THEN
         IF( .NOT. ActivePartition(i)) CYCLE
       END IF
-
-      IF( NoFileindex ) THEN
-        WRITE( VtuUnit,'(A,I4.4,A,A)' ) '    <Piece Source="'//&
-            TRIM(ShortName),i,"par",'.vtu"/>'
-      ELSE IF( FileIndex < 10000 ) THEN
-        WRITE( VtuUnit,'(A,I4.4,A,I4.4,A)' ) '    <Piece Source="'//&
-            TRIM(ShortName),i,"par",FileIndex,'.vtu"/>'        
-      ELSE
-        WRITE( VtuUnit,'(A,I4.4,A,I0,A)' ) '    <Piece Source="'//&
-            TRIM(ShortName),i,"par",FileIndex,'.vtu"/>'        
-      END IF
+      
+      WRITE( VtuUnit,'(A,A,I4.4,A)' ) '    <Piece Source="'//&
+          TRIM(ShortName),"_par",i,'.vtu"/>'        
     END DO
 
     WRITE( VtuUnit,'(A)') '  </PUnstructuredGrid>'
