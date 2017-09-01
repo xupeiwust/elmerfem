@@ -90,6 +90,8 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
       DG = .FALSE. 
       DN = .FALSE.
     END IF
+
+    IF( DN ) CALL AverageBodyFields( Mesh )  
   END IF
 
   
@@ -110,12 +112,6 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     AsciiOutput = GetLogical( Params,'Ascii Output',GotIt)
     BinaryOutput = .NOT. AsciiOutput
   END IF
-
-  IF( BinaryOutput ) THEN
-    BufferSize = GetInteger( Params,'Binary Output Buffer Size',GotIt)
-    IF( .NOT. GotIt ) BufferSize = MAX( NumberOfDofNodes, NumberOfElements )
-  END IF
-
   
   SaveElemental = GetLogical( Params,'Save Elemental Fields',GotIt)
   IF(.NOT. GotIt) SaveElemental = .TRUE.
@@ -165,6 +161,11 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     
   GroupCollection = GetLogical( Params,'Vtu Group Collection', GotIt ) 
   
+  IF( BinaryOutput ) THEN
+    BufferSize = GetInteger( Params,'Binary Output Buffer Size',GotIt)
+    IF( .NOT. GotIt ) BufferSize = Mesh % NumberOfNodes
+  END IF
+
 
 
   BaseFile = FilePrefix
@@ -513,17 +514,15 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     NumberOfDofNodes = 0
     NoPermutation = .FALSE.
 
-    IF( DN ) THEN      
-      CALL AverageBodyFields( Mesh )  
-      ALLOCATE( BodyVisited( Mesh % NumberOfNodes ) )
-    END IF
-
+    IF( DN ) ALLOCATE( BodyVisited( Mesh % NumberOfNodes ) )
+      
     k = 0
     DO i=1,Mesh % NumberOfBulkElements         
       CurrentElement => Mesh % Elements(i)
       k = k + CurrentElement % TYPE % NumberOfNodes
     END DO
     CALL Info('VtuOutputSolver','Maximum number of dofs in DG: '//TRIM(I2S(k)),Level=12)
+    IF( ALLOCATED( DgPerm ) ) DEALLOCATE( DgPerm ) 
     ALLOCATE( DgPerm(k) )
     DgPerm = 0
 
@@ -599,7 +598,7 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   ELSE
     NoPermutation = ( NumberOfGeomNodes == Mesh % NumberOfNodes )    
     IF( NoPermutation ) THEN
-      DEALLOCATE( NodePerm ) 
+      IF( ALLOCATED( NodePerm ) ) DEALLOCATE( NodePerm ) 
     ELSE
       CALL Info('VtuOutputSolver','Not saving all nodes, creating permutation!',Level=12)
       IF( ALLOCATED( InvNodePerm ) ) DEALLOCATE( InvNodePerm ) 
@@ -714,9 +713,10 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
 
   IF( NumberOfDofNodes > 0 ) THEN
     IF( .NOT. NoPermutation ) THEN
-      DEALLOCATE( InvNodePerm, NodePerm ) 
+      IF( ALLOCATED( InvNodePerm ) ) DEALLOCATE( InvNodePerm )
+      IF( ALLOCATED( NodePerm ) ) DEALLOCATE( NodePerm )
     END IF
-    DEALLOCATE( ActiveElem ) 
+    IF( ALLOCATED( ActiveElem) ) DEALLOCATE( ActiveElem ) 
   END IF
 
   IF( WriteIds ) THEN  
@@ -1924,7 +1924,7 @@ CONTAINS
 
   END SUBROUTINE WriteVtuFile
 
-
+ 
 
   SUBROUTINE WritePvdFile( PvdFile, DataSetFile, nTime, Model )
     CHARACTER(LEN=*), INTENT(IN) :: PvdFile, DataSetFile
