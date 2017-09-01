@@ -47,6 +47,7 @@ Sand      1
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
+0.0       As0
 Granite   2
 0.1       Xi0
 0.01      eta0
@@ -68,6 +69,7 @@ Granite   2
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
+0.0       As0
 Till      3
 0.6       Xi0
 0.25      eta0
@@ -89,6 +91,7 @@ Till      3
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
+0.0       As0
 Gravel    4
 0.1       Xi0
 0.25      eta0
@@ -110,3 +113,4 @@ Gravel    4
 4.65      qexp
 0.05      alphaL
 0.01      alphaT
+0.0       As0
