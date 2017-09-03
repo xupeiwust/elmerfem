@@ -2860,6 +2860,7 @@ CONTAINS
     END IF 
 
     CALL GetElementNodes( Nodes )
+    
     MASS  = 0._dp
     STIFF = 0._dp
     FORCE = 0._dp
@@ -2940,6 +2941,7 @@ CONTAINS
       XiAtIP = Xi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0)
       XixcAtIP = XiXc(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,Mc,ew,dw1,dw2,deltaInElement,GasConstant,SalinityAtIP)
       XietaAtIP = XiEta(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,eta0,PorosityAtIP)
+      KcAtIP = 0.0_dp
       KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
       KcXcXcAtIP = GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
 
@@ -2957,25 +2959,27 @@ CONTAINS
           DO i=1,DIM
             DO j=1,DIM
               Stiff(p,q) = Stiff(p,q) + Weight * XiAtIP * PorosityAtIP * KcXcXcAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
-              Stiff(p,q) = Stiff(p,q) - Weight * XiAtIP * PorosityAtIP * fluxXcG(i) * Basis(p) * dBasisdx(q,i)
+              !PRINT *, "Diff: Stiff = XiAtIP * PorosityAtIP * KcXcXcAtIP(i,j)", Stiff(p,q),XiAtIP,PorosityAtIP,KcXcXcAtIP(i,j)
+              !Stiff(p,q) = Stiff(p,q) - Weight * XiAtIP * PorosityAtIP * fluxXcG(i) * Basis(p) * dBasisdx(q,i)
             END DO
           END DO
           ! advection term ( JgwD.grad(u),v)
           ! -----------------------------------
-          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-               STIFF (p,q) = STIFF(p,q) + Weight * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
+          !     STIFF (p,q) = STIFF(p,q) + Weight * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! reaction term (Rc*u,v)
           ! -----------------------------------
-          STIFF(p,q) = STIFF(p,q) + ReactionWeight * Weight *Basis(q) * Basis(p)
+          !STIFF(p,q) = STIFF(p,q) + ReactionWeight * Weight *Basis(q) * Basis(p)
 
-          ! time derivative (rho*du/dt,v):
+          ! time derivative (TimeWeight du/dt,v):
           ! ------------------------------
-          MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * CGTTAtIP * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
+          !PRINT *,"Mass=TimeWeight * CGTTAtIP", MASS(p,q), TimeWeight
         END DO
       END DO
 
-      FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      !FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
