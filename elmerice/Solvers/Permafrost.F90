@@ -162,9 +162,6 @@ CONTAINS
     IF (.NOT.Found) THEN
       CALL INFO(SubroutineName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
       meanfactor = 1.0_dp
-    ELSE
-      WRITE (Message,'(A,F8.2)') '"Conductivity Arithmetic Mean Weight" found and set to ', meanfactor
-      CALL INFO(SubroutineName,Message,Level=9)
     END IF
     MinKgw = GetConstReal( Material, &
          'Hydraulic Conductivity Limit', Found)
@@ -724,7 +721,7 @@ CONTAINS
          CALL FATAL("GetKcXcXc","(Larger than) unity Salinity detected")
     relSalinity = Salinity/(1.0_dp - Salinity)
     aux = 1.0_dp + ((dw1 + dc1)/dc0) * relSalinity + 2.0_dp * (dw2/dc0) * relSalinity**2.0_dp
-    KcXcXc(1:3,1:3) = aux * Kc(1:3,1:3)    
+    KcXcXc(1:3,1:3) = aux * KcXcXc(1:3,1:3)    
   END FUNCTION GetKcXcXc
 END MODULE PermafrostMaterials
 
@@ -1673,7 +1670,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
 
   Params => GetSolverParams()
 
-  CALL AssignVars()
+  CALL AssignVarsHTEQ()
   
   maxiter = ListGetInteger( Params,&
       'Nonlinear System Max Iterations',Found,minv=1)
@@ -1704,9 +1701,9 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
 
-      CALL ReadVars(N)
+      CALL ReadVarsHTEQ(N)
       
-      CALL LocalMatrix(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
+      CALL LocalMatrixHTEQ(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
            NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
            NoGWflux, CurrentRockMaterial)
     END DO
@@ -1720,7 +1717,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
         n  = GetElementNOFNodes()
         nd = GetElementNOFDOFs()
         nb = GetElementNOFBDOFs()
-        CALL LocalMatrixBC(  Element, n, nd+nb )
+        CALL LocalMatrixBCHTEQ(  Element, n, nd+nb )
       END IF
     END DO
 
@@ -1740,7 +1737,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   
 CONTAINS
 
-  SUBROUTINE ReadVars(N)
+  SUBROUTINE ReadVarsHTEQ(N)
     INTEGER :: N
     ! Nodal variable dependencies
     NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
@@ -1778,9 +1775,9 @@ CONTAINS
         END IF
       END IF
     END IF
-  END SUBROUTINE ReadVars
+  END SUBROUTINE ReadVarsHTEQ
   
-  SUBROUTINE AssignVars()
+  SUBROUTINE AssignVarsHTEQ()
 
     IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
       N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
@@ -1917,11 +1914,11 @@ CONTAINS
       ComputeGWFlux = .FALSE.
       CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
     END IF
-  END SUBROUTINE AssignVars
+  END SUBROUTINE AssignVarsHTEQ
   
 ! Assembly of the matrix entries arising from the bulk elements
 !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrix( Element, n, nd, NodalTemperature, NodalPressure, &
+  SUBROUTINE LocalMatrixHTEQ( Element, n, nd, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, &
        CurrentRockMaterial )
 !------------------------------------------------------------------------------
@@ -2083,13 +2080,13 @@ CONTAINS
     CALL LCondensate( nd-nb, nb, STIFF, FORCE )
     CALL DefaultUpdateEquations(STIFF,FORCE)
 !------------------------------------------------------------------------------
-  END SUBROUTINE LocalMatrix
+  END SUBROUTINE LocalMatrixHTEQ
 !------------------------------------------------------------------------------
 
 
 ! Assembly of the matrix entries arising from the Neumann and Robin conditions
 !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixBC( Element, n, nd )
+  SUBROUTINE LocalMatrixBCHTEQ( Element, n, nd )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
@@ -2158,7 +2155,7 @@ CONTAINS
     END IF
     CALL DefaultUpdateEquations(STIFF,FORCE)
     !------------------------------------------------------------------------------
-  END SUBROUTINE LocalMatrixBC
+  END SUBROUTINE LocalMatrixBCHTEQ
 !------------------------------------------------------------------------------
 
 ! Perform static condensation in case bubble dofs are present
@@ -2189,7 +2186,6 @@ CONTAINS
 !------------------------------------------------------------------------------
   END SUBROUTINE LCondensate
 !------------------------------------------------------------------------------
-
 !------------------------------------------------------------------------------
 END SUBROUTINE PermafrostHeatTransfer
 !------------------------------------------------------------------------------
@@ -2242,7 +2238,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   WaterContentPerm => Solver % Variable % Perm
   
   ! Read Variables
-  CALL AssignVars()
+  CALL AssignVarsXi()
   Active = GetNOFActive()
   DO t=1,Active
     Element => GetActiveElement(t)      
@@ -2258,8 +2254,8 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
       END IF
       dim = CoordinateSystemDimension()
     END IF
-    CALL ReadVars(N)
-    CALL LocalMatrix(  Element, n, NodalTemperature, NodalPressure, &
+    CALL ReadVarsXi(N)
+    CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, &
          NodalPorosity, NodalSalinity, CurrentRockMaterial)
   END DO
   CALL DefaultFinishBoundaryAssembly()
@@ -2278,7 +2274,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
 CONTAINS
 ! Assembly of the matrix entries arising from the bulk elements
 !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrix( Element, n, NodalTemperature, NodalPressure, &
+  SUBROUTINE LocalMatrixXi( Element, n, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, CurrentRockMaterial )
     !------------------------------------------------------------------------------
     IMPLICIT NONE
@@ -2307,7 +2303,7 @@ CONTAINS
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
-    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixXi)'
 !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
          l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,&
@@ -2375,10 +2371,10 @@ CONTAINS
     
     CALL DefaultUpdateEquations(STIFF,FORCE)
 !------------------------------------------------------------------------------
-  END SUBROUTINE LocalMatrix
+  END SUBROUTINE LocalMatrixXi
   
 !------------------------------------------------------------------------------
-  SUBROUTINE ReadVars(N)
+  SUBROUTINE ReadVarsXi(N)
     INTEGER :: N
     ! Nodal variable dependencies
     NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
@@ -2402,9 +2398,9 @@ CONTAINS
     ELSE
       NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
     END IF
-  END SUBROUTINE ReadVars
+  END SUBROUTINE ReadVarsXi
   
-  SUBROUTINE AssignVars()
+  SUBROUTINE AssignVarsXi()
 
     IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
       N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
@@ -2507,11 +2503,12 @@ CONTAINS
     END IF
 
 
-  END SUBROUTINE AssignVars
+  END SUBROUTINE AssignVarsXi
 END SUBROUTINE PermafrostUnfrozenWaterContent
   
+
 !-----------------------------------------------------------------------------
-!> salinity balance equation for enhanced permafrost model
+!>  salinity transport equation for enhanced permafrost model
 !-----------------------------------------------------------------------------
 !------------------------------------------------------------------------------
 SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
@@ -2571,6 +2568,9 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
   !--------------------------
   DO iter=1,maxiter
 
+    WRITE (Message,'(I5,A,I5,A)') iter,' out of ', maxiter,' max non-linear iterations'
+    CALL INFO(SolverName,Message,Level=6)
+    
     ! System assembly:
     !----------------
     CALL DefaultInitialize()
@@ -2595,8 +2595,7 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
       CALL ReadVarsSalinity(N)
       
       CALL LocalMatrixSalinity(  Element, n, nd+nb, NodalTemperature, NodalTemperatureTimeDer,NodalPressure, &
-           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
-           NoGWflux, CurrentRockMaterial)
+           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWflux, CurrentRockMaterial)
     END DO
 
     CALL DefaultFinishBulkAssembly()
@@ -2614,7 +2613,7 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
 
     CALL DefaultFinishBoundaryAssembly()
     CALL DefaultFinishAssembly()
-    CALL DefaultDirichletBCs()
+    !CALL DefaultDirichletBCs()
 
     ! And finally, solve:
     !--------------------
@@ -2867,7 +2866,7 @@ CONTAINS
     END IF 
 
     CALL GetElementNodes( Nodes )
-    
+ 
     MASS  = 0._dp
     STIFF = 0._dp
     FORCE = 0._dp
@@ -2951,7 +2950,7 @@ CONTAINS
       KcAtIP = 0.0_dp
       KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
       KcXcXcAtIP = GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
-
+            
       DO i=1,DIM
         fluxXcG(i) = (1.0_dp - SalinityAtIP) * Mc /(GasConstant * T0 * dc0) * SUM(KcAtIP(1:DIM,i)*Gravity(1:DIM))
       END DO
@@ -2960,6 +2959,14 @@ CONTAINS
       ReactionWeight = (rhoi0/rhow0) * PorosityAtIP * XixcAtIP * TemperatureTimeDerAtIP
       Weight = IP % s(t) * DetJ
 
+      ! remove that part
+      KcXcXcAtIP = 0.0_dp
+      KcXcXcAtIP(1,1) = 0.0001
+      KcXcXcAtIP(2,2) = 0.0001
+      XiAtIP = 1.0
+      PorosityAtIP = 1.0
+      TimeWeight = 1.0
+      ! ---------------
       DO p=1,nd
         DO q=1,nd
           ! diffusion term (Xi * eta * KcXcXcAtIP.grad(u) - fluxXcG * u),grad(v)):
@@ -2981,7 +2988,8 @@ CONTAINS
 
           ! time derivative (TimeWeight du/dt,v):
           ! ------------------------------
-          MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
+          !MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) + 0.0001 * Weight * Basis(q) * Basis(p)
           !PRINT *,"Mass=TimeWeight * CGTTAtIP", MASS(p,q), TimeWeight
         END DO
       END DO
