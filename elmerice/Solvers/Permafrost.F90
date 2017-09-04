@@ -141,14 +141,14 @@ CONTAINS
   
   SUBROUTINE ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
        ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,GasConstant, Mw,Mc,&
-       DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+       DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     
     IMPLICIT NONE
     TYPE(Element_t) :: Element
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     REAL(KIND=dp), INTENT(IN) :: GasConstant,Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,&
          l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity(3) ! constants that need to have been set
-    INTEGER :: RockMaterialID
+    INTEGER :: RockMaterialID,DIM
     REAL(KIND=dp), INTENT(OUT) :: meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(1:3,1:3),qexp,alphaL,alphaT,As0
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
@@ -178,6 +178,13 @@ CONTAINS
     Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
     eta0 = CurrentRockMaterial % eta0(RockMaterialID)
     Kgwh0(1:3,1:3) = CurrentRockMaterial % Kgwh0(1:3,1:3,RockMaterialID)
+    IF (DIM == 2) THEN
+      Kgwh0(1,2) =  Kgwh0(1,3)
+      Kgwh0(2,2) =  Kgwh0(3,3)
+      Kgwh0(2,1) =  Kgwh0(3,1)
+      Kgwh0(3,1:3) = 0.0_dp
+      Kgwh0(1:3,3) = 0.0_dp
+    END IF
     qexp = CurrentRockMaterial % qexp(RockMaterialID)
     alphaL = CurrentRockMaterial % alphaL(RockMaterialID)
     alphaT = CurrentRockMaterial % alphaT(RockMaterialID)
@@ -977,7 +984,7 @@ CONTAINS
     ! read variable material parameters from CurrentRockMaterial
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-         GasConstant, Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+         GasConstant, Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     
     
     ! Numerical integration:
@@ -1375,7 +1382,7 @@ CONTAINS
       ! read variable material parameters from CurrentRockMaterial
       CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
            ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-           GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+           GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
 
       ! Integrate local stresses:
       ! -------------------------
@@ -1971,7 +1978,7 @@ CONTAINS
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     
     ! Numerical integration:
     !-----------------------
@@ -2323,7 +2330,7 @@ CONTAINS
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     
     ! Numerical integration:
     !-----------------------
@@ -2872,7 +2879,7 @@ CONTAINS
     ! read variable material parameters from CurrentRockMateria
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity)
+         GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     
     ! Numerical integration:
     !-----------------------
