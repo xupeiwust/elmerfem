@@ -197,15 +197,15 @@ SUBROUTINE WhitneyAVSolver( Model,Solver,dt,Transient )
 
   INTEGER, POINTER :: Perm(:)
   INTEGER, ALLOCATABLE :: FluxMap(:)
-  LOGICAL, ALLOCATABLE :: TreeEdges(:)
+  LOGICAL, ALLOCATABLE, SAVE :: TreeEdges(:)
   LOGICAL :: Stat, EigenAnalysis, TG, DoneAssembly=.FALSE., &
          SkipAssembly, ConstantSystem, ConstantBulk, FixJ, FoundRelax, &
          PiolaVersion, SecondOrder, LFact, LFactFound, EdgeBasis, &
          HasTensorReluctivity
   LOGICAL :: SteadyGauge, TransientGauge, TransientGaugeCollected=.FALSE., &
-       HasStabC
+       HasStabC, RegularizeWithMass
 
-  REAL(KIND=dp) :: Relax, gauge_penalize_c, gauge_penalize_m
+  REAL(KIND=dp) :: Relax, gauge_penalize_c, gauge_penalize_m, mass_reg_epsilon
 
   REAL(KIND=dp) :: NewtonTol
   INTEGER :: NewtonIter
@@ -250,6 +250,8 @@ SUBROUTINE WhitneyAVSolver( Model,Solver,dt,Transient )
 
   SteadyGauge = GetLogical(GetSolverParams(), 'Use Lagrange Gauge', Found) .and. .not. Transient
   TransientGauge = GetLogical(GetSolverParams(), 'Use Lagrange Gauge', Found) .and. Transient
+  
+
 
   IF (SteadyGauge) THEN
     CALL Info("WhitneyAVSolver", "Utilizing Lagrange multipliers for gauge condition in steady state computation")
@@ -275,6 +277,15 @@ SUBROUTINE WhitneyAVSolver( Model,Solver,dt,Transient )
       CALL ListAddLogical( SolverParams, 'Linear System Refactorize', .TRUE. )
     END IF
     ! TODO: Check if there is mortar boundaries and report the above in that case only.
+  END IF
+  
+  mass_reg_epsilon = GetCReal(GetSolverParams(), 'Mass regularize epsilon', RegularizeWithMass)
+  IF (RegularizeWithMass .AND. mass_reg_epsilon == 0.0_dp) THEN
+    RegularizeWithMass = .FALSE.
+  END IF
+  IF (RegularizeWithMass) THEN
+    WRITE (Message, *) 'Mass regularization epsilon', mass_reg_epsilon
+    CALL Info("WhitneyAVSolver", Message)
   END IF
 
   gauge_penalize_c = GetCReal(GetSolverParams(), 'Lagrange Gauge Penalization coefficient', HasStabC)
@@ -302,7 +313,7 @@ SUBROUTINE WhitneyAVSolver( Model,Solver,dt,Transient )
 
   IF( PiolaVersion .AND. TG ) THEN
     CALL Fatal('WhitneyAVSolver', &
-        'Tree Gauge cannot be used in conjuction with Piola transformation')
+        'Tree Gauge cannot be used in conjunction with Piola transformation')
   END IF
 
 
@@ -740,13 +751,18 @@ CONTAINS
   CALL DirichletAfromB()
   CALL ConstrainUnused(A)
 
-
+ 
   IF (TG) THEN
-    CALL GaugeTree()
+    IF ( .NOT.ALLOCATED(TreeEdges) ) CALL GaugeTree()
+
     WRITE(Message,*) 'Volume tree edges: ', &
            TRIM(i2s(COUNT(TreeEdges))),     &
              ' of total: ',Mesh % NumberOfEdges
     CALL Info('WhitneyAVSolver: ', Message, Level=5)
+
+    DO i=1,SIZE(TreeEdges)
+      IF(TreeEdges(i)) CALL SetDOFToValue(Solver,i,0._dp)
+    END DO
   END IF
 
   IF (DefaultLineSearch(Converged)) RETURN
@@ -784,7 +800,7 @@ CONTAINS
 10 CONTINUE
 
   IF ( ALLOCATED(FluxMap) ) DEALLOCATE(FluxMap)
-  IF ( ALLOCATED(TreeEdges) ) DEALLOCATE(TreeEdges)
+! IF ( ALLOCATED(TreeEdges) ) DEALLOCATE(TreeEdges)
 
 ! CALL WriteResults  ! debugging helper
 
@@ -1270,8 +1286,10 @@ CONTAINS
     TYPE(ValueList_t), POINTER :: BC
     REAL(KIND=dp) :: Cond1
     TYPE(Element_t), POINTER :: Edge, Boundary, Element
-!------------------------------------------------------------------------------
 
+    INTEGER, ALLOCATABLE :: r_e(:), s_e(:,:), iperm(:)
+    INTEGER :: ssz, status(MPI_STATUS_SIZE), ierr, ii(ParEnv % PEs)
+!------------------------------------------------------------------------------
     IF ( .NOT. ALLOCATED(TreeEdges) ) THEN
       ALLOCATE(TreeEdges(Mesh % NumberOfEdges))
     END IF
@@ -1280,7 +1298,6 @@ CONTAINS
     n = Mesh % NumberOfNodes
     ALLOCATE(Done(n)); Done=.FALSE.
 
-    ! 
     ! Skip Dirichlet BCs in terms of A:
     ! ---------------------------------
     DO i=1,Mesh % NumberOfBoundaryElements
@@ -1315,6 +1332,9 @@ CONTAINS
           Cond1 = GetCReal(GetMaterial(), 'Electric Conductivity',Found)
           IF (cond1==0) condReg(Element % NodeIndexes) = .FALSE.
         END DO
+
+        CALL CommunicateCondReg(Solver,Mesh,CondReg)
+
         Done = Done.OR.CondReg
         DEALLOCATE(CondReg)
       END IF
@@ -1330,7 +1350,12 @@ CONTAINS
       Done(Edge % NodeIndexes)=.TRUE.
     END DO
 
-    !
+    ! 
+    ! already set:
+    ! ------------
+
+    CALL RecvDoneNodesAndEdges(Solver,Mesh,Done,TreeEdges)
+
     ! node -> edge list
     ! -----------------
     Alist => NULL()
@@ -1353,8 +1378,10 @@ CONTAINS
       END DO
       CALL DepthFirstSearch(Alist,Done,Start)
     END DO
-    DEALLOCATE(Done)
     CALL List_FreeMatrix(SIZE(Alist),Alist)
+
+    CALL SendDoneNodesAndEdges(Solver,Mesh,Done,TreeEdges)
+    DEALLOCATE(Done)
 !------------------------------------------------------------------------------
   END SUBROUTINE GaugeTree
 !------------------------------------------------------------------------------
@@ -1958,34 +1985,38 @@ END SUBROUTINE LocalConstraintMatrix
                  ! ------------------------------------------------
                  STIFF(q,p) = STIFF(q,p) + SUM(MATMUL(C, dBasisdx(i,:))*WBasis(j,:))*detJ*IP % s(t)
                END DO
-               IF ( HasVelocity ) THEN
-                 DO j=1,nd-np
-                   q = j+np
-#ifndef __INTEL_COMPILER
-                   STIFF(p,q) = STIFF(p,q) - &
-                        SUM(MATMUL(C,CrossProduct(velo, RotWBasis(j,:)))*dBasisdx(i,:))*detJ*IP % s(t)
-#else
-                   ! Ifort workaround
-                   RotWJ(1:3) = RotWBasis(j,1:3)
-                   ! VeloCrossW(1:3) = CrossProduct(velo(1:3), RotWJ(1:3))
-                   ! CVelo(1:3)=MATMUL(C(1:3,1:3),VeloCrossW(1:3))
-                   CVelo(1:3) = C(1:3,1)*(velo(2)*RotWJ(3) - velo(3)*RotWJ(2))
-                   CVelo(1:3) = CVelo(1:3) + C(1:3,2)*(-velo(1)*RotWJ(3) + velo(3)*RotWJ(1))
-                   CVelo(1:3) = CVelo(1:3) + C(1:3,3)*(velo(1)*RotWJ(2) - velo(2)*RotWJ(1))
-                   CVeloSum = REAL(0,dp)
-                   DO k=1,3
-                      CVeloSum = CVeloSum + CVelo(k)*dBasisdx(i,k)
-                   END DO
-                   STIFF(p,q) = STIFF(p,q) - CVeloSum*detJ*IP % s(t)
-#endif
-                 END DO
-               END IF
              END DO
            END IF
          END IF
+         
 
        END IF ! (.NOT. CoilBody)
 
+       IF ( HasVelocity ) THEN
+         DO i=1,np
+           p = i
+           DO j=1,nd-np
+             q = j+np
+#ifndef __INTEL_COMPILER
+             STIFF(p,q) = STIFF(p,q) - &
+                 SUM(MATMUL(C,CrossProduct(velo, RotWBasis(j,:)))*dBasisdx(i,:))*detJ*IP % s(t)
+#else
+             ! Ifort workaround
+             RotWJ(1:3) = RotWBasis(j,1:3)
+             ! VeloCrossW(1:3) = CrossProduct(velo(1:3), RotWJ(1:3))
+             ! CVelo(1:3)=MATMUL(C(1:3,1:3),VeloCrossW(1:3))
+             CVelo(1:3) = C(1:3,1)*(velo(2)*RotWJ(3) - velo(3)*RotWJ(2))
+             CVelo(1:3) = CVelo(1:3) + C(1:3,2)*(-velo(1)*RotWJ(3) + velo(3)*RotWJ(1))
+             CVelo(1:3) = CVelo(1:3) + C(1:3,3)*(velo(1)*RotWJ(2) - velo(2)*RotWJ(1))
+             CVeloSum = REAL(0,dp)
+             DO k=1,3
+               CVeloSum = CVeloSum + CVelo(k)*dBasisdx(i,k)
+             END DO
+             STIFF(p,q) = STIFF(p,q) - CVeloSum*detJ*IP % s(t)
+#endif
+           END DO
+         END DO
+       END IF
        !-----------------------------------------------------------------
        ! The equations for the H(curl)-conforming part, i.e. the equation 
        ! for the vector potential
@@ -2027,7 +2058,7 @@ END SUBROUTINE LocalConstraintMatrix
            ! Note that the conductivity term <C A, eta> above can be used to 
            ! introduce the anisotropic effect in the laminate stack. However, 
            ! in classical approach of the Low-Frequency model it is set 
-           ! to zero (this is left to the user to deside).
+           ! to zero (this is left to the user to decide).
            ! -------------------------------------------------------------------
            IF (LaminateStackModel=='low-frequency model') THEN
                MASS(p,q) = MASS(p,q) + LocalLamCond * LocalLamthick**2/12d0 * & 
@@ -2061,6 +2092,22 @@ END SUBROUTINE LocalConstraintMatrix
            END DO
          END IF
 
+       END IF
+       
+       ! Add mass-type term to the stiffness matrix for regularization if requested
+       ! This turns the steady state system to "curl nu curl u + epsilon u = J"
+       ! For discussion on regularization see, e.g., "Cassagrande, Hiptmair, Ostrowski, 
+       ! An a priori error estimate for interior penalty discretizations of the Curl-Curl 
+       ! operator on non-conforming meshes" section 6.
+       
+       IF ( RegularizeWithMass ) THEN
+        DO j = 1, nd-np
+          q = j + np
+          DO i = 1, nd-np
+            p = i + np
+            STIFF(p,q) = STIFF(p,q) + mass_reg_epsilon*SUM(WBasis(i,:)*WBasis(j,:))*detJ*IP%s(t)
+          END DO
+        END DO
        END IF
 
     END DO

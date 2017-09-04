@@ -1122,7 +1122,7 @@ CONTAINS
         END IF
 
         ! Basically the solver could be matrix free but still the matrix
-        ! is used here temperarily since it is needed when making the 
+        ! is used here temporarily since it is needed when making the 
         ! permutation vector
         !-----------------------------------------------------------------
         IF( ListGetLogical( SolverParams, 'No Matrix', Found ) ) THEN
@@ -1389,8 +1389,10 @@ CONTAINS
         Solution = 0.0d0
         nrows = SIZE( Solution ) 
         Perm => Solver % Variable % Perm
-        VariableOutput = Solver % Variable % Output
 
+        VariableOutput = ListGetLogical( Solver % Values,'Save Loads',Found )
+        IF( .NOT. Found ) VariableOutput = Solver % Variable % Output
+        
         CALL VariableAdd( Solver % Mesh % Variables, Solver % Mesh, Solver,&
             var_name, Solver % Variable % DOFs, Solution, &
             Solver % Variable % Perm, Output=VariableOutput )
@@ -2078,10 +2080,18 @@ CONTAINS
 !------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------
-!   Intialize equation solvers for new timestep
+!   Initialize equation solvers for new timestep
 !------------------------------------------------------------------------------
     nSolvers = Model % NumberOfSolvers
 
+    IF(TransientSimulation) THEN
+       CoupledMinIter = ListGetInteger( Model % Simulation, &
+            'Steady State Min Iterations', Found )
+
+       CoupledMaxIter = ListGetInteger( Model % Simulation, &
+            'Steady State Max Iterations', Found, minv=1 )
+       IF ( .NOT. Found ) CoupledMaxIter = 1
+    END IF
 
     Scanning = &
       ListGetString( CurrentModel % Simulation, 'Simulation Type', Found ) == 'scanning'
@@ -2354,6 +2364,17 @@ CONTAINS
 CONTAINS
 
     SUBROUTINE SolveCoupled()
+
+    TYPE(Mesh_t), POINTER, SAVE :: PrevMesh
+    INTEGER, SAVE :: PrevMeshNoNodes
+    LOGICAL, SAVE :: FirstTime=.TRUE.
+
+    IF(FirstTime) THEN
+      PrevMesh => Model % Mesh
+      PrevMeshNoNodes = Model % Mesh % NumberOfNodes
+      FirstTime = .FALSE.
+    END IF
+
 !------------------------------------------------------------------------------
 
      DO i=1,CoupledMaxIter
@@ -2521,7 +2542,16 @@ CONTAINS
          END DO
 !------------------------------------------------------------------------------
          CALL ListPopNamespace()
-         Model % Mesh % Changed = .FALSE.
+
+         !Check if the mesh changed - should do this elsewhere too?
+         IF(ASSOCIATED(Model % Mesh, PrevMesh) .AND. &
+              Model % Mesh % NumberOfNodes == PrevMeshNoNodes) THEN
+           Model % Mesh % Changed = .FALSE.
+         ELSE
+           PrevMesh => Model % Mesh
+           PrevMeshNoNodes = Model % Mesh % NumberOfNodes
+           Model % Mesh % Changed = .TRUE.
+         END IF
 
          IF( DivergenceExit ) EXIT
 
