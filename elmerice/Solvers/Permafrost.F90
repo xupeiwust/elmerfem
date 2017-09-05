@@ -460,7 +460,7 @@ CONTAINS
     CALL FATAL(FunctionName,"Stopping simulation")    
   END FUNCTION ReadPermafrostRockMaterial
   
-  RECURSIVE FUNCTION groundwaterflux(Salinity,Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhow,rhoc,DIM) RESULT(JgwD)
+  FUNCTION groundwaterflux(Salinity,Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhow,rhoc,DIM) RESULT(JgwD)
     IMPLICIT NONE
     REAL (KIND=dp), INTENT(IN) :: Salinity,Kgwpp(3,3),KgwpT(3,3),Kgw(3,3),gradp(3),gradT(3),Gravity(3),&
          rhow,rhoc
@@ -478,7 +478,7 @@ CONTAINS
     JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + gFlux(1:DIM)    
   END FUNCTION groundwaterflux
   
-  RECURSIVE REAL FUNCTION delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
+  REAL (KIND=dp) FUNCTION delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant
     delta = 0.5_dp*l0*DeltaT/T0 &
@@ -486,7 +486,7 @@ CONTAINS
     delta = delta*(eps*(1.0_dp - eps)/(2.0_dp*eps -1.0_dp))* Mw/(GasConstant*(T0 + 0.5_dp*DeltaT))
   END FUNCTION delta
 
-  RECURSIVE REAL FUNCTION deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,dw1,dw2,&
+  REAL (KIND=dp) FUNCTION deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,dw1,dw2,&
        GasConstant,Temperature,Pressure,Salinity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,dw1,dw2,&
@@ -504,27 +504,27 @@ CONTAINS
          - GasConstant * Temperature *(dw1 * relSalinity + dw2 * (relSalinity**2.0_dp))/Mc
   END FUNCTION deltaG
 
-  RECURSIVE REAL FUNCTION B1(delta,ew,Mw,GasConstant,Temperature)
+  REAL (KIND=dp) FUNCTION B1(delta,ew,Mw,GasConstant,Temperature)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: delta,ew,Mw,GasConstant,Temperature
     B1 = 1.0_dp/(ew + delta)
     B1 = B1*Mw/(GasConstant*Temperature)
   END FUNCTION B1
 
-  RECURSIVE REAL FUNCTION B2(delta,deltaG,GasConstant,Mw,Temperature)
+  REAL  (KIND=dp) FUNCTION B2(delta,deltaG,GasConstant,Mw,Temperature)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: delta,deltaG,Mw,GasConstant,Temperature
     B2 = Mw*deltaG/(GasConstant*Temperature*delta)
   END FUNCTION B2
 
-  RECURSIVE REAL FUNCTION D1(delta,ew)
+  REAL (KIND=dp) FUNCTION D1(delta,ew)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: delta,ew
     ! local
     D1 = delta/(ew + delta)
   END FUNCTION D1
 
-  RECURSIVE REAL FUNCTION Xi(B1,B2,D1,D2,Xi0)
+  REAL (KIND=dp) FUNCTION Xi(B1,B2,D1,D2,Xi0)
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0
     Xi= Xi0/(1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1)) &
          + (1.0_dp - Xi0)/(1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))
@@ -532,7 +532,7 @@ CONTAINS
     IF (Xi > 1.0_dp) Xi = 1.0_dp
   END FUNCTION Xi
 
-  RECURSIVE REAL FUNCTION XiT(B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,&
+  REAL (KIND=dp) FUNCTION XiT(B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,&
        l0,T0,GasConstant,Temperature, Pressure)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,Temperature, Pressure
@@ -545,7 +545,7 @@ CONTAINS
     XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) *Mw*aux3/(T0*GasConstant*Temperature)
   END FUNCTION XiT
 
-  RECURSIVE REAL FUNCTION XiP(B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature)
+  REAL (KIND=dp) FUNCTION XiP(B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature
     !local
@@ -557,7 +557,7 @@ CONTAINS
          *((1.0_dp/rhoi0) - (1.0_dp/rhow0))* Mw/(GasConstant*Temperature)
   END FUNCTION XiP
 
-  RECURSIVE REAL FUNCTION XiXc(B1,B2,D1,D2,Xi0,Mw,Mc,ew,dw1,dw2,delta,GasConstant,Salinity)
+  REAL (KIND=dp) FUNCTION XiXc(B1,B2,D1,D2,Xi0,Mw,Mc,ew,dw1,dw2,delta,GasConstant,Salinity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,Mw,Mc,ew,dw1,dw2,delta,GasConstant,Salinity
     !local
@@ -574,7 +574,7 @@ CONTAINS
     END IF
   END FUNCTION XiXc
 
-  RECURSIVE REAL FUNCTION XiEta(B1,B2,D1,D2,Xi0,eta0,Porosity)
+  REAL (KIND=dp) FUNCTION XiEta(B1,B2,D1,D2,Xi0,eta0,Porosity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,eta0,Porosity
     !local
@@ -593,14 +593,14 @@ CONTAINS
     END IF
   END FUNCTION XiEta
   
-  RECURSIVE FUNCTION GetKAlphaTh(kalpha0th,balpha,T0,Temperature)RESULT(kalphath)
+  FUNCTION GetKAlphaTh(kalpha0th,balpha,T0,Temperature)RESULT(kalphath)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: kalpha0th,balpha,T0,Temperature
     REAL(KIND=dp) :: kalphath
     kalphath = kalpha0th/( 1.0_dp + balpha*(Temperature - T0)/T0)
   END FUNCTION GetKAlphaTh
 
-  RECURSIVE FUNCTION GetKGTT(ksth,kwth,kith,kcth,Xi,&
+  FUNCTION GetKGTT(ksth,kwth,kith,kcth,Xi,&
        Salinity,Porosity,meanfactor)RESULT(KGTT)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ksth,kwth,kith,kcth,Xi,&
@@ -615,7 +615,7 @@ CONTAINS
     KGTT = unittensor*((1.0_dp - meanfactor)*KGhTT + meanfactor * KGaTT)
   END FUNCTION GetKGTT
 
-  RECURSIVE FUNCTION GetCGTT(Xi,XiT,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
+  FUNCTION GetCGTT(Xi,XiT,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
        Porosity,Salinity)RESULT(CGTT)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: Xi,XiT,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,&
@@ -628,14 +628,14 @@ CONTAINS
          + rhoi0*l0*Porosity*XiT
   END FUNCTION GetCGTT
   
-  RECURSIVE FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
+  FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhow0,rhoc0,cw0,cc0,Salinity
     REAL(KIND=dp) :: CgwTT
     CgwTT = (1.0_dp - Salinity)*rhow0*cw0 + Salinity*rhoc0*cc0
   END FUNCTION GetCgwTT
 
-  RECURSIVE REAL FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0)
+  REAL (KIND=dp) FUNCTION fTildewT(B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,Temperature,D1,delta,ew,l0,cw0,ci0,T0,Xi,Xi0
     REAL(KIND=dp) :: aux1, aux2, aux3
@@ -649,7 +649,7 @@ CONTAINS
     END IF
   END FUNCTION fTildewT
 
-  RECURSIVE REAL FUNCTION fTildewp(B1,D1,delta,ew,rhow0,rhoi0,Xi,Xi0)
+  REAL (KIND=dp) FUNCTION fTildewp(B1,D1,delta,ew,rhow0,rhoi0,Xi,Xi0)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: B1,D1,delta,ew,rhow0,rhoi0,Xi,Xi0
     REAL(KIND=dp) :: aux1, aux2, aux3
@@ -663,18 +663,25 @@ CONTAINS
     END IF
   END FUNCTION fTildewp
   
-  RECURSIVE FUNCTION GetKgw(mu0,mu,Xi,rhow0,qexp,Kgwh0,MinKgw)RESULT(Kgw)
+  FUNCTION GetKgw(mu0,mu,Xi,rhow0,qexp,Kgwh0,MinKgw)RESULT(Kgw)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: mu0,Xi,rhow0,qexp,Kgwh0(3,3),MinKgw,mu
+    !    REAL(KIND=dp), INTENT(IN) :: mu0,Xi,rhow0,qexp,Kgwh0(3,3),MinKgw,mu
+    REAL(KIND=dp) :: mu0,Xi,rhow0,qexp,Kgwh0(3,3),MinKgw,mu
     REAL(KIND=dp) :: Kgw(3,3), factor
-    REAL(KIND=dp), PARAMETER :: gval=9.81 !hard coded, so match Kgwh0 with this value
+    REAL(KIND=dp), PARAMETER :: gval=9.81_dp !hard coded, so match Kgwh0 with this value
+    INTEGER :: I, J
     IF (mu <= 0.0_dp) &
          CALL FATAL("Permafrost(GetKgw)","Unphysical porosity detected")
     factor = (mu0/mu)*(Xi**qexp)/(rhow0*gval)
-    Kgw = MAX(Kgwh0*factor,MinKgw)
+    Kgw = 0.0_dp
+    DO I=1,3
+      DO J=1,3
+        Kgw(i,j) = MAX(Kgwh0(i,j)*factor,MinKgw)
+      END DO
+    END DO
   END FUNCTION GetKgw
   
-  RECURSIVE FUNCTION GetKgwpT(rhow0,fTildewT,Kgw)RESULT(KgwpT)
+  FUNCTION GetKgwpT(rhow0,fTildewT,Kgw)RESULT(KgwpT)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewT,Kgw(3,3)
     REAL(KIND=dp) :: KgwpT(3,3), factor
@@ -682,7 +689,7 @@ CONTAINS
     KgwpT = Kgw*factor
   END FUNCTION GetKgwpT
 
-  RECURSIVE FUNCTION GetKgwpp(rhow0,fTildewp,Kgw)RESULT(Kgwpp)
+  FUNCTION GetKgwpp(rhow0,fTildewp,Kgw)RESULT(Kgwpp)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhow0,fTildewp,Kgw(3,3)
     REAL(KIND=dp) :: Kgwpp(3,3), factor
@@ -690,7 +697,7 @@ CONTAINS
     Kgwpp = Kgw*factor
   END FUNCTION GetKgwpp
   
-  RECURSIVE FUNCTION GetKc(alphaL,alphaT,Dm0,Xi,absJgwD,eL,Porosity)RESULT(Kc)
+  FUNCTION GetKc(alphaL,alphaT,Dm0,Xi,absJgwD,eL,Porosity)RESULT(Kc)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: alphaL,alphaT,Dm0,Xi,absJgwD,eL(3),Porosity
     REAL(KIND=dp) :: Kc(3,3), unittensor(3,3), aux
@@ -710,7 +717,7 @@ CONTAINS
     END DO       
   END FUNCTION GetKc
   
-  RECURSIVE FUNCTION GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,Kc,Temperature,Salinity,Pressure)RESULT(KcXcXc)
+  FUNCTION GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,Kc,Temperature,Salinity,Pressure)RESULT(KcXcXc)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: T0,rhoc0,dw1,dw2,dc0,dc1,Kc(3,3),Temperature,Salinity,Pressure
     REAL(KIND=dp) :: KcXcXc(3,3), aux, relSalinity
@@ -763,11 +770,14 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,&
        NodalPorosity,NodalTemperature,NodalSalinity,NodalPressure
   !------------------------------------------------------------------------------
+  CALL DefaultStart()
+
   Params => GetSolverParams()
 
   Pressure => Solver % Variable % Values
   PressurePerm => Solver % Variable % Perm
   VarName = Solver % Variable % Name
+  
   IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
     N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
     IF (AllocationsDone) &
@@ -779,9 +789,11 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
     END IF
     AllocationsDone = .TRUE.
   END IF
+  
   maxiter = ListGetInteger( Params, &
        'Nonlinear System Max Iterations',Found,minv=1)
   IF(.NOT. Found ) maxiter = 1
+  
   ! find variables for dependencies
   !--------------------------------
   TemperatureName = ListGetString(Params, &
@@ -845,10 +857,11 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   ! Nonlinear iteration loop:
   !--------------------------
   DO iter=1,maxiter
+    CALL DefaultInitialize()
     !------------------------------------------------------------------------------
     Active = Solver % NumberOfActiveElements
     DO t=1,Active
-      Element => GetActiveElement(t,Solver)
+      Element => GetActiveElement(t)
       IF (.NOT.ASSOCIATED(Element)) CYCLE
       ! cycle halo elements
       !-------------------
@@ -893,7 +906,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
         NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
       END IF
 
-
+      ! compose element-wise contributions to matrix and R.H.S
       CALL LocalMatrixDarcy(  Element, N, ND+NB, NodalPressure, NodalTemperature, &
            NodalPorosity, NodalSalinity, CurrentRockMaterial)!, NodalGWflux
     END DO
@@ -914,14 +927,16 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
     CALL DefaultFinishAssembly()
     CALL DefaultDirichletBCs()
 
-    ! And finally, solve:
+    !Solve the system:
     !--------------------
     Norm = DefaultSolve()
     IF( Solver % Variable % NonlinConverged == 1 ) EXIT
 
     
   END DO
-
+  
+  CALL DefaultFinish()
+  
 CONTAINS
   ! PermafrostGroundWaterFlow : Assembly of the matrix entries arising from the bulk elements 
 
@@ -950,7 +965,7 @@ CONTAINS
          
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
     REAL(Kind=dp) , POINTER :: gWork(:,:)
-    INTEGER :: i,t,p,q,DIM, RockMaterialID
+    INTEGER :: i,t,p,q,DIM, RockMaterialID,output=1
     LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
@@ -959,7 +974,7 @@ CONTAINS
          FunctionName='Permafrost (LocalMatrixDarcy)'
 
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,bw,bi,bc, Gravity
+         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,dw1,dw2,dc0,dc1,bw,bi,bc, MinKgw, Gravity
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       ConstantsRead = ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
@@ -973,11 +988,11 @@ CONTAINS
     FORCE = 0._dp
     LOAD = 0._dp
 
-    BodyForce => GetBodyForce()
+    BodyForce => GetBodyForce(Element)
     IF ( ASSOCIATED(BodyForce) ) THEN
       LOAD(1:n) = GetReal( BodyForce,'Groundwater source', Found )   
     END IF
-
+    
     ! read variable material parameters from CurrentRockMaterial
     CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
          ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
@@ -1006,6 +1021,8 @@ CONTAINS
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
 
+      
+      
       ! functions at IP
       deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
            TemperatureAtIP,PressureAtIP,SalinityAtIP)
@@ -1015,10 +1032,29 @@ CONTAINS
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
       KgwAtIP = 0.0_dp
+      !PRINT *,mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw
+      !1.5670000000000000E-003   1.5670000000000000E-003  0.99081987142562866        999.89999999999998        4.0000000000000000        5.4739999999999997E-004   0.0000000000000000        0.0000000000000000        0.0000000000000000        5.4739999999999997E-004   0.0000000000000000        0.0000000000000000        0.0000000000000000        0.0000000000000000        9.9999999999999998E-013
+      !mu0 = 1.5670000000000000D-003
+      !XiAtIP = 0.99081987142562866
+      !rhow0 = 999.89999999999998
+      !qexp = 4.0
+      !MinKgw = 9.9999999999999998E-12
+      !Kgwh0 = 0.0_dp
+      !Kgwh0(1,1) = 5.4739999999999997D-004
+      !Kgwh0(2,2) = 5.4739999999999997D-004
+      !
+      IF (output == iter) THEN
+        PRINT *,"iter=", iter, mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw
+        output = iter + 1
+      END IF
       KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
+      !KgwAtIP(1,1) = 1.0d-04
+      !KgwAtIP(2,2) = 1.0d-04
+      KgwpTAtIP = 0.0_dp
       KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
+      KgwppAtIP = 0.0_dp
       KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
-
+      
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       DO p=1,nd
@@ -1030,9 +1066,10 @@ CONTAINS
           ! -----------------------------------
           DO i=1,DIM
             DO j=1,DIM
-              StiffPQ = StiffPQ + KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
+              StiffPQ = StiffPQ + KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)              
             END DO
           END DO
+          !StiffPQ = 1.0d-04 *  SUM(dBasisdx(p,1:DIM)* dBasisdx(q,1:DIM))
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
         END DO
       END DO
@@ -1043,12 +1080,14 @@ CONTAINS
       END DO
       DO i=1,DIM
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-        fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0) * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
+        fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0)&
+             * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
       END DO
       DO p=1,nd     
         !FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
-        FORCE(p) = FORCE(p) + Weight * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
-      END DO
+        !FORCE(p) = FORCE(p) + Weight * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
+        FORCE(p) = FORCE(p) - 1.0d-04 * 9.81 * dBasisdx(p,DIM)
+      END DO      
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
@@ -1222,7 +1261,7 @@ SUBROUTINE PermafrostGroundwaterFlux( Model,Solver,dt,Transient )
   Dofs = Dim
 
   ! Read Variables
-  CALL AssignVars()
+  CALL AssignVarsGWFlux()
 
   !-------------------------------------------------------------------------------
   ! If only one component is used use the scalar equation, otherwise use an
@@ -1461,7 +1500,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
 
-  SUBROUTINE AssignVars()
+  SUBROUTINE AssignVarsGWFlux()
     ! find variables for dependencies
     !--------------------------------
     TemperatureName = ListGetString(SolverParams, &
@@ -1539,7 +1578,7 @@ CONTAINS
       Salinity => SalinityVar % Values
       SalinityPerm => SalinityVar % Perm
     END IF
-  END SUBROUTINE AssignVars
+  END SUBROUTINE AssignVarsGWFlux
   !------------------------------------------------------------------------------
 END SUBROUTINE PermafrostGroundwaterFlux
 !------------------------------------------------------------------------------
