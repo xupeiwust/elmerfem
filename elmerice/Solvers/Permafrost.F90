@@ -1784,12 +1784,12 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       nb = GetElementNOFBDOFs()
       PhaseChangeModel = ListGetString(Params, &
            'Permafrost Phase Change Model', Found )
-      
+
       CALL ReadVarsHTEQ(N)
 
       CALL LocalMatrixHTEQ(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
            NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
-           NoGWflux, CurrentRockMaterial)
+           NoGWflux, CurrentRockMaterial, PhaseChangeModel)
     END DO
 
     CALL DefaultFinishBulkAssembly()
@@ -2010,7 +2010,7 @@ CONTAINS
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixHTEQ( Element, n, nd, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, &
-       CurrentRockMaterial )
+       CurrentRockMaterial,PhaseChangeModel )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
@@ -2018,6 +2018,7 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
     LOGICAL :: ComputeGWFlux,NoGWFlux
+    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP  ! function values needed for KGTT
@@ -2087,16 +2088,25 @@ CONTAINS
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
 
       ! functions at IP
-      deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
-           TemperatureAtIP,PressureAtIP,SalinityAtIP)
-      B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
-      B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
-      Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-      XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-      XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
-           deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
-      XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
-           deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+      SELECT CASE(PhaseChangeModel)
+      CASE('Andersson')
+        XiAtIP= &
+             GetXiAndersson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        !XiTAtIP
+        !XiPAtIP          
+      CASE DEFAULT
+        deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
+        B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
+        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
+        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+      END SELECT
+      
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
       kwthAtIP = GetKalphath(kw0th,bw,T0,TemperatureAtIP)
       kithAtIP = GetKalphath(ki0th,bi,T0,TemperatureAtIP)
@@ -2111,10 +2121,10 @@ CONTAINS
       !KGTTAtIP(2,2)= 6.3699416475296022_dp !REMOVE
       
       
-      !CGTTAtIP = &
-      !     GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
-      !     PorosityAtIP,SalinityAtIP)
-      CGTTAtIP = 1240973.25_dp !REMOVE
+      CGTTAtIP = &
+           GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
+           PorosityAtIP,SalinityAtIP)
+      !CGTTAtIP = 1240973.25_dp !REMOVE
       CgwTTAtIP = GetCgwTT(rhow0,rhoc0,cw0,cc0,SalinityAtIP)
 
       ! compute advection term
