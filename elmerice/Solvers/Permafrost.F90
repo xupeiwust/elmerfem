@@ -1782,8 +1782,12 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       n  = GetElementNOFNodes()
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
-      PhaseChangeModel = ListGetString(Params, &
+      PhaseChangeModel = ListGetString(Material, &
            'Permafrost Phase Change Model', Found )
+      IF (Found) THEN
+        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
 
       CALL ReadVarsHTEQ(N)
 
@@ -2090,10 +2094,12 @@ CONTAINS
       ! functions at IP
       SELECT CASE(PhaseChangeModel)
       CASE('Andersson')
-        XiAtIP= &
+        XiAtIP = &
              GetXiAndersson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-        !XiTAtIP
-        !XiPAtIP          
+        XiTAtIP = &
+             XiAnderssonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiPAtIP   = &
+             XiAnderssonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT
         deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
              TemperatureAtIP,PressureAtIP,SalinityAtIP)
