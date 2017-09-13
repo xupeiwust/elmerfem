@@ -526,36 +526,36 @@ CONTAINS
 
   FUNCTION GetXiAnderson(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
     REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
-    REAL(KIND=dp) :: PressureMeltingPoint, XiAnderson
+    REAL(KIND=dp) :: Tstar, XiAnderson
     IF (Porosity <= 0.0) &
          CALL FATAL("Permafrost(GetXiAnderson)","Zero or negative porosity detected")
-    PressureMeltingPoint = T0 - Beta * Pressure
-    XiAnderson = MIN((rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity),1.0_dp)
+    Tstar = T0 - Beta * Pressure - Temperature
+    XiAnderson =  MAX(MIN((rhos0/rhow)*(A*(Tstar**B)/Porosity),1.0_dp),0.0_dp)
   END FUNCTION GetXiAnderson
 
   REAL (KIND=dp) FUNCTION XiAndersonT(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
     REAL(KIND=dp), INTENT(IN) :: Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
-    REAL(KIND=dp) :: PressureMeltingPoint
+    REAL(KIND=dp) :: Tstar
     IF (Porosity <= 0.0) &
              CALL FATAL("Permafrost(GetXiAndersonT)","Zero or negative porosity detected")
-    PressureMeltingPoint = T0 - Beta * Pressure
-    IF (Xi == 1) THEN
+    Tstar = T0 - Beta * Pressure - Temperature
+    IF (Xi == 1.0_dp .OR. Xi == 0.0_dp) THEN
       XiAndersonT = 0.0_dp
     ELSE
-      XiAndersonT = (rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity)
+      XiAndersonT = -(rhos0/rhow)*(A*(Tstar**(B - 1.0_dp)))/Porosity
     END IF
   END FUNCTION XiAndersonT
   
   REAL (KIND=dp) FUNCTION XiAndersonP(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
     REAL(KIND=dp), INTENT(IN) :: Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
-    REAL(KIND=dp) :: PressureMeltingPoint
+    REAL(KIND=dp) :: Tstar
     IF (Porosity <= 0.0_dp) &
              CALL FATAL("Permafrost(GetXiAndersonT)","Zero or negative porosity detected")
-    PressureMeltingPoint = T0 - Beta * Pressure
-    IF (Xi == 1) THEN
+    Tstar = T0 - Beta * Pressure - Temperature
+    IF (Xi == 1_dp .OR. Xi == 0.0_dp) THEN
       XiAndersonP = 0.0_dp
     ELSE
-      XiAndersonP = -(rhos0/rhow)*(A*(PressureMeltingPoint**B)/(Porosity*Porosity))
+      XiAndersonP = -Beta*(rhos0/rhow)*(A*(Tstar**(B - 1.0_dp)))/Porosity
     END IF
   END FUNCTION XiAndersonP
   
@@ -637,6 +637,54 @@ CONTAINS
     END IF
   END FUNCTION XiEta
 
+  REAL (KIND=dp) FUNCTION rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhos0,TemperatureAtIP,PressureAtIP
+    rhos = rhos0
+  END FUNCTION rhos
+  
+  REAL (KIND=dp) FUNCTION rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhow0,TemperatureAtIP,PressureAtIP
+    rhow = rhow0
+  END FUNCTION rhow
+
+    REAL (KIND=dp) FUNCTION rhoi(rhoi0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhoi0,TemperatureAtIP,PressureAtIP
+    rhoi = rhoi0
+  END FUNCTION rhoi
+  
+  REAL (KIND=dp) FUNCTION rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhoc0,TemperatureAtIP,PressureAtIP
+    rhoc = rhoc0
+  END FUNCTION rhoc
+  
+  REAL (KIND=dp) FUNCTION cs(cs0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: cs0,TemperatureAtIP,PressureAtIP
+    cs = cs0
+  END FUNCTION cs
+  
+  REAL (KIND=dp) FUNCTION cw(cw0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: cw0,TemperatureAtIP,PressureAtIP
+    cw = cw0
+  END FUNCTION cw
+
+  REAL (KIND=dp) FUNCTION ci(ci0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: ci0,TemperatureAtIP,PressureAtIP
+    ci = ci0
+  END FUNCTION ci
+  
+  REAL (KIND=dp) FUNCTION cc(cc0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: cc0,TemperatureAtIP,PressureAtIP
+    cc = cc0
+  END FUNCTION cc
+  
   FUNCTION GetKAlphaTh(kalpha0th,balpha,T0,Temperature)RESULT(kalphath)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: kalpha0th,balpha,T0,Temperature
@@ -722,7 +770,12 @@ CONTAINS
     factor = (mu0/mu)*(Xi**qexp)/(rhow0*gval)
     Kgw = 0.0_dp
     DO I=1,3
-      Kgw(i,i) = MAX(Kgwh0(i,i)*factor,MinKgw)
+      DO J=1,3
+        Kgw(i,j) = Kgwh0(i,j)*factor
+      END DO
+    END DO
+    DO I=1,3
+      Kgw(i,i) = MAX(Kgw(i,i),MinKgw)
     END DO
   END FUNCTION GetKgw
 
@@ -1011,6 +1064,7 @@ CONTAINS
     REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
          l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity(3)    ! constants read only once
+    REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,csAtIP,cwAtIP,ciAtIP,ccAtIP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,StiffPQ
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
 
@@ -1092,18 +1146,26 @@ CONTAINS
         XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       END SELECT
+
+      !Materialproperties needed at IP
+      rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhowAtIP = rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhoiAtIP = rhow(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !rhocAtIP = rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !cwAtIP   = cw(cw0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !ciAtIP   = ci(ci0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !ccAtIP   = cc(cc0,TemperatureAtIP,PressureAtIP)  !!! NEW
       
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
       
       KgwAtIP = 0.0_dp
-      KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
+      KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw) ! NB it is meant to be rhow0 and kghh0
       KgwpTAtIP = 0.0_dp
-      KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
+      KgwpTAtIP = GetKgwpT(rhowAtIP,fTildewTATIP,KgwAtIP)
       KgwppAtIP = 0.0_dp
-      !IF (fTildewpATIP .NE. 0.0_dp)  PRINT *,iter,fTildewpATIP
-
-      KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
+      KgwppAtIP = GetKgwpp(rhowAtIP,fTildewpATIP,KgwAtIP)
 
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
@@ -1124,22 +1186,23 @@ CONTAINS
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
         END DO
       END DO
-
-      ! body forcexs
-      DO i=1,DIM
-        gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
-      END DO
-      DO i=1,DIM
-        fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-        !fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0)&
-        !     * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
-        fluxgAtIP(i) =rhow0*SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
-      END DO
-      DO p=1,nd     
-        !FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
-        FORCE(p) = FORCE(p) + Weight * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
-      END DO
-      FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      !IF (XiAtIP > 0.0_dp) THEN
+        ! body forcexs
+        DO i=1,DIM
+          gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
+        END DO
+        DO i=1,DIM
+          !fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+          fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhowAtIP  + SalinityAtIP * rhocAtIP)& 
+               * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!! NEW
+          !fluxgAtIP(i) =rhow0*SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
+        END DO
+        DO p=1,nd     
+          FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
+          FORCE(p) = FORCE(p) + Weight * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
+        END DO
+        FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      !END IF
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
@@ -2077,6 +2140,7 @@ CONTAINS
     REAL(KIND=dp) :: ks0th,ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw, Mc, DeltaT, T0,p0,rhow0,rhoi0,rhoc0,&
          l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc    ! constants read only once
+    REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,csAtIP,cwAtIP,ciAtIP,ccAtIP ! material properties at IP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          GWfluxAtIP(3),StiffPQ, meanfactor
@@ -2135,7 +2199,8 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
-
+            
+      
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('Anderson')
@@ -2158,34 +2223,36 @@ CONTAINS
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       END SELECT
 
+      !Materialproperties needed at IP
+      rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhowAtIP = rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhoiAtIP = rhow(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhocAtIP = rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      cwAtIP   = cw(cw0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      ciAtIP   = ci(ci0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      ccAtIP   = cc(cc0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      
       ! heat conductivity at IP
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
       kwthAtIP = GetKalphath(kw0th,bw,T0,TemperatureAtIP)
       kithAtIP = GetKalphath(ki0th,bi,T0,TemperatureAtIP)
-      kcthAtIP = GetKalphath(kc0th,bc,T0,TemperatureAtIP)
+      kcthAtIP = GetKalphath(kc0th,bc,T0,TemperatureAtIP)      
       KGTTAtIP = GetKGTT(ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,XiAtIP,&
            SalinityATIP,PorosityAtIP,meanfactor)
-      !KGTTAtIP = GetKGTT(ks0th,kw0th,ki0th,kc0th,XiAtIP,& ! REMOVE
-      !     SalinityATIP,PorosityAtIP,meanfactor) ! REMOVE
-      !
-      !KGTTAtIP = 0.0_dp !REMOVE
-      !KGTTAtIP(1,1)= 6.3699416475296022_dp !REMOVE
-      !KGTTAtIP(2,2)= 6.3699416475296022_dp !REMOVE
       
       ! heat capacities at IP
       CGTTAtIP = &
-           GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
+           GetCGTT(XiAtIP,XiTAtIP,rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,cwAtIP,ciAtIP,csAtIP,ccAtIP,l0,&
            PorosityAtIP,SalinityAtIP)
-      !CGTTAtIP = 1240973.25_dp !REMOVE
-      CgwTTAtIP = GetCgwTT(rhow0,rhoc0,cw0,cc0,SalinityAtIP)
+      CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP)
 
-      ! compute advection term
+      ! compute groundwater flux for advection term
       IF (.NOT.ComputeGWFlux .AND. .NOT.NoGWFlux) THEN
         JgwDAtIP = 0.0_dp
         DO I=1,DIM
           JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
         END DO
-        !PRINT *,"JgwDAtIP",JgwDAtIP(1:DIM),"Nodal",NodalGWflux(1:DIM,1:N)
       ELSE IF(ComputeGWFlux .AND. NoGWFlux) THEN        
         fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
         fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
@@ -2210,7 +2277,6 @@ CONTAINS
       ELSE ! nothing at all is computed or read in
         JgwDAtIP(1:DIM) = 0.0_dp
       END IF
-      !JgwDAtIP(1:DIM) = 0.0_dp !!!REMOVE !!!
 
       Weight = IP % s(t) * DetJ
 
@@ -2224,9 +2290,9 @@ CONTAINS
           END DO
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
-          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-          !     STIFF (p,q) = STIFF(p,q) + Weight * &
-          !     CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
+               STIFF (p,q) = STIFF(p,q) + Weight * &
+               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
@@ -2234,7 +2300,7 @@ CONTAINS
         END DO
       END DO
 
-      !FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
