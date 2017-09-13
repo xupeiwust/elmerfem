@@ -542,7 +542,7 @@ CONTAINS
     IF (Xi == 1.0_dp .OR. Xi == 0.0_dp) THEN
       XiAndersonT = 0.0_dp
     ELSE
-      XiAndersonT = -(rhos0/rhow)*(A*(Tstar**(B - 1.0_dp)))/Porosity
+      XiAndersonT = -(rhos0/rhow)*(A*B*(Tstar**(B - 1.0_dp)))/Porosity
     END IF
   END FUNCTION XiAndersonT
   
@@ -555,9 +555,22 @@ CONTAINS
     IF (Xi == 1_dp .OR. Xi == 0.0_dp) THEN
       XiAndersonP = 0.0_dp
     ELSE
-      XiAndersonP = -Beta*(rhos0/rhow)*(A*(Tstar**(B - 1.0_dp)))/Porosity
+      XiAndersonP = -Beta*(rhos0/rhow)*(A*B*(Tstar**(B - 1.0_dp)))/Porosity
     END IF
   END FUNCTION XiAndersonP
+
+!  REAL (KIND=dp) FUNCTION XiAndersonEta(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
+!    REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
+!    REAL(KIND=dp) :: Tstar
+!    IF (Porosity <= 0.0) &
+!         CALL FATAL("Permafrost(GetXiAndersonEta)","Zero or negative porosity detected")
+!    Tstar = T0 - Beta * Pressure - Temperature
+!    IF (Xi == 1_dp .OR. Xi == 0.0_dp) THEN
+!      XiAndersonEta = 0.0_dp
+!    ELSE
+!      XiAndersonEta =  -(rhos0/rhow)*(A*(Tstar**B)/(Porosity*Porosity)
+!    END IF
+!  END FUNCTION GetXiAnderson
   
   FUNCTION GetXi0Tilde(Xi0,mu0,Porosity) RESULT(Xi0tilde)
     REAL(KIND=dp), INTENT(IN) :: Xi0,mu0,Porosity
