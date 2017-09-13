@@ -524,40 +524,40 @@ CONTAINS
     D1 = delta/(ew + delta)
   END FUNCTION D1
 
-  FUNCTION GetXiAndersson(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAndersson)
+  FUNCTION GetXiAnderson(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
     REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
-    REAL(KIND=dp) :: PressureMeltingPoint, XiAndersson
+    REAL(KIND=dp) :: PressureMeltingPoint, XiAnderson
     IF (Porosity <= 0.0) &
-         CALL FATAL("Permafrost(GetXiAndersson)","Zero or negative porosity detected")
+         CALL FATAL("Permafrost(GetXiAnderson)","Zero or negative porosity detected")
     PressureMeltingPoint = T0 - Beta * Pressure
-    XiAndersson = MIN((rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity),1.0_dp)
-  END FUNCTION GetXiAndersson
+    XiAnderson = MIN((rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity),1.0_dp)
+  END FUNCTION GetXiAnderson
 
-  REAL (KIND=dp) FUNCTION XiAnderssonT(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
+  REAL (KIND=dp) FUNCTION XiAndersonT(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
     REAL(KIND=dp), INTENT(IN) :: Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
     REAL(KIND=dp) :: PressureMeltingPoint
     IF (Porosity <= 0.0) &
-             CALL FATAL("Permafrost(GetXiAnderssonT)","Zero or negative porosity detected")
+             CALL FATAL("Permafrost(GetXiAndersonT)","Zero or negative porosity detected")
     PressureMeltingPoint = T0 - Beta * Pressure
     IF (Xi == 1) THEN
-      XiAnderssonT = 0.0_dp
+      XiAndersonT = 0.0_dp
     ELSE
-      XiAnderssonT = (rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity)
+      XiAndersonT = (rhos0/rhow)*(A*(PressureMeltingPoint**B)/Porosity)
     END IF
-  END FUNCTION XiAnderssonT
+  END FUNCTION XiAndersonT
   
-  REAL (KIND=dp) FUNCTION XiAnderssonP(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
+  REAL (KIND=dp) FUNCTION XiAndersonP(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity)
     REAL(KIND=dp), INTENT(IN) :: Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
     REAL(KIND=dp) :: PressureMeltingPoint
     IF (Porosity <= 0.0_dp) &
-             CALL FATAL("Permafrost(GetXiAnderssonT)","Zero or negative porosity detected")
+             CALL FATAL("Permafrost(GetXiAndersonT)","Zero or negative porosity detected")
     PressureMeltingPoint = T0 - Beta * Pressure
     IF (Xi == 1) THEN
-      XiAnderssonP = 0.0_dp
+      XiAndersonP = 0.0_dp
     ELSE
-      XiAnderssonP = -(rhos0/rhow)*(A*(PressureMeltingPoint**B)/(Porosity*Porosity))
+      XiAndersonP = -(rhos0/rhow)*(A*(PressureMeltingPoint**B)/(Porosity*Porosity))
     END IF
-  END FUNCTION XiAnderssonP
+  END FUNCTION XiAndersonP
   
   FUNCTION GetXi0Tilde(Xi0,mu0,Porosity) RESULT(Xi0tilde)
     REAL(KIND=dp), INTENT(IN) :: Xi0,mu0,Porosity
@@ -808,7 +808,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
        ConstantPorosity=.FALSE., NoSalinity=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow'
-  CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, VarName 
+  CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, VarName, PhaseChangeModel 
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,&
        NodalPorosity,NodalTemperature,NodalSalinity,NodalPressure
@@ -909,7 +909,15 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
       ! cycle halo elements
       !-------------------
       IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
-      Material => GetMaterial()
+      Material => GetMaterial(Element)
+      
+      PhaseChangeModel = ListGetString(Material, &
+           'Permafrost Phase Change Model', Found )
+      IF (Found) THEN
+        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      
       IF (FirstTime) THEN
         NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
         IF (NumberOfRecords < 1) THEN
@@ -951,7 +959,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
 
       ! compose element-wise contributions to matrix and R.H.S
       CALL LocalMatrixDarcy(  Element, N, ND+NB, NodalPressure, NodalTemperature, &
-           NodalPorosity, NodalSalinity, CurrentRockMaterial)!, NodalGWflux
+           NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -984,7 +992,7 @@ CONTAINS
 
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixDarcy( Element, n, nd,  NodalPressure, NodalTemperature, &
-       NodalPorosity, NodalSalinity, CurrentRockMaterial )
+       NodalPorosity, NodalSalinity, CurrentRockMaterial, PhaseChangeModel )
     IMPLICIT NONE
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
@@ -992,6 +1000,7 @@ CONTAINS
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
+    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),MinKgw,gradTAtIP(3),&
          gradPAtIP(3),fluxTAtIP(3),fluxgAtIP(3) ! needed in equation
@@ -1062,19 +1071,31 @@ CONTAINS
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
 
-
-
-      ! functions at IP
-      deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
-           TemperatureAtIP,PressureAtIP,SalinityAtIP)
-      !deltaGAtIP = 1.0_dp !!!!!!!!!!!!!!!!!
-      B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
-      B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
-      Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-      XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+      ! unfrozen pore-water content at IP
+      SELECT CASE(PhaseChangeModel)
+      CASE('Anderson')
+        XiAtIP = &
+             GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiTAtIP = &
+             XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiPAtIP   = &
+             XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
+      CASE DEFAULT ! Hartikainen model
+        deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
+        B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
+        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
+        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+      END SELECT
+      
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
-      !fTildewpATIP = 0.0_dp !!!!!!!!!!!!!!!!
+      
       KgwAtIP = 0.0_dp
       KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
       KgwpTAtIP = 0.0_dp
@@ -1393,7 +1414,8 @@ CONTAINS
     REAL(KIND=dp), ALLOCATABLE :: NodalTemperature(:), NodalSalinity(:), NodalPressure(:),NodalPorosity(:)
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='PermafrostGroundwaterFlux (BulkAssembly)'
-
+    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
+    
     SAVE Conductivity, Nodes, ConstantsRead,DIM,&
          GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
          l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,&
@@ -1411,6 +1433,14 @@ CONTAINS
       ! ---------------------
       Element => GetActiveElement(elem)
       Material => GetMaterial(Element)
+      
+      PhaseChangeModel = ListGetString(Material, &
+           'Permafrost Phase Change Model', Found )
+      IF (Found) THEN
+        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      
       IF (FirstTime) THEN
         NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
         IF (NumberOfRecords < 1) THEN
@@ -1474,15 +1504,29 @@ CONTAINS
           gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
           gradpAtIP(i) =  SUM(NodalPressure(1:N)*dBasisdx(1:N,i))
         END DO
+        
+        ! unfrozen pore-water content at IP
+        SELECT CASE(PhaseChangeModel)
+        CASE('Anderson')
+          XiAtIP = &
+               GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+          XiTAtIP = &
+               XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+          XiPAtIP   = &
+               XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
+        CASE DEFAULT ! Hartikainen model
+          deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
+               TemperatureAtIP,PressureAtIP,SalinityAtIP)
+          B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
+          B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+          Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
+          XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+          XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+               deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
+          XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+               deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+        END SELECT
 
-        ! functions at IP
-        deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
-        !deltaGAtIP = 1.0_dp !!!!!!!!!!!!!!!!!
-        B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
-        B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
-        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
         fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,ew,l0,cw0,ci0,T0,XiAtIP,Xi0)
         fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,ew,rhow0,rhoi0,XiAtIP,Xi0)
         !fTildewpATIP = 0.0_dp !!!!!!!!!!!!!!!!!
@@ -1782,6 +1826,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       n  = GetElementNOFNodes()
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
+      
       PhaseChangeModel = ListGetString(Material, &
            'Permafrost Phase Change Model', Found )
       IF (Found) THEN
@@ -2091,16 +2136,16 @@ CONTAINS
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
 
-      ! functions at IP
+      ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Andersson')
+      CASE('Anderson')
         XiAtIP = &
-             GetXiAndersson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+             GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
         XiTAtIP = &
-             XiAnderssonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+             XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
         XiPAtIP   = &
-             XiAnderssonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
-      CASE DEFAULT
+             XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
+      CASE DEFAULT ! Hartikainen model
         deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
              TemperatureAtIP,PressureAtIP,SalinityAtIP)
         B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
@@ -2112,7 +2157,8 @@ CONTAINS
         XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       END SELECT
-      
+
+      ! heat conductivity at IP
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
       kwthAtIP = GetKalphath(kw0th,bw,T0,TemperatureAtIP)
       kithAtIP = GetKalphath(ki0th,bi,T0,TemperatureAtIP)
@@ -2126,7 +2172,7 @@ CONTAINS
       !KGTTAtIP(1,1)= 6.3699416475296022_dp !REMOVE
       !KGTTAtIP(2,2)= 6.3699416475296022_dp !REMOVE
       
-      
+      ! heat capacities at IP
       CGTTAtIP = &
            GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,&
            PorosityAtIP,SalinityAtIP)
@@ -2165,6 +2211,7 @@ CONTAINS
         JgwDAtIP(1:DIM) = 0.0_dp
       END IF
       !JgwDAtIP(1:DIM) = 0.0_dp !!!REMOVE !!!
+
       Weight = IP % s(t) * DetJ
 
       DO p=1,nd
@@ -2177,9 +2224,9 @@ CONTAINS
           END DO
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
-          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-               STIFF (p,q) = STIFF(p,q) + Weight * &
-               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
+          !     STIFF (p,q) = STIFF(p,q) + Weight * &
+          !     CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
@@ -2187,7 +2234,7 @@ CONTAINS
         END DO
       END DO
 
-      FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
+      !FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
@@ -2339,7 +2386,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
        ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.   
   !CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostUnfrozenWaterContent'
-  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName
+  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName, PhaseChangeModel
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,NumberOfRecords,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature
@@ -2357,8 +2404,14 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   Active = GetNOFActive()
   DO t=1,Active
     Element => GetActiveElement(t)      
-    n  = GetElementNOFNodes()
-    Material => GetMaterial()
+    n  = GetElementNOFNodes(Element)
+    Material => GetMaterial(Element)
+    PhaseChangeModel = ListGetString(Material, &
+         'Permafrost Phase Change Model', Found )
+    IF (Found) THEN
+      WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+      CALL INFO(SolverName,Message,Level=9)
+    END IF
     IF (FirstTime) THEN
       NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
       IF (NumberOfRecords < 1) THEN
@@ -2371,7 +2424,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
     END IF
     CALL ReadVarsXi(N)
     CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, &
-         NodalPorosity, NodalSalinity, CurrentRockMaterial)
+         NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
   END DO
   CALL DefaultFinishBoundaryAssembly()
   CALL DefaultFinishAssembly()
@@ -2390,7 +2443,7 @@ CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixXi( Element, n, NodalTemperature, NodalPressure, &
-       NodalPorosity, NodalSalinity, CurrentRockMaterial )
+       NodalPorosity, NodalSalinity, CurrentRockMaterial, PhaseChangeModel )
     !------------------------------------------------------------------------------
     IMPLICIT NONE
     INTEGER :: n
@@ -2398,6 +2451,7 @@ CONTAINS
     TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
+    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
@@ -2462,17 +2516,27 @@ CONTAINS
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
 
-      ! functions at IP
-      deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
-           TemperatureAtIP,PressureAtIP,SalinityAtIP)
-      B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
-      B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
-      Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-      XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-      XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
-           deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
-      XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
-           deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+      ! unfrozen pore-water content at IP
+      SELECT CASE(PhaseChangeModel)
+      CASE('Anderson')
+        XiAtIP = &
+             GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiTAtIP = &
+             XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiPAtIP   = &
+             XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
+      CASE DEFAULT ! Hartikainen model
+        deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
+        B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
+        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
+        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+      END SELECT
 
       Weight = IP % s(t) * DetJ
 
