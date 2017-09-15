@@ -559,18 +559,18 @@ CONTAINS
     END IF
   END FUNCTION XiAndersonP
 
-!  REAL (KIND=dp) FUNCTION XiAndersonEta(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
-!    REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
-!    REAL(KIND=dp) :: Tstar
-!    IF (Porosity <= 0.0) &
-!         CALL FATAL("Permafrost(GetXiAndersonEta)","Zero or negative porosity detected")
-!    Tstar = T0 - Beta * Pressure - Temperature
-!    IF (Xi == 1_dp .OR. Xi == 0.0_dp) THEN
-!      XiAndersonEta = 0.0_dp
-!    ELSE
-!      XiAndersonEta =  -(rhos0/rhow)*(A*(Tstar**B)/(Porosity*Porosity)
-!    END IF
-!  END FUNCTION GetXiAnderson
+  REAL (KIND=dp) FUNCTION XiAndersonEta(Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) 
+    REAL(KIND=dp), INTENT(IN) :: Xi,A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
+    REAL(KIND=dp) :: Tstar
+    IF (Porosity <= 0.0) &
+         CALL FATAL("Permafrost(GetXiAndersonEta)","Zero or negative porosity detected")
+    Tstar = T0 - Beta * Pressure - Temperature
+    IF (Xi == 1.0_dp .OR. Xi == 0.0_dp) THEN
+      XiAndersonEta = 0.0_dp
+    ELSE
+      XiAndersonEta =  -(rhos0/rhow)*(A*(Tstar**B))/(Porosity*Porosity)
+    END IF
+  END FUNCTION XiAndersonEta
   
   FUNCTION GetXi0Tilde(Xi0,mu0,Porosity) RESULT(Xi0tilde)
     REAL(KIND=dp), INTENT(IN) :: Xi0,mu0,Porosity
@@ -2770,7 +2770,7 @@ END SUBROUTINE PermafrostUnfrozenWaterContent
 !>  salinity transport equation for enhanced permafrost model
 !-----------------------------------------------------------------------------
 !------------------------------------------------------------------------------
-SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
+SUBROUTINE PermafrostSalinityTransport( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
   USE DefUtils
   USE PermaFrostMaterials
@@ -2804,8 +2804,9 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
        NoGWflux=.TRUE.,ComputeGWFlux=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostSalinity'
-  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, TemperatureName,TemperatureTimeDerName, GWfluxName
-
+  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, TemperatureName,TemperatureTimeDerName, GWfluxName,&
+       PhaseChangeModel
+  
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,NumberOfRecords,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,&
        NodalTemperatureTimeDer,NodalGWflux
@@ -2838,6 +2839,14 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
       Element => GetActiveElement(t)
       ! Read Material information
       Material => GetMaterial(Element)
+
+      PhaseChangeModel = ListGetString(Material, &
+           'Permafrost Phase Change Model', Found )
+      IF (Found) THEN
+        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      
       IF (FirstTime) THEN
         NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
         IF (NumberOfRecords < 1) THEN
@@ -2854,7 +2863,7 @@ SUBROUTINE PermafrostSalinity( Model,Solver,dt,TransientSimulation )
       CALL ReadVarsSalinity(N)
 
       CALL LocalMatrixSalinity(  Element, n, nd+nb, NodalTemperature, NodalTemperatureTimeDer,NodalPressure, &
-           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWflux, CurrentRockMaterial)
+           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWflux, CurrentRockMaterial,PhaseChangeModel)
     END DO
 
     CALL DefaultFinishBulkAssembly()
@@ -3083,7 +3092,7 @@ CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixSalinity( Element, n, nd, NodalTemperature, NodalTempTimeDer, NodalPressure, &
-       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, CurrentRockMaterial )
+       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, CurrentRockMaterial,PhaseChangeModel )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
     TYPE(Element_t), POINTER :: Element
@@ -3091,6 +3100,7 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalTempTimeDer(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
     LOGICAL :: ComputeGWFlux,NoGWFlux
+    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
@@ -3110,7 +3120,7 @@ CONTAINS
     LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
-    TYPE(Nodes_t) :: Nodes
+    TYPE(Nodes_t) :: Nodes    
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixSalinity)'
     !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,&
@@ -3159,12 +3169,39 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
+      
+      ! unfrozen pore-water content at IP
+      SELECT CASE(PhaseChangeModel)
+      CASE('Anderson')
+        XiAtIP = &
+             GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiTAtIP = &
+             XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiPAtIP   = &
+             XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+        XiEtaAtIP   = &
+             XiAndersonEta(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
+         XixcAtIP = 0.0_dp 
+      CASE DEFAULT ! Hartikainen model
+        deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
+        B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
+        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
+        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+             deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
+        XietaAtIP = XiEta(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Xi0Tilde,eta0,PorosityAtIP)
+        XixcAtIP = XiXc(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,Mc,ew,dw1,dw2,deltaInElement,GasConstant,SalinityAtIP)
+      END SELECT
 
-      ! functions at IP
-      deltaGAtIP = deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,dw1,dw2,&
-           TemperatureAtIP,PressureAtIP,SalinityAtIP)
-      B1AtIP = B1(deltaInElement,deltaGAtIP,ew,Mw,GasConstant,TemperatureAtIP)
-      B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
+      ! diffusivities at IP
+      KcAtIP = 0.0_dp
+      KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
+      KcXcXcAtIP = GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
+      
       CGTTAtIP = GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,PorosityAtIP,SalinityAtIP)
       CgwTTAtIP = GetCgwTT(rhow0,rhoc0,cw0,cc0,SalinityAtIP)
 
@@ -3194,7 +3231,7 @@ CONTAINS
           !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
           JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)          
         END DO
-      ELSE ! nothing at all is computed or read in
+      ELSE ! nothing at all is computed or read in - pure diffusion
         JgwDAtIP(1:DIM) = 0.0_dp
       END IF
 
@@ -3202,14 +3239,7 @@ CONTAINS
       eL = 0.0_dp
       IF (AbsJgwDAtIP > 0.0_dp) &
            eL(1:DIM) = JgwDAtIP(1:DIM)/AbsJgwDAtIP
-      
-      Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-      XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-      XixcAtIP = XiXc(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,Mc,ew,dw1,dw2,deltaInElement,GasConstant,SalinityAtIP)
-      XietaAtIP = XiEta(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Xi0Tilde,eta0,PorosityAtIP)
-      KcAtIP = 0.0_dp
-      KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
-      KcXcXcAtIP = GetKcXcXc(T0,rhoc0,dw1,dw2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
+
 
       DO i=1,DIM
         fluxXcG(i) = (1.0_dp - SalinityAtIP) * Mc /(GasConstant * T0 * dc0) * SUM(KcAtIP(1:DIM,i)*Gravity(1:DIM))
@@ -3220,13 +3250,14 @@ CONTAINS
       Weight = IP % s(t) * DetJ
 
       ! remove that part
-      KcXcXcAtIP = 0.0_dp
-      KcXcXcAtIP(1,1) = 0.0001
-      KcXcXcAtIP(2,2) = 0.0001
-      XiAtIP = 1.0
-      PorosityAtIP = 1.0
-      TimeWeight = 1.0
+      !KcXcXcAtIP = 0.0_dp
+      !KcXcXcAtIP(1,1) = 0.0001
+      !KcXcXcAtIP(2,2) = 0.0001
+      !XiAtIP = 1.0
+      !PorosityAtIP = 1.0
+      !TimeWeight = 1.0
       ! ---------------
+      
       DO p=1,nd
         DO q=1,nd
           ! diffusion term (Xi * eta * KcXcXcAtIP.grad(u) - fluxXcG * u),grad(v)):
@@ -3239,17 +3270,17 @@ CONTAINS
           END DO
           ! advection term ( JgwD.grad(u),v)
           ! -----------------------------------
-          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-          !     STIFF (p,q) = STIFF(p,q) + Weight * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
+               STIFF (p,q) = STIFF(p,q) + Weight * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! reaction term (Rc*u,v)
           ! -----------------------------------
-          !STIFF(p,q) = STIFF(p,q) + ReactionWeight * Weight *Basis(q) * Basis(p)
+          STIFF(p,q) = STIFF(p,q) + ReactionWeight * Weight *Basis(q) * Basis(p)
 
           ! time derivative (TimeWeight du/dt,v):
           ! ------------------------------
-          !MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
-          MASS(p,q) = MASS(p,q) + 0.0001 * Weight * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
+          !MASS(p,q) = MASS(p,q) + 0.0001 * Weight * Basis(q) * Basis(p)
           !PRINT *,"Mass=TimeWeight * CGTTAtIP", MASS(p,q), TimeWeight
         END DO
       END DO
@@ -3364,7 +3395,7 @@ CONTAINS
   !------------------------------------------------------------------------------
 
   !------------------------------------------------------------------------------
-END SUBROUTINE PermafrostSalinity
+END SUBROUTINE PermafrostSalinityTransport
 !------------------------------------------------------------------------------
 
 !==============================================================================
