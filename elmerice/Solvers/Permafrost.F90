@@ -1163,7 +1163,7 @@ CONTAINS
       !Materialproperties needed at IP
       rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
       rhowAtIP = rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhoiAtIP = rhow(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhoiAtIP = rhoi(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
       !rhocAtIP = rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
       !csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!! NEW
       !cwAtIP   = cw(cw0,TemperatureAtIP,PressureAtIP)  !!! NEW
