@@ -575,9 +575,15 @@ CONTAINS
   FUNCTION GetXi0Tilde(Xi0,mu0,Porosity) RESULT(Xi0tilde)
     REAL(KIND=dp), INTENT(IN) :: Xi0,mu0,Porosity
     REAL(KIND=dp) Xi0tilde    
-    IF (Porosity <= 0.0_dp) &
-         CALL FATAL("Permafrost(GetXi)","Zero or negative porosity detected")
-    Xi0tilde = MIN(Xi0 * (mu0/Porosity) * (1.0_dp - Porosity)/(1 - mu0),1.0_dp)
+    IF (Porosity <= 0.0_dp) THEN
+      IF (Xi0 == 0.0_dp) THEN
+        Xi0tilde = 0.0_dp
+      ELSE
+        CALL FATAL("Permafrost(GetXi)","Zero or negative porosity detected")
+      END IF
+    ELSE
+      Xi0tilde = MIN(Xi0 * (mu0/Porosity) * (1.0_dp - Porosity)/(1 - mu0),1.0_dp)
+    END IF
   END FUNCTION GetXi0Tilde
   
   FUNCTION GetXi(B1,B2,D1,D2,Xi0tilde) RESULT(Xi)
