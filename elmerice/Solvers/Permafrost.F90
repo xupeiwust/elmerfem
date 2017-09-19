@@ -501,7 +501,7 @@ CONTAINS
     deltaG = -l0*(Temperature - T0)/T0 &  ! the first one is L-Zero, do not add a _dp to it!
          + ((1.0_dp/rhow0) + (1.0_dp/rhoi0))*(Pressure - p0) &
          - (cw0 - ci0)*(Temperature*LOG(Temperature/T0) - (Temperature - T0)) &
-         - GasConstant * Temperature *(dw1 * relSalinity + dw2 * (relSalinity**2.0_dp))/Mc
+         - GasConstant * Temperature *(dw1 * relSalinity + dw2 * (relSalinity**2.0_dp))/Mw
     !deltaG = 1.0_dp ! REMOVE THIS LINE !
   END FUNCTION deltaG
 
@@ -577,7 +577,7 @@ CONTAINS
     REAL(KIND=dp) Xi0tilde    
     IF (Porosity <= 0.0_dp) THEN
       IF (Xi0 == 0.0_dp) THEN
-        Xi0tilde = 0.0_dp
+        Xi0tilde = 1.0_dp
       ELSE
         CALL FATAL("Permafrost(GetXi)","Zero or negative porosity detected")
       END IF
@@ -739,7 +739,11 @@ CONTAINS
          + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
          + Salinity * Xi * Porosity * rhoc * cc &
          + (1.0_dp - Xi)*Porosity*rhoi*ci &
-         + rhoi*l0*Porosity*XiT
+         + 1.0_dp * rhoi*l0*Porosity*XiT
+    !PRINT *,"CGTT", (1.0_dp - Porosity)*rhos*cs &
+    !     + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
+    !     + Salinity * Xi * Porosity * rhoc * cc &
+    !     + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
   END FUNCTION GetCGTT
 
   FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
@@ -2236,9 +2240,10 @@ CONTAINS
         B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
         XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde,p0,Mw,ew,&
              deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
-        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
+        !PRINT *, "XiTAtIP",XiTAtIP ,XiAtIP
+        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde,Mw,ew,&
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       END SELECT
 
@@ -2264,6 +2269,7 @@ CONTAINS
       CGTTAtIP = &
            GetCGTT(XiAtIP,XiTAtIP,rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,cwAtIP,ciAtIP,csAtIP,ccAtIP,l0,&
            PorosityAtIP,SalinityAtIP)
+      !PRINT *, "CGTTAtIP", CGTTAtIP
       CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP)
 
       ! compute groundwater flux for advection term
@@ -2487,6 +2493,8 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   ! Read Variables
   CALL AssignVarsXi()
   Active = GetNOFActive()
+  
+
   DO t=1,Active
     Element => GetActiveElement(t)      
     n  = GetElementNOFNodes(Element)
@@ -2511,6 +2519,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
     CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, &
          NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
   END DO
+  
   CALL DefaultFinishBoundaryAssembly()
   CALL DefaultFinishAssembly()
   CALL DefaultDirichletBCs()
@@ -2524,6 +2533,38 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
     WaterContent(WaterContentPerm(I)) =  MAX(WaterContent(WaterContentPerm(I)),0.0_dp)
     WaterContent(WaterContentPerm(I)) =  MIN(WaterContent(WaterContentPerm(I)),1.0_dp)
   END DO
+
+  CALL INFO("SolverName","Computation of unfrozen water content (Xi) for post-processing done",Level=1)
+!!$  IF (Compute XiT) THEN
+!!$    CALL DefaultInitialize()
+!!$  
+!!$    ! Assign output variables
+!!$    Xit => Solver % Variable % Values
+!!$    XitPerm => Solver % Variable % Perm
+!!$    DO t=1,Active
+!!$      Element => GetActiveElement(t)      
+!!$      n  = GetElementNOFNodes(Element)
+!!$      Material => GetMaterial(Element)
+!!$      PhaseChangeModel = ListGetString(Material, &
+!!$           'Permafrost Phase Change Model', Found )
+!!$      IF (Found) THEN
+!!$        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
+!!$        CALL INFO(SolverName,Message,Level=9)
+!!$      END IF
+!!$      IF (FirstTime) THEN
+!!$        NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
+!!$        IF (NumberOfRecords < 1) THEN
+!!$          CALL FATAL(SolverName,'No Rock Material specified')
+!!$        ELSE
+!!$          CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
+!!$          FirstTime = .FALSE.
+!!$        END IF
+!!$        dim = CoordinateSystemDimension()
+!!$      END IF
+!!$      CALL LocalMatrixXiT(  Element, n, NodalTemperature, NodalPressure, &
+!!$           NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
+!!$    END DO
+!!$  END IF
 CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
