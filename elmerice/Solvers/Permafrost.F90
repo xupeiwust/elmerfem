@@ -740,10 +740,10 @@ CONTAINS
          + Salinity * Xi * Porosity * rhoc * cc &
          + (1.0_dp - Xi)*Porosity*rhoi*ci &
          + 1.0_dp * rhoi*l0*Porosity*XiT
-    !PRINT *,"CGTT", (1.0_dp - Porosity)*rhos*cs &
-    !     + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
-    !     + Salinity * Xi * Porosity * rhoc * cc &
-    !     + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
+    PRINT *,"CGTT", (1.0_dp - Porosity)*rhos*cs &
+         + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
+         + Salinity * Xi * Porosity * rhoc * cc &
+         + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
   END FUNCTION GetCGTT
 
   FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
@@ -2474,7 +2474,8 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
        NodalTemperature(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-       ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.   
+       ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE., &
+       ComputeXiT=.FALSE.
   !CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostUnfrozenWaterContent'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName, PhaseChangeModel
@@ -2483,7 +2484,9 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature
   !------------------------------------------------------------------------------
   Params => GetSolverParams()
-
+  ComputeXiT = GetLogical(Params,"Compute XiT",Found)
+  IF (.NOT.Found) ComputeXiT=.FALSE.
+  
   CALL DefaultInitialize()
   
   ! Assign output variables
@@ -2517,7 +2520,8 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
     END IF
     CALL ReadVarsXi(N)
     CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, &
-         NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
+         NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel,&
+         ComputeXiT)
   END DO
   
   CALL DefaultFinishBoundaryAssembly()
@@ -2535,41 +2539,13 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
   END DO
 
   CALL INFO("SolverName","Computation of unfrozen water content (Xi) for post-processing done",Level=1)
-!!$  IF (Compute XiT) THEN
-!!$    CALL DefaultInitialize()
-!!$  
-!!$    ! Assign output variables
-!!$    Xit => Solver % Variable % Values
-!!$    XitPerm => Solver % Variable % Perm
-!!$    DO t=1,Active
-!!$      Element => GetActiveElement(t)      
-!!$      n  = GetElementNOFNodes(Element)
-!!$      Material => GetMaterial(Element)
-!!$      PhaseChangeModel = ListGetString(Material, &
-!!$           'Permafrost Phase Change Model', Found )
-!!$      IF (Found) THEN
-!!$        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
-!!$        CALL INFO(SolverName,Message,Level=9)
-!!$      END IF
-!!$      IF (FirstTime) THEN
-!!$        NumberOfRecords =  ReadPermafrostRockMaterial( Material,CurrentRockMaterial )
-!!$        IF (NumberOfRecords < 1) THEN
-!!$          CALL FATAL(SolverName,'No Rock Material specified')
-!!$        ELSE
-!!$          CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
-!!$          FirstTime = .FALSE.
-!!$        END IF
-!!$        dim = CoordinateSystemDimension()
-!!$      END IF
-!!$      CALL LocalMatrixXiT(  Element, n, NodalTemperature, NodalPressure, &
-!!$           NodalPorosity, NodalSalinity, CurrentRockMaterial,PhaseChangeModel)
-!!$    END DO
-!!$  END IF
+
 CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixXi( Element, n, NodalTemperature, NodalPressure, &
-       NodalPorosity, NodalSalinity, CurrentRockMaterial, PhaseChangeModel )
+       NodalPorosity, NodalSalinity, CurrentRockMaterial, PhaseChangeModel, &
+       ComputeXit)
     !------------------------------------------------------------------------------
     IMPLICIT NONE
     INTEGER :: n
@@ -2578,6 +2554,7 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
+    LOGICAL :: ComputeXiT
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
@@ -2671,8 +2648,11 @@ CONTAINS
           Stiff(p,q) = Stiff(p,q) + Weight * Basis(q) * Basis(p)
         END DO
       END DO
-
-      FORCE(1:n) = FORCE(1:n) + Weight * XiAtIP * Basis(1:n)
+      IF (ComputeXiT) THEN
+        FORCE(1:n) = FORCE(1:n) + Weight * XiTAtIP * Basis(1:n)
+      ELSE
+        FORCE(1:n) = FORCE(1:n) + Weight * XiAtIP * Basis(1:n)
+      END IF
     END DO
 
     CALL DefaultUpdateEquations(STIFF,FORCE)
