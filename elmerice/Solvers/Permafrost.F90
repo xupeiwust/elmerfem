@@ -481,9 +481,11 @@ CONTAINS
   REAL (KIND=dp) FUNCTION delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant
-    delta = 0.5_dp*l0*DeltaT/T0 &
+    REAL(KIND=dp) :: aux
+    aux = 0.5_dp*l0*DeltaT/T0 &
          + (cw0 - ci0)*((T0 + 0.5_dp*DeltaT)*LOG(1.0_dp + 0.5_dp*DeltaT/T0) - 0.5_dp*DeltaT)
-    delta = delta*(eps*(1.0_dp - eps)/(2.0_dp*eps -1.0_dp))* Mw/(GasConstant*(T0 + 0.5_dp*DeltaT))
+    delta = aux*(eps*(1.0_dp - eps)/(2.0_dp*eps - 1.0_dp))* Mw/(GasConstant*(T0 + 0.5_dp*DeltaT))
+    !PRINT *, "delta=", delta
   END FUNCTION delta
 
   REAL (KIND=dp) FUNCTION deltaG(ew,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,dw1,dw2,&
@@ -497,11 +499,12 @@ CONTAINS
     ELSE
       CALL WARN("deltaG", "Salinity either too small or too large - removing salinity effect")
       relSalinity = 0.0_dp
-    END IF
+    END IF    
     deltaG = -l0*(Temperature - T0)/T0 &  ! the first one is L-Zero, do not add a _dp to it!
-         + ((1.0_dp/rhow0) + (1.0_dp/rhoi0))*(Pressure - p0) &
+         + ((1.0_dp/rhow0) - (1.0_dp/rhoi0))*(Pressure - p0) &
          - (cw0 - ci0)*(Temperature*LOG(Temperature/T0) - (Temperature - T0)) &
          - GasConstant * Temperature *(dw1 * relSalinity + dw2 * (relSalinity**2.0_dp))/Mw
+    !PRINT *,"deltaG=", deltaG
     !deltaG = 1.0_dp ! REMOVE THIS LINE !
   END FUNCTION deltaG
 
@@ -595,17 +598,17 @@ CONTAINS
     IF (Xi > 1.0_dp) Xi = 1.0_dp
   END FUNCTION GetXi
 
-  REAL (KIND=dp) FUNCTION XiT(B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,&
+  REAL (KIND=dp) FUNCTION XiT(B1,B2,D1,D2,Xi0Tilde,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,&
        l0,T0,GasConstant,Temperature, Pressure)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,Temperature, Pressure
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0Tilde,p0,Mw,ew,delta,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,Temperature, Pressure
     !local
     REAL(KIND=dp) :: aux1, aux2, aux3
     aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
     aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
     aux3 = (l0 + (cw0 - ci0)*(Temperature - T0) & ! this l0 is small L and 0 - don't change
          + (-(1.0_dp/rhoi0) + (1.0_dp/rhow0))*(Pressure - p0))/Temperature
-    XiT = (0.5_dp*Xi0*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0)*aux2/delta) *Mw*aux3/(T0*GasConstant*Temperature)
+    XiT = (0.5_dp*Xi0Tilde*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0Tilde)*aux2/delta) *Mw*aux3/(GasConstant*Temperature)
   END FUNCTION XiT
 
   REAL (KIND=dp) FUNCTION XiP(B1,B2,D1,D2,Xi0Tilde,Mw,ew,delta,rhow0,rhoi0,GasConstant,Temperature)
@@ -630,7 +633,7 @@ CONTAINS
       aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
       aux3 = 1.0_dp - Salinity
       XiXc = (0.5_dp*Xi0Tilde*aux1/(ew + delta) + 0.5_dp*(1.0_dp - Xi0Tilde)*aux2/delta) &
-           *(dw1/(aux3**2.0_dp) + dw2*Salinity/(aux3**3.0_dp)) * Mw/Mc
+           *(dw1/(aux3**2.0_dp) + dw2*Salinity/(aux3**3.0_dp)) 
     ELSE
       CALL WARN("Permafrost(XiXc)","Salinity out of physical range - returning zero")
       XiXc = 0.0_dp
@@ -740,10 +743,10 @@ CONTAINS
          + Salinity * Xi * Porosity * rhoc * cc &
          + (1.0_dp - Xi)*Porosity*rhoi*ci &
          + 1.0_dp * rhoi*l0*Porosity*XiT
-    PRINT *,"CGTT", (1.0_dp - Porosity)*rhos*cs &
-         + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
-         + Salinity * Xi * Porosity * rhoc * cc &
-         + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
+    !PRINT *,"CGTT", (1.0_dp - Porosity)*rhos*cs &
+    !     + (1.0_dp - Salinity) * Xi * Porosity * rhow * cw &
+    !     + Salinity * Xi * Porosity * rhoc * cc &
+    !     + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
   END FUNCTION GetCGTT
 
   FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
@@ -1164,7 +1167,7 @@ CONTAINS
         B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
         XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde,p0,Mw,ew,&
              deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
         XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
@@ -1607,7 +1610,7 @@ CONTAINS
           B2AtIP = B2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
           Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
           XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-          XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,ew,&
+          XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde,p0,Mw,ew,&
                deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
           XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,ew,&
                deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
@@ -1924,7 +1927,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
 
       CALL LocalMatrixHTEQ(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
            NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
-           NoGWflux, CurrentRockMaterial, PhaseChangeModel)
+           NoGWflux, NoPressure, CurrentRockMaterial, PhaseChangeModel)
     END DO
 
     CALL DefaultFinishBulkAssembly()
@@ -2144,7 +2147,7 @@ CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixHTEQ( Element, n, nd, NodalTemperature, NodalPressure, &
-       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, &
+       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
        CurrentRockMaterial,PhaseChangeModel )
     !------------------------------------------------------------------------------
     INTEGER :: n, nd
@@ -2152,7 +2155,7 @@ CONTAINS
     TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
-    LOGICAL :: ComputeGWFlux,NoGWFlux
+    LOGICAL :: ComputeGWFlux,NoGWFlux,NoPressure
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
@@ -2220,7 +2223,11 @@ CONTAINS
       ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
       TemperatureAtIP = SUM( Basis(1:N) * NodalTemperature(1:N) )
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
-      PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
+      PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))      
+      IF (NoPressure) THEN
+        PressureAtIP = p0
+        !PRINT *,"PressureAtIP",PressureAtIP
+      END IF
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
             
       
