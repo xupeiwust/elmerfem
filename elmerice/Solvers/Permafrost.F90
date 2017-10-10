@@ -47,7 +47,7 @@ MODULE PermafrostMaterials
   
   TYPE RockMaterial_t
      INTEGER :: NumerOfRockRecords
-     REAL(KIND=dp) :: GasConstant,T0,p0
+     !REAL(KIND=dp) :: GasConstant,T0,p0
      REAL(KIND=dp) :: DeltaT,eps
      REAL(KIND=dp) :: Mw,rhow0,rhoi0,hw0,hi0,vi0,cw0,ci0,acw(3),bcw(3),aci(2),kw0th,ki0th,bw,bi
      REAL(KIND=dp), ALLOCATABLE :: ks0th(:),ew(:),bs(:),rhos0(:),&
@@ -219,33 +219,13 @@ CONTAINS
         CALL FATAL(FunctionName, 'Allocation Error of input data array')
       END IF
       !------------------------------------------------------------------------------
-      ! Constants
-      ! GasConstant
-      !------------------------------------------------------------------------------
-      LocalRockMaterial % GasConstant = GetConstReal(Constants, 'Gas Constant', Found)
-      IF (.NOT.Found) THEN
-        LocalRockMaterial % GasConstant = 8.3145_dp
-        CALL INFO(FunctionName, ' "Gas Constant" not found in Constants and set to default value 8.3145',Level=3)
-      END IF
-      LocalRockMaterial % T0 = GetConstReal(Constants, 'Reference Temperature', Found)
-      IF (.NOT.Found) THEN
-        LocalRockMaterial % T0 = 273.15_dp
-        CALL INFO(FunctionName, ' "Reference Temperature" not found in Constants and set to default value T0=273.15',Level=3)
-      END IF
-      LocalRockMaterial % p0 = GetConstReal(Constants, 'Reference Pressure', Found)
-      IF (.NOT.Found) THEN
-        LocalRockMaterial % p0 = 100132.0_dp
-        CALL INFO(FunctionName, ' "Reference Pressure not found in Constants and set to default value p0=100132.0',Level=3)
-      END IF
-      !------------------------------------------------------------------------------
       ! To be changed later
       !------------------------------------------------------------------------------
       LocalRockMaterial % DeltaT = 1.0_dp ! will become material parameter
       LocalRockMaterial % eps = 0.99_dp ! will become material parameter
       CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
       CALL INFO(FunctionName,"Model related constants",Level=9)
-      WRITE(Message,*)"GasConstant",LocalRockMaterial % GasConstant,"T0",LocalRockMaterial % T0,&
-           "p0",LocalRockMaterial % p0,"DelatT",LocalRockMaterial % DeltaT,"eps",LocalRockMaterial % eps
+      WRITE(Message,*)"DelatT",LocalRockMaterial % DeltaT,"eps",LocalRockMaterial % eps
       CALL INFO(FunctionName,Message,Level=9)
       CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
       !------------------------------------------------------------------------------
@@ -372,6 +352,7 @@ CONTAINS
     CALL WARN(FunctionName,Comment)
     CALL FATAL(FunctionName,"Stopping simulation")    
   END FUNCTION ReadPermafrostRockMaterial
+  
   FUNCTION ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
        GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
        l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
@@ -398,13 +379,33 @@ CONTAINS
     ELSE
       Gravity = gWork(1:3,1)*gWork(4,1)
     END IF
+    !------------------------------------------------------------------------------
+    ! Constants
+    ! GasConstant, T0, p0
+    !------------------------------------------------------------------------------
+    GasConstant = GetConstReal(Model % Constants, 'Gas Constant', Found)
+    IF (.NOT.Found) THEN
+      GasConstant = 8.3145_dp
+      CALL INFO(FunctionName, ' "Gas Constant" not found in Constants and set to default value 8.3145',Level=3)
+    END IF
+    T0 = GetConstReal(Model % Constants, 'Reference Temperature', Found)
+    IF (.NOT.Found) THEN
+      T0 = 273.15_dp
+      CALL INFO(FunctionName, ' "Reference Temperature" not found in Constants and set to default value T0=273.15',Level=3)
+    END IF
+    p0 = GetConstReal(Model % Constants, 'Reference Pressure', Found)
+    IF (.NOT.Found) THEN
+      p0 = 100132.0_dp
+      CALL INFO(FunctionName, ' "Reference Pressure not found in Constants and set to default value p0=100132.0',Level=3)
+    END IF
+    
     NumerOfRockRecords = CurrentRockMaterial % NumerOfRockRecords
-    GasConstant = CurrentRockMaterial % GasConstant
+    !GasConstant = CurrentRockMaterial % GasConstant
     Mw = CurrentRockMaterial % Mw
     Mc = CurrentRockMaterial % Mc
     DeltaT = CurrentRockMaterial % DeltaT
-    T0 = CurrentRockMaterial % T0
-    p0 = CurrentRockMaterial % p0
+    !T0 = CurrentRockMaterial % T0
+    !p0 = CurrentRockMaterial % p0
     rhow0 = CurrentRockMaterial % rhow0
     rhoi0 = CurrentRockMaterial % rhoi0
     rhoc0 = CurrentRockMaterial % rhoc0
@@ -438,11 +439,11 @@ CONTAINS
 
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
     CALL INFO(FunctionName,"General Constants:", Level=9)
-    WRITE(Message,'(A)') "GasConstant,Mw,Mc,DeltaT,T0,p0,rhow0,rhoi0,rhoc0,hw0,hi0,cw0,ci0,cc0"
+    WRITE(Message,'(A)') "Mw,Mc,DeltaT,rhow0,rhoi0,rhoc0,hw0,hi0,cw0,ci0,cc0"
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) CurrentRockMaterial % GasConstant, &
+    WRITE(Message,*)  &
          CurrentRockMaterial % Mw, CurrentRockMaterial % Mc, &
-         CurrentRockMaterial % DeltaT, CurrentRockMaterial % T0, CurrentRockMaterial % p0,&
+         CurrentRockMaterial % DeltaT, &
          CurrentRockMaterial % rhow0, CurrentRockMaterial % rhoi0, CurrentRockMaterial % rhoc0,&
          CurrentRockMaterial % hw0, CurrentRockMaterial % hi0,&
          CurrentRockMaterial % cw0,CurrentRockMaterial % ci0,CurrentRockMaterial % cc0
@@ -2427,6 +2428,7 @@ CONTAINS
           !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
           JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)          
         END DO
+        !PRINT *,"JgwDAtIP=(",JgwDAtIP(1:DIM),")=(",fluxgAtIP(1:DIM),") + (",fluxPAtIP(1:DIM)
       ELSE ! nothing at all is computed or read in
         JgwDAtIP(1:DIM) = 0.0_dp
       END IF
@@ -2443,10 +2445,11 @@ CONTAINS
           END DO
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
-          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-               STIFF (p,q) = STIFF(p,q) + Weight * &
+          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
+            STIFF (p,q) = STIFF(p,q) + Weight * &
                CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-
+            !PRINT *,JgwDAtIP(1:dim)
+          END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
           MASS(p,q) = MASS(p,q) + Weight * CGTTAtIP * Basis(q) * Basis(p)
@@ -3284,8 +3287,9 @@ CONTAINS
     TYPE(Nodes_t) :: Nodes    
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixSalinity)'
     !------------------------------------------------------------------------------   
-    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,&
-         l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity
+    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+           Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       dim = CoordinateSystemDimension()
