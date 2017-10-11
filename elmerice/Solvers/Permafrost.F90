@@ -515,7 +515,120 @@ CONTAINS
     D2InElement = 1.0_dp
   END SUBROUTINE ReadPermafrostRockMaterialVariables
 
+  SUBROUTINE ReadPermafrostRockMaterialElementVariables(ElementID,NoElements,DIM,&
+       eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
+       ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
+       deltaInElement,D1InElement,D2InElement,MaterialFileName)
+    IMPLICIT NONE
 
+    INTEGER, INTENT(IN) :: ElementID,NoElements,DIM
+    REAL(KIND=dp), INTENT(IN) :: eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant! constants that need to have been set
+    REAL(KIND=dp), INTENT(OUT) :: ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0(1:3,1:3),qexp,alphaL,alphaT,As0 ! derived properties
+    REAL(KIND=dp), INTENT(OUT) :: deltaInElement,D1InElement,D2InElement ! derived properties
+    CHARACTER(LEN=MAX_NAME_LEN) :: MaterialFileName
+    !-----------------------------------------------------------
+    CHARACTER(LEN=MAX_NAME_LEN) :: SubroutineName="ReadPermafrostRockMaterialElementVariables"
+    LOGICAL :: FirstTime=.TRUE.
+    TYPE(RockMaterial_t) :: LocalRockMaterial
+    INTEGER :: OK, CurrentNo, I, io
+    REAL(KIND=dp) :: ReceivingArray(50)
+
+    SAVE LocalRockMaterial, FirstTime
+    IF (FirstTime) THEN
+      ALLOCATE(&
+           LocalRockMaterial % ks0th(NoElements),&
+           LocalRockMaterial % ew(NoElements),&
+           LocalRockMaterial % bs(NoElements),&
+           LocalRockMaterial % rhos0(NoElements),&
+           LocalRockMaterial % cs0(NoElements),&
+           LocalRockMaterial % Xi0(NoElements),&
+           LocalRockMaterial % eta0(NoElements),&
+           LocalRockMaterial % hs0(NoElements),&
+           LocalRockMaterial % Kgwh0(3,3,NoElements),&
+           LocalRockMaterial % qexp(NoElements), &
+           LocalRockMaterial % alphaL(NoElements), &
+           LocalRockMaterial % alphaT(NoElements), &
+           LocalRockMaterial % As0(NoElements), &
+           LocalRockMaterial % VariableBaseName(NoElements),&
+           STAT=OK)
+      OPEN(unit = io, file = TRIM(MaterialFileName), status = 'old',iostat = ok)
+      IF (ok /= 0) THEN
+        WRITE(Message,'(A,A)') 'Unable to open file ',TRIM(MaterialFileName)
+        CALL FATAL(Trim(SubroutineName),Trim(message))
+      ELSE        
+        !------------------------------------------------------------------------------
+        ! Read in the number of records in file (first line integer)
+        !------------------------------------------------------------------------------
+        WRITE (Message,'(A,I2,A,A,A,A)') "Attempting read ",NoElements,&
+             " from data file ",TRIM(MaterialFileName)
+        CALL INFO(SubroutineName,Message,level=3)
+        DO I=1,NoElements
+          READ (io, *, END=40, ERR=50, IOSTAT=OK) CurrentNo, ReceivingArray(1:50)
+           LocalRockMaterial % ks0th(I) = ReceivingArray(12) ! shall be changed to tensor
+           LocalRockMaterial % ew(I) = ReceivingArray(34) ! e1 (mail from Juha 11.10.)
+           LocalRockMaterial % bs(I) = ReceivingArray(24) ! b11,1 (mail from Juha 11.10.)
+           LocalRockMaterial % rhos0(I) = ReceivingArray(2)
+           LocalRockMaterial % cs0(I) = ReceivingArray(9)
+           LocalRockMaterial % Xi0(I) = ReceivingArray(33)
+           LocalRockMaterial % eta0(I) = ReceivingArray(31) ! eta_t (mail from Juha 11.10.)
+           LocalRockMaterial % hs0(I) = 0.0_dp! will be removed
+           LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(36)
+           LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(37)
+           LocalRockMaterial % Kgwh0(3,3,I) = ReceivingArray(38)
+           LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(39)
+           LocalRockMaterial % Kgwh0(1,3,I) = ReceivingArray(40)
+           LocalRockMaterial % Kgwh0(2,3,I) = ReceivingArray(41)
+           LocalRockMaterial % Kgwh0(2,1,I) = LocalRockMaterial % Kgwh0(1,2,I)
+           LocalRockMaterial % Kgwh0(3,1,I) = LocalRockMaterial % Kgwh0(1,3,I)
+           LocalRockMaterial % Kgwh0(3,2,I) = LocalRockMaterial % Kgwh0(2,3,I)
+           LocalRockMaterial % qexp(I) = ReceivingArray(42)
+           LocalRockMaterial % alphaL(I) = ReceivingArray(48)
+           LocalRockMaterial % alphaT(I) = ReceivingArray(49)
+           LocalRockMaterial % As0(I) = ReceivingArray(30)
+           WRITE(*,Message) 'Element ',I
+           LocalRockMaterial % VariableBaseName(I) = TRIM(Message)
+        END DO
+40      CLOSE(io)
+        IF (CurrentNo < NoElements) THEN
+          WRITE (Message,*) 'Found only ',CurrentNo,' entries in file ',TRIM(MaterialFileName),&
+               ' for ', NoElements, ' elements in mesh.'
+          CALL FATAL(TRIM(SubroutineName),Message)
+        ELSE
+          WRITE (Message,*) 'Read ',CurrentNo,' entries in file ',TRIM(MaterialFileName)
+          CALL INFO(TRIM(SubroutineName),Message,Level=3)
+        END IF
+      END IF
+    
+      FirstTime = .FALSE.
+    END IF
+    
+    ks0th = LocalRockMaterial % ks0th(ElementID)
+    ew = LocalRockMaterial % ew(ElementID)
+    bs = LocalRockMaterial % bs(ElementID)
+    rhos0 = LocalRockMaterial % rhos0(ElementID)
+    cs0 = LocalRockMaterial % cs0(ElementID)
+    Xi0 = LocalRockMaterial % Xi0(ElementID)
+    eta0 = LocalRockMaterial % eta0(ElementID)
+    Kgwh0(1:3,1:3) = LocalRockMaterial % Kgwh0(1:3,1:3,ElementID)
+    IF (DIM == 2) THEN
+      Kgwh0(1,2) =  Kgwh0(1,3)
+      Kgwh0(2,2) =  Kgwh0(3,3)
+      Kgwh0(2,1) =  Kgwh0(3,1)
+      Kgwh0(3,1:3) = 0.0_dp
+      Kgwh0(1:3,3) = 0.0_dp
+    END IF
+    qexp = LocalRockMaterial % qexp(ElementID)
+    alphaL = LocalRockMaterial % alphaL(ElementID)
+    alphaT = LocalRockMaterial % alphaT(ElementID)
+    As0 = LocalRockMaterial % As0(ElementID)
+    ! derive element rock material specific parameters
+    deltaInElement = delta(ew,eps,DeltaT,T0,Mw,l0,cw0,ci0,GasConstant)
+    D1InElement = D1(deltaInElement,ew)
+    D2InElement = 1.0_dp
+    RETURN
+50  WRITE (Message,*) 'I/O error at entry ',CurrentNo,' of file ',TRIM(MaterialFileName)
+    CALL FATAL(TRIM(SubroutineName),Message)
+  END SUBROUTINE ReadPermafrostRockMaterialElementVariables
 
   FUNCTION groundwaterflux(Salinity,Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhow,rhoc,DIM) RESULT(JgwD)
     IMPLICIT NONE
@@ -1205,9 +1318,6 @@ CONTAINS
            GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
            Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
-      !ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-      !     NumerOfRockRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-      !     l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -1236,9 +1346,6 @@ CONTAINS
          MinKgw = 1.0D-14
     
     ! read variable material parameters from CurrentRockMaterial
-    !CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-    !     ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-    !     GasConstant, Mw, Mc,DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,RockmaterialID,DIM,&
          eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
          ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
@@ -1658,9 +1765,6 @@ CONTAINS
            GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
            Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
-       ! ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-       !      NumerOfRockRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-       !      l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
       END IF
 
       CALL GetElementNodes( Nodes )
@@ -1699,9 +1803,6 @@ CONTAINS
            MinKgw = 1.0D-14
       
       ! read variable material parameters from CurrentRockMaterial
-      !CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-      !     ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-      !     GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
       CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,RockmaterialID,DIM,&
        eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
        ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
@@ -2071,7 +2172,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
 
       CALL ReadVarsHTEQ(N)
 
-      CALL LocalMatrixHTEQ(  Element, n, nd+nb, NodalTemperature, NodalPressure, &
+      CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb, NodalTemperature, NodalPressure, &
            NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
            NoGWflux, NoPressure, CurrentRockMaterial, NumberOfRockRecords, PhaseChangeModel)
     END DO
@@ -2287,12 +2388,12 @@ CONTAINS
 
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixHTEQ( Element, n, nd, NodalTemperature, NodalPressure, &
+  SUBROUTINE LocalMatrixHTEQ( Element, ElementNo, NoElements, n, nd, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
        CurrentRockMaterial,NumberOfRockRecords, PhaseChangeModel )
     IMPLICIT NONE
     !------------------------------------------------------------------------------
-    INTEGER, INTENT(IN) :: n, nd, NumberOfRockRecords
+    INTEGER, INTENT(IN) :: n, nd, ElementNo, NoElements, NumberOfRockRecords
     TYPE(Element_t), POINTER :: Element
     TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
@@ -2322,6 +2423,7 @@ CONTAINS
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
+    CHARACTER(LEN=MAX_NAME_LEN) :: MaterialFileName
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
     !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
@@ -2337,11 +2439,6 @@ CONTAINS
            GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
            Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
-      !PRINT *, "acw,bcw", acw,bcw
-      !STOP
-           !ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-           !NumerOfRockRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           !l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -2370,14 +2467,16 @@ CONTAINS
     
     ! read variable material parameters from CurrentRockMaterial
     IF (RockMaterialID > 0 .AND. RockMaterialID < NumberOfRockRecords) THEN ! we read the material from the regular database
-      !CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,RockMaterialID,ks0th,&
-      !     ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-      !     GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
       CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,RockmaterialID,DIM,&
        eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
        ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
        deltaInElement,D1InElement,D2InElement)
     ELSE IF (RockMaterialID == 0) THEN ! Call element wise material parameters
+       MaterialFileName = GetString( Material, 'Element Rock Material File', Found )
+      CALL ReadPermafrostRockMaterialElementVariables(t,NoElements,DIM,&
+           eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
+           ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
+           deltaInElement,D1InElement,D2InElement,MaterialFileName)
       CALL FATAL(FunctionName,"We will implement the feature of Element-wise read of rock parameters")
     ELSE
       WRITE(Message,*) "Value of RockMaterialID in Material section, ",RockMaterialID,", not compuatable"
@@ -2778,9 +2877,6 @@ CONTAINS
            GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
            Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
-           !ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-           !NumerOfRockRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           !l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -2802,9 +2898,6 @@ CONTAINS
     IF (.NOT.Found .OR. (MinKgw <= 0.0_dp))  &
          MinKgw = 1.0D-14
     ! read variable material parameters from CurrentRockMateria
-    !CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-    !     ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-    !     GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,RockmaterialID,DIM,&
        eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
        ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
@@ -3372,9 +3465,6 @@ CONTAINS
            GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
            Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
-           !ReadPermafrostRockMaterialConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-           !NumerOfRockRecords,GasConstant, Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           !l0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,Dm0,dw1,dw2,dc0,dc1,bw,bi,bc,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -3403,9 +3493,6 @@ CONTAINS
          MinKgw = 1.0D-14
     
     ! read variable material parameters from CurrentRockMateria
-    !CALL ReadPermafrostRockMaterialVariables(Element,CurrentRockMaterial,meanfactor,MinKgw,ks0th,&
-    !     ew,bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,deltaInElement,D1InElement,D2InElement,&
-    !     GasConstant,Mw, Mc, DeltaT, T0, p0, rhow0,rhoi0,l0,cw0,ci0,eps,kw0th,ki0th,mu0,Gravity,DIM)
     CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,RockmaterialID,DIM,&
        eps, DeltaT, T0, p0, l0, Mw, cw0,ci0,GasConstant,&
        ks0th, ew, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
