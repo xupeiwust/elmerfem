@@ -44,8 +44,25 @@ MODULE PermafrostMaterials
   ! type for solvent (water and ice)
   !---------------------------------
   TYPE SolventMaterial_t
-     REAL(KIND=dp) ::  Mw,rhow0,rhoi0,hw0,hi0,vi0,acw(0:2),bcw(0:2),&
-          aci(0:1),bccw0,cw0,ci0,kw0th,ki0th,bw,bi,mu0,nu0(2)
+     REAL(KIND=dp) :: &
+          Mw,rhow0,rhoi0,hw0,hi0,vi0,bccw0,&
+          kw0th,ki0th,bw,bi,mu0,nu0(2), &
+          cw0,kw0,aw0,zw0,ci0,ki0,ai0, &
+          acw(0:5),bcw(0:5),ccw(0:5),&
+          akw(0:5),bkw(0:5),ckw(0:5),&
+          aaw(0:5),baw(0:5),caw(0:5),&
+          azw(0:5),bzw(0:5),czw(0:5),&
+          aci(0:5),bci(0:5),cci(0:5),&
+          aki(0:5),bki(0:5),cki(0:5),&
+          aai(0:5),bai(0:5),cai(0:5)
+          INTEGER :: &
+          acwl,bcwl,ccwl,&
+          akwl,bkwl,ckwl,&
+          aawl,bawl,cawl,&
+          azwl,bzwl,czwl,&
+          acil,bcil,ccil, &
+          akil,bkil,ckil,&
+          aail,bail,cail
   END type SolventMaterial_t
   
   !---------------------------------
@@ -94,12 +111,7 @@ CONTAINS
       LocalSolventMaterial % rhoi0 = 916.8_dp 
       LocalSolventMaterial % hw0 = 0.0_dp 
       LocalSolventMaterial % hi0 = -333360.0_dp 
-      LocalSolventMaterial % vi0 = 0.0010908_dp 
-      LocalSolventMaterial % cw0 = 4207.7_dp 
-      LocalSolventMaterial % ci0 = 2088.8_dp 
-      LocalSolventMaterial % acw(0:2) = RESHAPE([1.0,-0.088,0.2859], SHAPE(LocalSolventMaterial % acw))
-      LocalSolventMaterial % bcw(0:2) = RESHAPE([1.0,3.0201,14.7607], SHAPE(LocalSolventMaterial % bcw))
-      LocalSolventMaterial % aci(0:1) = RESHAPE([1.0,0.9557],SHAPE(LocalSolventMaterial % aci)) 
+      LocalSolventMaterial % vi0 = 0.0010908_dp
       LocalSolventMaterial % kw0th = 0.56_dp 
       LocalSolventMaterial % ki0th = 2.24_dp
       LocalSolventMaterial % mu0=       1.792d-03
@@ -107,6 +119,76 @@ CONTAINS
       LocalSolventMaterial % nu0(2)=    1.9175_dp
       LocalSolventMaterial % bi = 0.0_dp ! ?????????????
       LocalSolventMaterial % bw = 0.0_dp ! ?????????????
+      ! --------------------- polynomials
+      LocalSolventMaterial % cw0 = 4207.7_dp
+      LocalSolventMaterial % kw0 = 4.4534d-10
+      LocalSolventMaterial % aw0 = 5.3358d-05
+      LocalSolventMaterial % zw0 = -6.6237d-01
+      LocalSolventMaterial % ci0 = 2088.8_dp
+      LocalSolventMaterial % ki0 = 1.1417d-10
+      LocalSolventMaterial % ai0 = 1.6781d-04
+      LocalSolventMaterial % acwl=2
+      LocalSolventMaterial % bcwl=2
+      LocalSolventMaterial % ccwl=-1      
+      LocalSolventMaterial % akwl=-1
+      LocalSolventMaterial % bkwl=-1
+      LocalSolventMaterial % ckwl=0
+      LocalSolventMaterial % aawl=5
+      LocalSolventMaterial % bawl=-1
+      LocalSolventMaterial % cawl=-1
+      LocalSolventMaterial % azwl=-1
+      LocalSolventMaterial % bzwl=1
+      LocalSolventMaterial % czwl=-1
+      LocalSolventMaterial % acil=1
+      LocalSolventMaterial % bcil=-1
+      LocalSolventMaterial % ccil=-1
+      LocalSolventMaterial % akil=-1
+      LocalSolventMaterial % bkil=-1
+      LocalSolventMaterial % ckil=0
+      LocalSolventMaterial % aail=1
+      LocalSolventMaterial % bail=-1
+      LocalSolventMaterial % cail=-1
+      LocalSolventMaterial % acw(0:5) = &
+           RESHAPE([1.0,-0.088,0.2859,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % acw))
+      LocalSolventMaterial % bcw(0:5) = &
+           RESHAPE([1.0,3.0201,14.7607,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % bcw))
+      LocalSolventMaterial % akw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % akw))
+      LocalSolventMaterial % bkw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % bkw))
+      LocalSolventMaterial % ckw(0:5) = &
+           RESHAPE([1.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % ckw))
+      LocalSolventMaterial % aaw(0:5) = &
+           RESHAPE([1.0,-79.1305,207.4836,-403.8270,395.5347,-166.1466], SHAPE(LocalSolventMaterial % aaw))
+      LocalSolventMaterial % baw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % baw))  
+      LocalSolventMaterial % caw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % azw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % azw))
+      LocalSolventMaterial % bzw(0:5) = &
+           RESHAPE([1.0,5.1806,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % czw(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % aci(0:5) = &
+           RESHAPE([1.0,0.9557,0.0,0.0,0.0,0.0],SHAPE(LocalSolventMaterial % aci))
+      LocalSolventMaterial % bci(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % cci(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % aki(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % bki(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % cki(0:5) = &
+           RESHAPE([1.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % aai(0:5) = &
+           RESHAPE([1.0,1.1923,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % bai(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+      LocalSolventMaterial % cai(0:5) = &
+           RESHAPE([0.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % caw))
+
       CALL INFO(SubroutineName,"-----------------------------------------------------------------",Level=9)
       CALL INFO(SubroutineName,"Solvent related constants",Level=9)
       WRITE(Message,*) "Mw",LocalSolventMaterial % Mw,"rhow0",LocalSolventMaterial % rhow0,"rhoi0",LocalSolventMaterial % rhoi0,&
@@ -545,20 +627,48 @@ CONTAINS
   END FUNCTION ReadPermafrostElementRockMaterial
   
   !---------------------------------------------------------------------------------------------
-  FUNCTION ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
-       CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-       l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-       Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity) RESULT(Constantsread)
+!!$  FUNCTION ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
+!!$       CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
+!!$       l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$       Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity) RESULT(Constantsread)
+  FUNCTION ReadPermafrostConstants(Model, FunctionName, CurrentSoluteMaterial,&
+       CurrentSolventMaterial,  DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+       l0,vi0,vc0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,Gravity,&
+       acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+       acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+       acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+       aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+       acc,bcc) RESULT(Constantsread)
     !------------------------------------------------------------------------------
     TYPE(Model_t) :: Model
     CHARACTER(LEN=MAX_NAME_LEN) :: FunctionName
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
     INTEGER :: DIM
-    REAL(KIND=dp) :: GasConstant, Mw,Mc, T0, p0, DeltaT, eps, rhow0,rhoi0,rhoc0,&
-         l0,hi0,hw0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),kw0th,ki0th,kc0th,mu0,&
-         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity(3)
+!!$    REAL(KIND=dp) :: GasConstant, Mw,Mc, T0, p0, DeltaT, eps, rhow0,rhoi0,rhoc0,&
+!!$         l0,hi0,hw0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),kw0th,ki0th,kc0th,mu0,&
+!!$         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity(3)
+    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         acw(0:5),bcw(0:5),ccw(0:5),&
+         akw(0:5),bkw(0:5),ckw(0:5),&
+         aaw(0:5),baw(0:5),caw(0:5),&
+         azw(0:5),bzw(0:5),czw(0:5),&
+         aci(0:5),bci(0:5),cci(0:5),&
+         aki(0:5),bki(0:5),cki(0:5),&
+         aai(0:5),bai(0:5),cai(0:5),&
+         acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
+         Gravity(3) ! constants read only once
+    INTEGER :: &
+         acwl,bcwl,ccwl,&
+         akwl,bkwl,ckwl,&
+         aawl,bawl,cawl,&
+         azwl,bzwl,czwl,&
+         acil,bcil,ccil, &
+         akil,bkil,ckil,&
+         aail,bail,cail ! integer values read only once
+    REAL(KIND=dp) :: hi0,hw0
     LOGICAL :: Constantsread
     !------------------------------------------------------------------------------
     REAL(KIND=dp), POINTER :: gWork(:,:)
@@ -641,10 +751,54 @@ CONTAINS
     l0= (CurrentSolventMaterial % hw0) - (CurrentSolventMaterial % hi0)
     vi0 = CurrentSolventMaterial % vi0
     cw0 = CurrentSolventMaterial % cw0
+    kw0 = CurrentSolventMaterial % kw0
+    aw0 = CurrentSolventMaterial % aw0
+    zw0 = CurrentSolventMaterial % zw0
     ci0 = CurrentSolventMaterial % ci0
-    acw(0:1) = CurrentSolventMaterial % acw(0:1)
-    bcw(0:2) = CurrentSolventMaterial % bcw(0:2)
-    aci(0:1) = CurrentSolventMaterial % aci(0:1)
+    ki0 = CurrentSolventMaterial % ki0
+    ai0 = CurrentSolventMaterial % ai0
+    acw(0:5) = CurrentSolventMaterial % acw(0:5)
+    bcw(0:5) = CurrentSolventMaterial % bcw(0:5)
+    ccw(0:5) = CurrentSolventMaterial % ccw(0:5)
+    akw(0:5) = CurrentSolventMaterial % akw(0:5)
+    bkw(0:5) = CurrentSolventMaterial % bkw(0:5)
+    ckw(0:5) = CurrentSolventMaterial % ckw(0:5)
+    aaw(0:5) = CurrentSolventMaterial % aaw(0:5)
+    baw(0:5) = CurrentSolventMaterial % baw(0:5)
+    caw(0:5) = CurrentSolventMaterial % caw(0:5)
+    azw(0:5) = CurrentSolventMaterial % azw(0:5)
+    bzw(0:5) = CurrentSolventMaterial % bzw(0:5)
+    czw(0:5) = CurrentSolventMaterial % czw(0:5)
+    aci(0:5) = CurrentSolventMaterial % aci(0:5)
+    bci(0:5) = CurrentSolventMaterial % bci(0:5)
+    cci(0:5) = CurrentSolventMaterial % cci(0:5)
+    aki(0:5) = CurrentSolventMaterial % aki(0:5)
+    bki(0:5) = CurrentSolventMaterial % bki(0:5)
+    cki(0:5) = CurrentSolventMaterial % cki(0:5)
+    aai(0:5) = CurrentSolventMaterial % aai(0:5)
+    bai(0:5) = CurrentSolventMaterial % bai(0:5)
+    cai(0:5) = CurrentSolventMaterial % cai(0:5)
+    acwl = CurrentSolventMaterial % acwl 
+    bcwl = CurrentSolventMaterial % bcwl 
+    ccwl = CurrentSolventMaterial % ccwl 
+    akwl = CurrentSolventMaterial % akwl 
+    bkwl = CurrentSolventMaterial % bkwl 
+    ckwl = CurrentSolventMaterial % ckwl 
+    aawl = CurrentSolventMaterial % aawl 
+    bawl = CurrentSolventMaterial % bawl 
+    cawl = CurrentSolventMaterial % cawl 
+    azwl = CurrentSolventMaterial % azwl 
+    bzwl = CurrentSolventMaterial % bzwl 
+    czwl = CurrentSolventMaterial % czwl 
+    acil = CurrentSolventMaterial % acil 
+    bcil = CurrentSolventMaterial % bcil 
+    ccil = CurrentSolventMaterial % ccil 
+    akil = CurrentSolventMaterial % akil 
+    bkil = CurrentSolventMaterial % bkil 
+    ckil = CurrentSolventMaterial % ckil 
+    aail = CurrentSolventMaterial % aail 
+    bail = CurrentSolventMaterial % bail 
+    cail = CurrentSolventMaterial % cail 
     kw0th = CurrentSolventMaterial % kw0th
     ki0th = CurrentSolventMaterial % ki0th
     mu0 = CurrentSolventMaterial % mu0
@@ -673,11 +827,6 @@ CONTAINS
     WRITE(Message,*) a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bc
     CALL INFO(FunctionName,Message,Level=9)
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
-    
-    !------------------------------------------------------------------------------
-    ! rock material constants
-    !------------------------------------------------------------------------------
-    !NumerOfRockRecords = CurrentRockMaterial % NumerOfRockRecords
 
   END FUNCTION ReadPermafrostConstants
   
@@ -1063,17 +1212,17 @@ CONTAINS
     END IF
   END FUNCTION XiEta
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION GeneralPolynomial(VariableAtIP,ReferenceVariable,Normation,coeff0,coeff,pdeg)
+  REAL(KIND=dp) FUNCTION GeneralPolynomial(VariableAtIP,ReferenceVariable,Normation,coeff,pdeg)
     IMPLICIT NONE
     !-------
-    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff0,coeff(0:pdeg)
+    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff(0:5)
     INTEGER, INTENT(IN) :: pdeg
     REAL(KIND=dp) outval
     ! ------
     REAL(KIND=dp) currpot
     INTEGER :: currdeg
 
-    outval = coeff0
+    outval = 1.0_dp
     currpot = 1.0_dp
     DO currdeg=0,pdeg
       outval = outval * coeff(currdeg) * currpot
@@ -1082,16 +1231,16 @@ CONTAINS
     GeneralPolynomial = outval
   END FUNCTION GeneralPolynomial
     !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION GeneralIntegral(VariableAtIP,ReferenceVariable,Normation,coeff0,coeff,pdeg)
+  REAL(KIND=dp) FUNCTION GeneralIntegral(VariableAtIP,ReferenceVariable,Normation,coeff0,coeff,pdeg)
     IMPLICIT NONE
     !-------
-    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff0,coeff(0:pdeg)
+    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff0,coeff(0:5)
     INTEGER, INTENT(IN) :: pdeg
     REAL(KIND=dp) outval
     ! ------
     REAL(KIND=dp) currpot
     INTEGER :: currdeg
-
+    !PRINT *,"Integral"
     outval = coeff0*(VariableAtIP - ReferenceVariable)
     currpot = 1.0_dp
     DO currdeg=0,pdeg
@@ -1107,17 +1256,45 @@ CONTAINS
     rhos = rhos0
   END FUNCTION rhos
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+  REAL (KIND=dp) FUNCTION rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+       kw0,akw,bkw,ckw,akwl,bkwl,ckwl,&
+       aw0,aaw,baw,caw,aawl,bawl,cawl,&
+       zw0,azw,bzw,czw,azwl,bzwl,czwl)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhow0,TemperatureAtIP,PressureAtIP
-    rhow = rhow0
+    REAL(KIND=dp), INTENT(IN) :: rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,kw0,aw0,zw0
+    REAL(KIND=DP), DIMENSION(0:5) :: akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw
+    INTEGER, INTENT(IN) :: akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl
+    !----------------------
+    REAL(KIND=dp) :: aux1, aux2, aux3, watercont
+    !----------------------
+    aux1 = GeneralIntegral(PressureAtIP,p0,p0,kw0,akw,akwl)
+    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,aw0,baw,bawl)
+    watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
+    aux3 = GeneralIntegral(watercont,1.0_dp,1.0_dp,zw0,bzw,bzwl)
+    !PRINT *,"aux1-3",aux1,aux2,aux3
+    !PRINT *,"watercont,zw0,bzw,bzwl", watercont,zw0,bzw,bzwl
+    rhow = rhow0 * EXP(aux1 - aux2 + aux3)
   END FUNCTION rhow
   !---------------------------------------------------------------------------------------------
-    REAL (KIND=dp) FUNCTION rhoi(rhoi0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+  REAL (KIND=dp) FUNCTION rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+       ki0,aki,bki,cki,akil,bkil,ckil,&
+       ai0,aai,bai,cai,aail,bail,cail)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhoi0,TemperatureAtIP,PressureAtIP
-    rhoi = rhoi0
+    REAL(KIND=dp), INTENT(IN) :: rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,ki0,ai0
+    REAL(KIND=DP), DIMENSION(0:5) :: aki,bki,cki,aai,bai,cai,azi,bzi,czi
+    INTEGER, INTENT(IN) :: akil,bkil,ckil,aail,bail,cail
+    !----------------------
+    REAL(KIND=dp) :: aux1, aux2, aux3, watercont
+    !----------------------
+    aux1 = GeneralIntegral(PressureAtIP,p0,p0,ki0,aki,akil)
+    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ai0,bai,bail)
+    rhoi = rhoi0 * EXP(aux1 - aux2)
   END FUNCTION rhoi
+!!$  REAL (KIND=dp) FUNCTION rhoi(rhoi0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+!!$    IMPLICIT NONE
+!!$    REAL(KIND=dp), INTENT(IN) :: rhoi0,TemperatureAtIP,PressureAtIP
+!!$    rhoi = rhoi0
+!!$  END FUNCTION rhoi
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
     IMPLICIT NONE
@@ -1132,31 +1309,54 @@ CONTAINS
     cs = cs0
   END FUNCTION cs
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
+  REAL (KIND=dp) FUNCTION cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
+       acw,bcw,ccw,acwl,bcwl,ccwl)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: cw0,acw(0:2),bcw(0:2),T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
-    INTEGER :: i
-    REAL(KIND=dp) :: xw, xw0, aux(2)
-    xw = 1.0_dp - SalinityAtIP
-    xw0 = 1.0_dp
-    aux = 0.0_dp
-    DO i=1,3
-      aux(1) = aux(1) + acw(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
-      aux(2) = aux(2) + acw(i)* ( ( xw - xw0 )**(1.0_dp*i - 1.0_dp))
-    END DO
-    cw = cw0 * aux(1) * aux(2) 
+    REAL(KIND=dp), INTENT(IN) :: cw0,T0,TemperatureAtIP,SalinityAtIP
+    REAL(KIND=DP), DIMENSION(0:5) :: acw,bcw,ccw
+    INTEGER, INTENT(IN) :: acwl,bcwl,ccwl
+    !----------------------
+    REAL(KIND=dp) :: aux1, aux2, watercont
+    watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
+    aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acw,acwl)
+    aux2 = GeneralPolynomial(watercont,1.0_dp,1.0_dp,bcw,bcwl)
+    cw = cw0*aux1*aux2
   END FUNCTION cw
+!!$  !---------------------------------------------------------------------------------------------
+!!$  REAL (KIND=dp) FUNCTION cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
+!!$    IMPLICIT NONE
+!!$    REAL(KIND=dp), INTENT(IN) :: cw0,acw(0:2),bcw(0:2),T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
+!!$    INTEGER :: i
+!!$    REAL(KIND=dp) :: xw, xw0, aux(2)
+!!$    xw = 1.0_dp - SalinityAtIP
+!!$    xw0 = 1.0_dp
+!!$    aux = 0.0_dp
+!!$    DO i=1,3
+!!$      aux(1) = aux(1) + acw(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
+!!$      aux(2) = aux(2) + acw(i)* ( ( xw - xw0 )**(1.0_dp*i - 1.0_dp))
+!!$    END DO
+!!$    cw = cw0 * aux(1) * aux(2) 
+!!$  END FUNCTION cw
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !! NEW
+  REAL (KIND=dp) FUNCTION ci(T0,TemperatureAtIP,&
+       ci0,aci,acil)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: ci0,aci(0:1),T0,TemperatureAtIP,PressureAtIP
-    INTEGER :: i
-    REAL(KIND=dp) :: aux
-    DO i=1,2
-      aux = aux + aci(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
-    END DO
-    ci = ci0 * aux
+    REAL(KIND=dp), INTENT(IN) :: ci0,T0,TemperatureAtIP
+    REAL(KIND=DP), DIMENSION(0:5) :: aci
+    INTEGER, INTENT(IN) :: acil
+    !----------------------
+    ci = ci0 * GeneralPolynomial(TemperatureAtIP,T0,T0,aci,acil)
   END FUNCTION ci
+!!$  REAL (KIND=dp) FUNCTION ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !! NEW
+!!$    IMPLICIT NONE
+!!$    REAL(KIND=dp), INTENT(IN) :: ci0,aci(0:1),T0,TemperatureAtIP,PressureAtIP
+!!$    INTEGER :: i
+!!$    REAL(KIND=dp) :: aux
+!!$    DO i=1,2
+!!$      aux = aux + aci(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
+!!$    END DO
+!!$    ci = ci0 * aux
+!!$  END FUNCTION ci
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
     IMPLICIT NONE
@@ -1213,11 +1413,11 @@ CONTAINS
     !     + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*l0*Porosity*XiT
   END FUNCTION GetCGTT
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwTT(rhow0,rhoc0,cw0,cc0,Salinity)RESULT(CgwTT)
+  FUNCTION GetCgwTT(rhow,rhoc,cw,cc,Salinity)RESULT(CgwTT)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhow0,rhoc0,cw0,cc0,Salinity
+    REAL(KIND=dp), INTENT(IN) :: rhow,rhoc,cw,cc,Salinity
     REAL(KIND=dp) :: CgwTT
-    CgwTT = (1.0_dp - Salinity)*rhow0*cw0 + Salinity*rhoc0*cc0
+    CgwTT = (1.0_dp - Salinity)*rhow*cw + Salinity*rhoc*cc
   END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION fTildewT(B1,Temperature,D1,delta,e1,l0,cw0,ci0,T0,Xi,Xi0)
@@ -1579,10 +1779,30 @@ CONTAINS
     REAL(KIND=dp) :: fTildewTAtIP, fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
-    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+!!$    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+!!$         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+!!$         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
+!!$         Gravity(3) ! constants read only once
+    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         acw(0:5),bcw(0:5),ccw(0:5),&
+         akw(0:5),bkw(0:5),ckw(0:5),&
+         aaw(0:5),baw(0:5),caw(0:5),&
+         azw(0:5),bzw(0:5),czw(0:5),&
+         aci(0:5),bci(0:5),cci(0:5),&
+         aki(0:5),bki(0:5),cki(0:5),&
+         aai(0:5),bai(0:5),cai(0:5),&
+         acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
          nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
          Gravity(3) ! constants read only once
+    INTEGER :: &
+         acwl,bcwl,ccwl,&
+         akwl,bkwl,ckwl,&
+         aawl,bawl,cawl,&
+         azwl,bzwl,czwl,&
+         acil,bcil,ccil, &
+         akil,bkil,ckil,&
+         aail,bail,cail ! integer values read only once
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,StiffPQ
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
@@ -1598,17 +1818,34 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow', &
          FunctionName='Permafrost (LocalMatrixDarcy)'
 
+!!$    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+!!$         l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$         Dm0,d1,d2,dc0,dc1,bw,bi,bc,MinKgw,Gravity
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-         Dm0,d1,d2,dc0,dc1,bw,bi,bc,MinKgw,Gravity
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity,&
+         acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+         acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+         acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+         aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+         acc,bcc
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       ConstantsRead = &
-           ReadPermafrostConstants(Model, FunctionName, &
-           CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial, &
-           DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+           ReadPermafrostConstants(Model, FunctionName, CurrentSoluteMaterial,&
+           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+           l0,vi0,vc0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,Gravity,&
+           acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+           acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+           acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+           aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+           acc,bcc)
+!!$           ReadPermafrostConstants(Model, FunctionName, &
+!!$           CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial, &
+!!$           DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
+!!$           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -1694,9 +1931,14 @@ CONTAINS
       END SELECT
 
       !Materialproperties needed at IP
-      rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhowAtIP = rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhoiAtIP = rhoi(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  
+      rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+           kw0,akw,bkw,ckw,akwl,bkwl,ckwl,&
+           aw0,aaw,baw,caw,aawl,bawl,cawl,&
+           zw0,azw,bzw,czw,azwl,bzwl,czwl) !!! NEW
+      rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+           ki0,aki,bki,cki,akil,bkil,ckil,&
+           ai0,aai,bai,cai,aail,bail,cail)
       !rhocAtIP = rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
       
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,e1,l0,cw0,ci0,T0,XiAtIP,Xi0)
@@ -2010,11 +2252,31 @@ CONTAINS
     REAL(KIND=dp), ALLOCATABLE :: Basis(:), dBasisdx(:,:)
     LOGICAL :: Found, ConstantsRead=.FALSE., FirstTime=.TRUE., ElementWiseRockMaterial
     TYPE(ValueList_t), POINTER :: Material
-    REAL(KIND=dp), POINTER :: Conductivity(:,:,:)=>NULL()
-    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+    !REAL(KIND=dp), POINTER :: Conductivity(:,:,:)=>NULL()
+!!$    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+!!$         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+!!$         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
+!!$         Gravity(3) ! constants read only once
+    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         acw(0:5),bcw(0:5),ccw(0:5),&
+         akw(0:5),bkw(0:5),ckw(0:5),&
+         aaw(0:5),baw(0:5),caw(0:5),&
+         azw(0:5),bzw(0:5),czw(0:5),&
+         aci(0:5),bci(0:5),cci(0:5),&
+         aki(0:5),bki(0:5),cki(0:5),&
+         aai(0:5),bai(0:5),cai(0:5),&
+         acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
          nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
          Gravity(3) ! constants read only once
+    INTEGER :: &
+         acwl,bcwl,ccwl,&
+         akwl,bkwl,ckwl,&
+         aawl,bawl,cawl,&
+         azwl,bzwl,czwl,&
+         acil,bcil,ccil, &
+         akil,bkil,ckil,&
+         aail,bail,cail ! integer values read only once
     REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),MinKgw,gradTAtIP(3),gradPAtIP(3),&
          fluxTAtIP(3),fluxpAtIP(3),fluxgAtIP(3) ! needed in equation
     REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
@@ -2027,10 +2289,20 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='PermafrostGroundwaterFlux (BulkAssembly)'
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel,ElementRockMaterialName
     
-    SAVE Conductivity, Nodes, ConstantsRead,DIM,GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-       l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-       Gravity,CurrentRockMaterial,CurrentSoluteMaterial,FirstTime,ElementWiseRockMaterial
-
+!!$    SAVE Conductivity, Nodes, ConstantsRead,DIM,GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+!!$       l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$       Gravity,CurrentRockMaterial,CurrentSoluteMaterial,FirstTime,ElementWiseRockMaterial
+    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity,&
+         acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+         acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+         acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+         aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+         acc,bcc,CurrentRockMaterial,CurrentSoluteMaterial,FirstTime,ElementWiseRockMaterial
+         
+          
     n = 2 * MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
 
     ALLOCATE( STIFF(n,n), FORCE(dofs,n) )
@@ -2088,10 +2360,19 @@ CONTAINS
       !  CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
       ! END IF
       IF(.NOT.ConstantsRead) THEN
-        ConstantsRead =  ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
-             CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-             l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-             Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+!!$        ConstantsRead =  ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
+!!$             CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
+!!$             l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$             Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+        ConstantsRead = &
+             ReadPermafrostConstants(Model, FunctionName, CurrentSoluteMaterial,&
+             CurrentSolventMaterial,  DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+             l0,vi0,vc0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,Gravity,&
+             acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+             acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+             acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+             aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+             acc,bcc)
       END IF
 
       CALL GetElementNodes( Nodes )
@@ -2452,14 +2733,14 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
        NodalTemperature(:),NodalGWflux(:,:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-       ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.,&
-       NoGWflux=.TRUE.,ComputeGWFlux=.FALSE.
+       ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.,GivenGWFlux=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName, PhaseChangeModel
 
-  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
-  NumberOfRockRecords,NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux
+  SAVE DIM,FirstTime,AllocationsDone,GivenGWFlux,&
+       CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords,&
+       NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux!,NodalGWflux,NoGWflux
   !------------------------------------------------------------------------------
 
   CALL DefaultStart()
@@ -2509,9 +2790,14 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
 
       CALL ReadVarsHTEQ(N)
 
-      CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb, NodalTemperature, NodalPressure, &
-           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
-           NoGWflux, NoPressure, CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
+      !CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb, NodalTemperature, NodalPressure, &
+      !     NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
+      !     NoGWflux, NoPressure, CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
+      !     NumberOfRockRecords, PhaseChangeModel)
+      CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb,&
+           NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
+           NodalGWflux,GivenGWflux,&
+           CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
            NumberOfRockRecords, PhaseChangeModel)
     END DO
 
@@ -2549,6 +2835,8 @@ CONTAINS
   ! compute element-wise nodal variables
   SUBROUTINE ReadVarsHTEQ(N)
     INTEGER :: N
+    REAL(KIND=dp) :: p0
+    
     NodalPressure(1:N) = 0.0_dp
     NodalSalinity(1:N) = 0.0_dp
     NodalGWflux(1:3,1:N) = 0.0_dp
@@ -2564,13 +2852,23 @@ CONTAINS
     ELSE
       NodalPorosity(1:N) = Porosity(PorosityPerm(Element % NodeIndexes(1:N)))
     END IF
-    IF (.NOT.NoPressure) THEN
+    IF (NoPressure) THEN
+      CALL INFO(SolverName,'No Pressure variable found - setting to "Reference Pressure"',Level=9)
+      p0 = GetConstReal(Model % Constants, 'Reference Pressure', Found)
+      IF (.NOT.Found) THEN
+        p0 = 100132.0_dp
+        CALL INFO(SolverName, ' "Reference Pressure not found in Constants and set to default value p0=100132.0',Level=9)
+      END IF
+      NodalPressure(1:N) = p0
+    ELSE
       NodalPressure(1:N) = Pressure(PressurePerm(Element % NodeIndexes(1:N)))
     END IF
-    IF (.NOT.NoSalinity) THEN
+    IF (NoSalinity) THEN
+      NodalSalinity(1:N) = 0.0_dp
+    ELSE
       NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
     END IF
-    IF (.NOT.NoGWflux) THEN
+    IF (GivenGWflux) THEN
       NodalGWflux(1,1:N) = &
            GWflux1(GWfluxPerm1(Element % NodeIndexes(1:N)))
       IF (DIM > 1) THEN
@@ -2581,7 +2879,8 @@ CONTAINS
                GWflux3(GWfluxPerm3(Element % NodeIndexes(1:N)))
         END IF
       END IF
-
+    ELSE
+      NodalGWflux(1:3,1:N) = 0.0_dp
     END IF
   END SUBROUTINE ReadVarsHTEQ
 
@@ -2671,43 +2970,31 @@ CONTAINS
       NoSalinity=.FALSE.
     END IF
 
+    
     GWfluxName = ListGetString(Params, &
-         'Groundwater Flux Variable', Found )
-    IF (.NOT.Found) THEN
-      NoGWflux = .TRUE.
-    ELSE
+         'Groundwater Flux Variable', GivenGWFlux )
+    IF (GivenGWFlux) THEN
       WRITE(Message,'(A,A)') "'Groundwater flux Variable' found and set to: ", GWfluxName
       CALL INFO(SolverName,Message,Level=9)
-      NoGWflux = .FALSE.
       GWfluxVar1 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 1")
       IF (.NOT.ASSOCIATED(GWfluxVar1)) THEN
         PRINT *, TRIM(GWfluxName) // " 1", " not found"
-        NoGWflux = .TRUE.
+        GivenGWflux = .FALSE.
       END IF
       IF (DIM > 1) THEN
         GWfluxVar2 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 2")
         IF (.NOT.ASSOCIATED(GWfluxVar2)) THEN
           PRINT *, TRIM(GWfluxName) // " 2", " not found"
-          NoGWflux = .TRUE.
+          GivenGWflux = .FALSE.
         END IF
         IF (DIM > 2) THEN
           GWfluxVar3 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 3")
           IF (.NOT.ASSOCIATED(GWfluxVar2)) THEN
             PRINT *, TRIM(GWfluxName) // " 3", " not found"
-            NoGWflux = .TRUE.
+            GivenGWflux = .FALSE.
           END IF
         END IF
       END IF
-    END IF
-    IF (NoGWFlux) THEN  
-      IF (NoPressure) THEN
-        CALL WARN(SolverName,'Neither Pressure nor Groundwater Flux variable found. No convection will be computed')
-        ComputeGWFlux = .FALSE.
-      ELSE
-        CALL INFO(SolverName,'Using Pressure and Temperature to compute flux',Level=9)
-        ComputeGWFlux = .TRUE.
-      END IF
-    ELSE
       GWflux1 => GWfluxVar1 % Values
       GWfluxPerm1 => GWfluxVar1 % Perm
       IF (DIM > 1) THEN
@@ -2718,17 +3005,29 @@ CONTAINS
           GWfluxPerm3 => GWfluxVar3 % Perm
         END IF
       END IF
-      NoGWflux = .FALSE.
-      ComputeGWFlux = .FALSE.
+      !ComputeGWFlux = .FALSE.
       CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
+    !ELSE
+    !  IF (NoPressure) THEN
+    !    CALL WARN(SolverName,'Neither Pressure nor Groundwater Flux variable found. No convection will be computed')
+    !    ComputeGWFlux = .FALSE.
+    !  ELSE
+    !    CALL INFO(SolverName,'Using Pressure and Temperature to compute flux',Level=9)
+    !    ComputeGWFlux = .TRUE.
+    !  END IF
     END IF
   END SUBROUTINE AssignVarsHTEQ
 
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixHTEQ( Element, ElementNo, NoElements, n, nd, NodalTemperature, NodalPressure, &
-       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
-       CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords, PhaseChangeModel )
+ ! SUBROUTINE LocalMatrixHTEQ( Element, ElementNo, NoElements, n, nd, NodalTemperature, NodalPressure, &
+ !      NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
+  !      CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords, PhaseChangeModel )
+  SUBROUTINE LocalMatrixHTEQ(  Element, ElementNo, NoElements, n, nd,&
+       NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
+       NodalGWflux, GivenGWflux,&
+       CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
+       NumberOfRockRecords, PhaseChangeModel)
     IMPLICIT NONE
     !------------------------------------------------------------------------------
     INTEGER, INTENT(IN) :: n, nd, ElementNo, NoElements, NumberOfRockRecords
@@ -2738,7 +3037,8 @@ CONTAINS
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
-    LOGICAL, INTENT(IN) :: ComputeGWFlux,NoGWFlux,NoPressure
+    LOGICAL, INTENT(IN) :: GivenGWflux
+    !LOGICAL, INTENT(IN) :: ComputeGWFlux,NoGWFlux,NoPressure
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
@@ -2747,10 +3047,26 @@ CONTAINS
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
-    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         acw(0:5),bcw(0:5),ccw(0:5),&
+         akw(0:5),bkw(0:5),ckw(0:5),&
+         aaw(0:5),baw(0:5),caw(0:5),&
+         azw(0:5),bzw(0:5),czw(0:5),&
+         aci(0:5),bci(0:5),cci(0:5),&
+         aki(0:5),bki(0:5),cki(0:5),&
+         aai(0:5),bai(0:5),cai(0:5),&
+         acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
          nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
          Gravity(3) ! constants read only once
+    INTEGER :: &
+         acwl,bcwl,ccwl,&
+         akwl,bkwl,ckwl,&
+         aawl,bawl,cawl,&
+         azwl,bzwl,czwl,&
+         acil,bcil,ccil, &
+         akil,bkil,ckil,&
+         aail,bail,cail   ! integer values read only once    
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,csAtIP,cwAtIP,ciAtIP,ccAtIP ! material properties at IP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
@@ -2767,21 +3083,32 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixHTEQ)'
     !------------------------------------------------------------------------------   
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Gravity
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity,&
+         acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+         acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+         acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+         aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+         acc,bcc
     !------------------------------------------------------------------------------
     gradTAtIP = 0.0_dp
     gradPAtIP = 0.0_dp
     IF(.NOT.ConstantsRead) THEN
       DIM = CoordinateSystemDimension()
-      ConstantsRead =  ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
-           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
-           !ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-           !GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           !l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           !Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+      ConstantsRead =  ReadPermafrostConstants(Model, FunctionName, CurrentSoluteMaterial,&
+       CurrentSolventMaterial,  DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+       l0,vi0,vc0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,Gravity,&
+       acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+       acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+       acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+       aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+       acc,bcc)
+!!$      ConstantsRead =  ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
+!!$           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
+!!$           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+
     END IF
 
     CALL GetElementNodes( Nodes )
@@ -2827,25 +3154,22 @@ CONTAINS
     IP = GaussPoints( Element )
     DO t=1,IP % n
       ! Basis function values & derivatives at the integration point:
-      !--------------------------------------------------------------
       stat = ElementInfo( Element, Nodes, IP % U(t), IP % V(t), &
            IP % W(t), detJ, Basis, dBasisdx )
 
       ! The source term at the integration point:
-      !------------------------------------------
       LoadAtIP = SUM( Basis(1:n) * LOAD(1:n) )
 
       ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
       TemperatureAtIP = SUM( Basis(1:N) * NodalTemperature(1:N) )
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))      
-      IF (NoPressure) THEN
-        PressureAtIP = p0
+      !IF (NoPressure) THEN
+      !  PressureAtIP = p0
         !PRINT *,"PressureAtIP",PressureAtIP
-      END IF
+      !END IF
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
             
-      
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('Anderson')
@@ -2869,15 +3193,32 @@ CONTAINS
              deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
       END SELECT
 
-      !Materialproperties needed at IP
-      rhosAtIP = rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhowAtIP = rhow(rhow0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhoiAtIP = rhow(rhoi0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhocAtIP = rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      cwAtIP   = cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
+      !Materialproperties needed at IP:
+      
+      ! densities
+      rhosAtIP = rhos0 ! replace
+      !rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+           ki0,aki,bki,cki,akil,bkil,ckil,&
+           ai0,aai,bai,cai,aail,bail,cail) !!! NEW
+      !rhowAtIp = rhow0 ! replace
+      rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+           kw0,akw,bkw,ckw,akwl,bkwl,ckwl,&
+           aw0,aaw,baw,caw,aawl,bawl,cawl,&
+           zw0,azw,bzw,czw,azwl,bzwl,czwl)
+      IF (rhowAtIP .NE. rhowAtIP) PRINT *,"rhowAtIP",rhowAtIP
+      rhocAtIP = rhoc0
+      !rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      
+      ! heat capacities
+      csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!
+      cwAtIP   = cw(T0,TemperatureAtIP,SalinityAtIP,&
+           cw0,acw,bcw,ccw,acwl,bcwl,ccwl)!!! NEW
+      !cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
       !PRINT *, "cwAtIP", cwAtIP, "cw0",cw0,"acw",acw,"bcw",bcw,"T0",T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
-      ciAtIP   = ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !!! NEW
+      ciAtIP   = ci(T0,TemperatureAtIP,&
+           ci0,aci,acil)
+      !ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !!! NEW
       ccAtIP   = cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
       
       ! heat conductivity at IP
@@ -2896,12 +3237,13 @@ CONTAINS
       CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP)
       !PRINT *,"CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
       ! compute groundwater flux for advection term
-      IF (.NOT.ComputeGWFlux .AND. .NOT.NoGWFlux) THEN
-        JgwDAtIP = 0.0_dp
+      JgwDAtIP = 0.0_dp
+      IF (GivenGWFlux) THEN
         DO I=1,DIM
           JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
         END DO
-      ELSE IF(ComputeGWFlux .AND. NoGWFlux) THEN        
+      ELSE         
+        !PRINT *, "HTEQ: Compute Flux"
         fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,e1,l0,cw0,ci0,T0,XiAtIP,Xi0)
         fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,e1,rhow0,rhoi0,XiAtIP,Xi0)
         KgwAtIP = 0.0_dp
@@ -2920,12 +3262,13 @@ CONTAINS
           fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0) * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
           fluxPAtIP(i) =  -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
           !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
-          JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)          
+          JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)
+          !PRINT *,"JgwDAtIP_",i,"=",JgwDAtIP(i)," =", fluxgAtIP(i)," +", fluxPAtIP(i)
         END DO
-        !PRINT *,"JgwDAtIP=(",JgwDAtIP(1:DIM),")=(",fluxgAtIP(1:DIM),") + (",fluxPAtIP(1:DIM)
+        !PRINT *,"JgwDAtIP=(",JgwDAtIP(1:DIM),")=(",fluxgAtIP(1:DIM),") + (",fluxPAtIP(1:DIM),")"
         !PRINT *,"KgwppAtIP",KgwppAtIP(1:DIM,1:DIM),"gradPAtIP",gradPAtIP(1:DIM),"fluxPAtIP",fluxPAtIP(1:DIM)
-      ELSE ! nothing at all is computed or read in
-        JgwDAtIP(1:DIM) = 0.0_dp
+      !ELSE ! nothing at all is computed or read in
+      !  JgwDAtIP(1:DIM) = 0.0_dp
       END IF
 
       Weight = IP % s(t) * DetJ
@@ -2941,11 +3284,11 @@ CONTAINS
           END DO
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
-          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
-            STIFF (p,q) = STIFF(p,q) + Weight * &
-               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-           ! PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-          END IF
+          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
+          STIFF (p,q) = STIFF(p,q) + Weight * &
+                CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) ! REMOVE THE FACTOR 10
+            !PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          !END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
           MASS(p,q) = MASS(p,q) + Weight * CGTTAtIP * Basis(q) * Basis(p)
@@ -3150,9 +3493,9 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
       dim = CoordinateSystemDimension()
     END IF
     CALL ReadVarsXi(N)
-    CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, &
-         NodalPorosity, NodalSalinity, CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
-         PhaseChangeModel,ComputeXiT)
+    CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
+          CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
+          PhaseChangeModel,ComputeXiT)
   END DO
   
   CALL DefaultFinishBoundaryAssembly()
@@ -3195,10 +3538,30 @@ CONTAINS
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
     REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
-    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),&
-         eps,kw0th,ki0th,kc0th,mu0,nu0(2),a1(0:3),b1,a2,b2(0:1),&
-         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity(3)  ! constants read only once
+    !REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+    !     l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),&
+    !     eps,kw0th,ki0th,kc0th,mu0,nu0(2),a1(0:3),b1,a2,b2(0:1),&
+    !     Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity(3)  ! constants read only once
+    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         acw(0:5),bcw(0:5),ccw(0:5),&
+         akw(0:5),bkw(0:5),ckw(0:5),&
+         aaw(0:5),baw(0:5),caw(0:5),&
+         azw(0:5),bzw(0:5),czw(0:5),&
+         aci(0:5),bci(0:5),cci(0:5),&
+         aki(0:5),bki(0:5),cki(0:5),&
+         aai(0:5),bai(0:5),cai(0:5),&
+         acc(0:2),bcc(0:2),eps,kw0th,ki0th,kc0th,mu0,&
+         nu0(2),a1(0:3),b1,a2,b2(0:1),Dm0,d1,d2,dc0,dc1,bw,bi,bc,&
+         Gravity(3) ! constants read only once
+    INTEGER :: &
+         acwl,bcwl,ccwl,&
+         akwl,bkwl,ckwl,&
+         aawl,bawl,cawl,&
+         azwl,bzwl,czwl,&
+         acil,bcil,ccil, &
+         akil,bkil,ckil,&
+         aail,bail,cail ! integer values read only once
     REAL(KIND=dp) :: Basis(n),dBasisdx(n,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
          GWfluxAtIP(3),StiffPQ, meanfactor
@@ -3212,17 +3575,34 @@ CONTAINS
     TYPE(Nodes_t) :: Nodes
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixXi)'
     !------------------------------------------------------------------------------   
+!!$    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+!!$           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity
     SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity
+         l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,&
+         eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity,&
+         acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+         acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+         acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+         aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+         acc,bcc
     !------------------------------------------------------------------------------
     IF(.NOT.ConstantsRead) THEN
       dim = CoordinateSystemDimension()
       ConstantsRead = &
-           ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
-           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
+           ReadPermafrostConstants(Model, FunctionName, CurrentSoluteMaterial,&
+           CurrentSolventMaterial,  DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
+           l0,vi0,vc0,cw0,ci0,cc0,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,Gravity,&
+           acwl,bcwl,ccwl,akwl,bkwl,ckwl,aawl,bawl,cawl,azwl,bzwl,czwl,&
+           acil,bcil,ccil,akil,bkil,ckil,aail,bail,cail,&
+           acw,bcw,ccw,akw,bkw,ckw,aaw,baw,caw,azw,bzw,czw,&
+           aci,bci,cci,aki,bki,cki,aai,bai,cai,&
+           acc,bcc)
+!!$           ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
+!!$           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
+!!$           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
+!!$           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
            !ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
            !GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
            !l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
@@ -3448,668 +3828,14 @@ END SUBROUTINE PermafrostUnfrozenWaterContent
 
 !-----------------------------------------------------------------------------
 !>  salinity transport equation for enhanced permafrost model
+!----------------------------------------------------------------------------
+
+!!! TEMPORARILY REMOVED 
+
+
 !-----------------------------------------------------------------------------
-!------------------------------------------------------------------------------
-SUBROUTINE PermafrostSalinityTransport( Model,Solver,dt,TransientSimulation )
-  !------------------------------------------------------------------------------
-  USE DefUtils
-  USE PermaFrostMaterials
-
-  IMPLICIT NONE
-  !------------------------------------------------------------------------------
-  TYPE(Solver_t) :: Solver
-  TYPE(Model_t) :: Model
-  REAL(KIND=dp) :: dt
-  LOGICAL :: TransientSimulation
-  !------------------------------------------------------------------------------
-  ! Local variables
-  !------------------------------------------------------------------------------
-  TYPE(Element_t),POINTER :: Element
-  TYPE(ValueList_t), POINTER :: Params, Material
-  TYPE(Variable_t), POINTER :: PressureVar,PorosityVar,TemperatureVar,TemperatureTimeDerVar,&
-       GWfluxVar1,GWfluxVar2,GWfluxVar3
-  TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
-  TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
-  TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-  INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRockRecords, active,iter, maxiter, istat
-  INTEGER,PARAMETER :: io=25
-  INTEGER,POINTER :: TemperaturePerm(:), TemperatureTimeDerPerm(:), PressurePerm(:),&
-       PorosityPerm(:),SalinityPerm(:),GWfluxPerm1(:),&
-       GWfluxPerm2(:),GWfluxPerm3(:)
-  REAL(KIND=dp) :: Norm, meanfactor
-  REAL(KIND=dp),POINTER :: Temperature(:),TemperatureTimeDer(:), Pressure(:), Porosity(:),&
-       Salinity(:),GWflux1(:),GWflux2(:),GWflux3(:)
-  REAL(KIND=dp),ALLOCATABLE :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
-       NodalTemperature(:),NodalTemperatureTimeDer(:),NodalGWflux(:,:)
-  LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-       ConstantPorosity=.TRUE., NoPressure=.TRUE.,&
-       NoGWflux=.TRUE.,ComputeGWFlux=.FALSE.
-  CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
-  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostSalinity'
-  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, TemperatureName,TemperatureTimeDerName, GWfluxName,&
-       PhaseChangeModel
-  
-  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
-       NumberOfRockRecords,NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,&
-       NodalTemperatureTimeDer,NodalGWflux
-  !------------------------------------------------------------------------------
-
-  CALL DefaultStart()
-
-
-  Params => GetSolverParams()
-
-
-  CALL AssignVarsSalinity()
-
-  maxiter = ListGetInteger( Params,&
-       'Nonlinear System Max Iterations',Found,minv=1)
-  IF(.NOT. Found ) maxiter = 1
-
-  ! Nonlinear iteration loop:
-  !--------------------------
-  DO iter=1,maxiter
-
-    WRITE (Message,'(I5,A,I5,A)') iter,' out of ', maxiter,' max non-linear iterations'
-    CALL INFO(SolverName,Message,Level=6)
-
-    ! System assembly:
-    !----------------
-    CALL DefaultInitialize()
-    Active = GetNOFActive()
-    DO t=1,Active
-      Element => GetActiveElement(t)
-      ! Read Material information
-      Material => GetMaterial(Element)
-
-      PhaseChangeModel = ListGetString(Material, &
-           'Permafrost Phase Change Model', Found )
-      IF (Found) THEN
-        WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
-        CALL INFO(SolverName,Message,Level=9)
-      END IF
-      
-      IF (FirstTime) THEN
-        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material, Model % Constants, CurrentRockMaterial )
-        IF (NumberOfRockRecords < 1) THEN
-          CALL FATAL(SolverName,'No Rock Material specified')
-        ELSE
-          CALL INFO(SolverName,'Permafrost rock material read',Level=3)
-          FirstTime = .FALSE.
-        END IF
-        CALL ReadPermafrostSoluteMaterial( Material,Model % Constants,CurrentSoluteMaterial )
-        CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
-      END IF
-      n  = GetElementNOFNodes()
-      nd = GetElementNOFDOFs()
-      nb = GetElementNOFBDOFs()
-
-      CALL ReadVarsSalinity(N)
-
-      CALL LocalMatrixSalinity(  Element, n, nd+nb, NodalTemperature, NodalTemperatureTimeDer,NodalPressure, &
-           NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWflux, CurrentRockMaterial,&
-           CurrentSoluteMaterial,CurrentSolventMaterial,PhaseChangeModel)
-    END DO
-
-    CALL DefaultFinishBulkAssembly()
-
-    Active = GetNOFBoundaryElements()
-    DO t=1,Active
-      Element => GetBoundaryElement(t)
-      IF(ActiveBoundaryElement()) THEN
-        n  = GetElementNOFNodes()
-        nd = GetElementNOFDOFs()
-        nb = GetElementNOFBDOFs()
-        CALL LocalMatrixSalinityBC(  Element, n, nd+nb )
-      END IF
-    END DO
-
-    CALL DefaultFinishBoundaryAssembly()
-    CALL DefaultFinishAssembly()
-    !CALL DefaultDirichletBCs()
-
-    ! And finally, solve:
-    !--------------------
-    Norm = DefaultSolve()
-
-    IF( Solver % Variable % NonlinConverged > 0 ) EXIT
-
-  END DO
-
-  CALL DefaultFinish()
-
-CONTAINS
-
-  SUBROUTINE ReadVarsSalinity(N)
-    INTEGER :: N
-    ! Nodal variable dependencies
-    NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
-    NodalTemperatureTimeDer(1:N) = TemperatureTimeDer(TemperatureTimeDerPerm(Element % NodeIndexes(1:N)))
-    IF (ConstantPorosity) THEN
-      NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
-      IF (.NOT.Found) THEN
-        WRITE (Message,'(A,A,A)') "No '",TRIM(PorosityName) ,"'found in Material"
-        CALL FATAL(SolverName,Message)
-      END IF
-    ELSE
-      NodalPorosity(1:N) = Porosity(PorosityPerm(Element % NodeIndexes(1:N)))
-    END IF
-    IF (NoPressure) THEN
-      NodalPressure(1:N) = 0.0_dp
-    ELSE
-      NodalPressure(1:N) = Pressure(PressurePerm(Element % NodeIndexes(1:N)))
-    END IF
-    NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
-    IF (NoGWflux) THEN
-      NodalGWflux(1:3,1:N) = 0.0_dp
-    ELSE
-      NodalGWflux(1,1:N) = &
-           GWflux1(GWfluxPerm1(Element % NodeIndexes(1:N)))
-      IF (DIM > 1) THEN
-        NodalGWflux(2,1:N) = &
-             GWflux2(GWfluxPerm2(Element % NodeIndexes(1:N)))
-        IF (DIM > 2) THEN
-          NodalGWflux(3,1:N) = &
-               GWflux3(GWfluxPerm3(Element % NodeIndexes(1:N)))
-        END IF
-      END IF
-    END IF
-  END SUBROUTINE ReadVarsSalinity
-
-  SUBROUTINE AssignVarsSalinity()
-
-    IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
-      N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
-      IF (AllocationsDone) &
-           DEALLOCATE(NodalTemperature,NodalTemperatureTimeDer,NodalPorosity,NodalPressure,&
-           NodalSalinity,NodalGWflux)
-      ALLOCATE(NodalTemperature(N),NodalTemperatureTimeDer(N),NodalPorosity(N),NodalPressure(N),&
-           NodalSalinity(N),NodalGWflux(3,N),STAT=istat )
-      IF ( istat /= 0 ) THEN
-        CALL FATAL(SolverName,"Allocation error")
-      ELSE
-        AllocationsDone = .TRUE.
-        CALL INFO(SolverName,"Allocations Done",Level=1)
-      END IF
-
-    END IF
-    Salinity => Solver % Variable % Values
-    SalinityPerm => Solver % Variable % Perm
-
-    PressureName = ListGetString(Params, &
-         'Pressure Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
-      WRITE(PressureName,'(A)') 'Pressure'
-    ELSE
-      WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
-      CALL INFO(SolverName,Message,Level=9)
-    END IF
-    PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
-    IF (.NOT.ASSOCIATED(PressureVar)) THEN
-      NULLIFY(Pressure)
-      NoPressure = .TRUE.
-      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " not associated"
-      CALL WARN(SolverName,Message)
-    ELSE
-      Pressure => PressureVar % Values
-      PressurePerm => PressureVar % Perm
-      NoPressure = .FALSE.
-      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " associated"
-      CALL INFO(SolverName,Message,Level=9)
-    END IF
-
-    PorosityName = ListGetString(Params, &
-         'Porosity Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Porosity Variable' not found. Using default 'Porosity' ")
-      WRITE(PorosityName,'(A)') 'Porosity'
-    ELSE
-      WRITE(Message,'(A,A)') "'Porosity Variable' found and set to: ", PorosityName
-      CALL INFO(SolverName,Message,Level=9)
-    END IF
-    ConstantPorosity= GetLogical(Params,'Constant Porosity', Found)
-    IF ((.NOT.Found) .OR. (.NOT.ConstantPorosity)) THEN
-      PorosityVar => VariableGet(Solver % Mesh % Variables,PorosityName)
-      IF (.NOT.ASSOCIATED(PorosityVar)) THEN
-        CALL FATAL(SolverName,'Porosity Variable not found')
-      ELSE
-        Porosity => PorosityVar % Values
-        PorosityPerm => PorosityVar % Perm
-      END IF
-    ELSE
-      NULLIFY(PorosityVar)
-    END IF
-
-    TemperatureName = ListGetString(Params, &
-         'Temperature Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Temperature Variable' not found. Using default 'Temperature' ")
-      WRITE(TemperatureName,'(A)') 'Temperature'
-    ELSE
-      WRITE(Message,'(A,A)') "'Temperature Variable' found and set to: ", TemperatureName
-      CALL INFO(SolverName,Message,Level=9)
-    END IF
-    TemperatureVar => VariableGet(Solver % Mesh % Variables,TemperatureName)
-    IF (.NOT.ASSOCIATED(TemperatureVar)) THEN
-      CALL FATAL(SolverName,'Temperature Variable not associtated.')
-    ELSE
-      Temperature => TemperatureVar % Values
-      TemperaturePerm => TemperatureVar % Perm
-    END IF
-
-
-    TemperatureTimeDerName = ListGetString(Params, &
-         'TemperatureTimeDer Variable', Found )
-    IF (.NOT.Found) THEN
-      WRITE(TemperatureTimeDerName,'(A)') TRIM(TemperatureName),' Velocity'
-      WRITE(Message,'(A,A)') " 'Temperature Time Derivative Variable' not found. Using default ",&
-           TRIM(TemperatureTimeDerName)
-      CALL WARN(SolverName,Message)
-    ELSE
-      WRITE(Message,'(A,A)') "'Temperature Time Derivative Variable' found and set to: ",&
-           TemperatureTimeDerName
-      CALL INFO(SolverName,Message,Level=9)
-    END IF
-    TemperatureTimeDerVar => VariableGet(Solver % Mesh % Variables,TemperatureTimeDerName)
-    IF (.NOT.ASSOCIATED(TemperatureTimeDerVar)) THEN
-      CALL FATAL(SolverName,'Temperature Time Derivative Variable not associtated.')
-    ELSE
-      TemperatureTimeDer => TemperatureTimeDerVar % Values
-      TemperatureTimeDerPerm => TemperatureTimeDerVar % Perm
-    END IF
-
-    GWfluxName = ListGetString(Params, &
-         'Groundwater Flux Variable', Found )
-    IF (.NOT.Found) THEN
-      NoGWflux = .TRUE.
-    ELSE
-      WRITE(Message,'(A,A)') "'Groundwater flux Variable' found and set to: ", GWfluxName
-      CALL INFO(SolverName,Message,Level=9)
-      !      NoGWflux = .FALSE.
-      !    END IF
-      NoGWflux = .FALSE.
-      GWfluxVar1 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 1")
-      IF (.NOT.ASSOCIATED(GWfluxVar1)) THEN
-        PRINT *, TRIM(GWfluxName) // " 1", " not found"
-        NoGWflux = .TRUE.
-      END IF
-      IF (DIM > 1) THEN
-        GWfluxVar2 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 2")
-        IF (.NOT.ASSOCIATED(GWfluxVar2)) THEN
-          PRINT *, TRIM(GWfluxName) // " 2", " not found"
-          NoGWflux = .TRUE.
-        END IF
-        IF (DIM > 2) THEN
-          GWfluxVar3 => VariableGet(Solver % Mesh % Variables,TRIM(GWfluxName) // " 3")
-          IF (.NOT.ASSOCIATED(GWfluxVar2)) THEN
-            PRINT *, TRIM(GWfluxName) // " 3", " not found"
-            NoGWflux = .TRUE.
-          END IF
-        END IF
-      END IF
-    END IF
-    IF (NoGWFlux) THEN  
-      IF (NoPressure) THEN
-        CALL WARN(SolverName,'Neither Pressure nor Groundwater Flux variable found. No convection will be computed')
-        ComputeGWFlux = .FALSE.
-      ELSE
-        CALL INFO(SolverName,'Groundwater flux Variable not found. Using Pressure and Temperature to compute flux',Level=9)
-        ComputeGWFlux = .TRUE.
-      END IF
-    ELSE
-      GWflux1 => GWfluxVar1 % Values
-      GWfluxPerm1 => GWfluxVar1 % Perm
-      IF (DIM > 1) THEN
-        GWflux2 => GWfluxVar2 % Values
-        GWfluxPerm2 => GWfluxVar2 % Perm
-        IF (DIM > 3) THEN
-          GWflux3 => GWfluxVar3 % Values
-          GWfluxPerm3 => GWfluxVar3 % Perm
-        END IF
-      END IF
-      NoGWflux = .FALSE.
-      ComputeGWFlux = .FALSE.
-      CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
-    END IF
-  END SUBROUTINE AssignVarsSalinity
-
-  ! Assembly of the matrix entries arising from the bulk elements
-  !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixSalinity( Element, n, nd, NodalTemperature, NodalTempTimeDer, NodalPressure, &
-       NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, CurrentRockMaterial,&
-       CurrentSoluteMaterial,CurrentSolventMaterial,PhaseChangeModel )
-    !------------------------------------------------------------------------------
-    INTEGER :: n, nd
-    TYPE(Element_t), POINTER :: Element
-    TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
-    TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
-    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-   
-    REAL(KIND=dp) :: NodalTemperature(:), NodalTempTimeDer(:), NodalSalinity(:),&
-         NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
-    LOGICAL :: ComputeGWFlux,NoGWFlux
-    CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
-    !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
-    REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
-    REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
-    REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
-    REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,As0  ! stuff comming from RockMaterial
-    REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-         l0,vi0,vc0,cw0,ci0,cc0,acw(0:2),bcw(0:2),aci(0:1),acc(0:2),bcc(0:2),&
-         eps,kw0th,ki0th,kc0th,mu0,nu0(2),a1(0:3),b1,a2,b2(0:1),&
-         Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity(3)    ! constants read only once
-    REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
-         TemperatureAtIP, TemperatureTimeDerAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
-         GWfluxAtIP(3),StiffPQ, meanfactor,AbsJgwDAtIP, gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),&
-         fluxPAtIP(3),fluxgAtIP(3),el(3),MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n),&
-         KcAtIP(3,3), KcXcXcAtIP(3,3),fluxXcG(3),XixcAtIP,XietaAtIP,TimeWeight,ReactionWeight
-    REAL(KIND=dp), POINTER :: gWork(:,:)
-    INTEGER :: i,t,p,q,DIM, RockMaterialID
-    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
-    TYPE(GaussIntegrationPoints_t) :: IP
-    TYPE(ValueList_t), POINTER :: BodyForce, Material
-    TYPE(Nodes_t) :: Nodes    
-    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='Permafrost(LocalMatrixSalinity)'
-    !------------------------------------------------------------------------------   
-    SAVE Nodes, ConstantsRead, DIM, GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity
-    !------------------------------------------------------------------------------
-    IF(.NOT.ConstantsRead) THEN
-      dim = CoordinateSystemDimension()
-      ConstantsRead = &
-           ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, CurrentSoluteMaterial,&
-           CurrentSolventMaterial, DIM, GasConstant, Mw,Mc, T0, p0, DeltaT, eps,rhow0,rhoi0,rhoc0,&
-           l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
-           !ReadPermafrostConstants(Model, FunctionName, CurrentRockMaterial, DIM, &
-           !GasConstant, Mw,Mc,DeltaT, T0, p0, rhow0,rhoi0,rhoc0,&
-           !l0,vi0,vc0,cw0,ci0,cc0,acw,bcw,aci,acc,bcc,eps,kw0th,ki0th,kc0th,mu0,nu0,a1,b1,a2,b2,&
-           !Dm0,d1,d2,dc0,dc1,bw,bi,bc,Gravity)
-    END IF
-
-    CALL GetElementNodes( Nodes )
-
-    MASS  = 0._dp
-    STIFF = 0._dp
-    FORCE = 0._dp
-    LOAD = 0._dp
-    
-    ! Get stuff from SIF BodyForce section
-    BodyForce => GetBodyForce(Element)
-    IF ( ASSOCIATED(BodyForce) ) &
-         LOAD(1:n) = GetReal( BodyForce,'Salinity Source', Found )
-    
-    ! Get stuff from SIF Material section
-    Material => GetMaterial(Element)
-    RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
-    meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",Found)
-    IF (.NOT.Found) THEN
-      CALL INFO(FunctionName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
-      meanfactor = 1.0_dp
-    END IF
-    MinKgw = GetConstReal( Material, &
-         'Hydraulic Conductivity Limit', Found)
-    IF (.NOT.Found .OR. (MinKgw <= 0.0_dp))  &
-         MinKgw = 1.0D-14
-    
-    ! read variable material parameters from CurrentRockMaterial
-    CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,&
-       RockmaterialID, DIM, T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
-       ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,As0,&
-       deltaInElement,D1InElement,D2InElement)
-    
-    ! Numerical integration:
-    !-----------------------
-    IP = GaussPoints( Element )
-    DO t=1,IP % n
-      ! Basis function values & derivatives at the integration point:
-      !--------------------------------------------------------------
-      stat = ElementInfo( Element, Nodes, IP % U(t), IP % V(t), &
-           IP % W(t), detJ, Basis, dBasisdx )
-
-      ! The source term at the integration point:
-      !------------------------------------------
-      LoadAtIP = SUM( Basis(1:n) * LOAD(1:n) )
-
-      ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
-      TemperatureAtIP = SUM( Basis(1:N) * NodalTemperature(1:N) )
-      TemperatureTimeDerAtIP = SUM( Basis(1:N) * NodalTemperatureTimeDer(1:N) )
-      PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
-      PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))
-      SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
-      
-      ! unfrozen pore-water content at IP
-      SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
-        XiAtIP = &
-             GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-        XiTAtIP = &
-             XiAndersonT(XiAtIP,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-        XiPAtIP   = &
-             XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-        XiEtaAtIP   = &
-             XiAndersonEta(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
-         XixcAtIP = 0.0_dp 
-      CASE DEFAULT ! Hartikainen model
-        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
-        B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
-        B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
-        Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0Tilde)
-        XiTAtIP= XiT(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,p0,Mw,e1,&
-             deltaInElement,rhow0,rhoi0,cw0,ci0,l0,T0,GasConstant,TemperatureAtIP,PressureAtIP)
-        XiPAtIP= XiP(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,e1,&
-             deltaInElement,rhow0,rhoi0,GasConstant,TemperatureAtIP)
-        XietaAtIP = XiEta(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Xi0Tilde,eta0,PorosityAtIP)
-        XixcAtIP = XiXc(B1AtIP,B2AtIP,D1InElement,D2InElement,Xi0,Mw,Mc,e1,d1,d2,deltaInElement,GasConstant,SalinityAtIP)
-      END SELECT
-
-      ! diffusivities at IP
-      KcAtIP = 0.0_dp
-      KcAtIP = GetKc(alphaL,alphaT,Dm0,XiAtIP,AbsJgwDAtIP,eL,PorosityAtIP)
-      KcXcXcAtIP = GetKcXcXc(T0,rhoc0,d1,d2,dc0,dc1,KcAtIP,TemperatureAtIP,SalinityAtIP,PressureAtIP)
-      
-      CGTTAtIP = GetCGTT(XiAtIP,XiTAtIP,rhos0,rhow0,rhoi0,rhoc0,cw0,ci0,cs0,cc0,l0,PorosityAtIP,SalinityAtIP)
-      CgwTTAtIP = GetCgwTT(rhow0,rhoc0,cw0,cc0,SalinityAtIP)
-
-      ! compute advection term
-      IF (.NOT.ComputeGWFlux .AND. .NOT.NoGWFlux) THEN
-        DO I=1,3
-          JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N))
-        END DO
-      ELSE IF(ComputeGWFlux .AND. NoGWFlux) THEN        
-        fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,e1,l0,cw0,ci0,T0,XiAtIP,Xi0)
-        fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,e1,rhow0,rhoi0,XiAtIP,Xi0)
-        KgwAtIP = 0.0_dp
-        KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
-        KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
-        KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
-        gradTAtIP = 0.0_dp
-        gradPAtIP = 0.0_dp
-        DO i=1,DIM
-          gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
-          gradPAtIP(i) =  SUM(NodalPressure(1:N) * dBasisdx(1:N,i))
-        END DO
-
-        DO i=1,DIM
-          fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0) * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
-          fluxPAtIP(i) =  -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
-          !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
-          JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)          
-        END DO
-      ELSE ! nothing at all is computed or read in - pure diffusion
-        JgwDAtIP(1:DIM) = 0.0_dp
-      END IF
-
-      AbsJgwDAtIP = SQRT(SUM(JgwDAtIP(1:DIM)*JgwDAtIP(1:DIM)))
-      eL = 0.0_dp
-      IF (AbsJgwDAtIP > 0.0_dp) &
-           eL(1:DIM) = JgwDAtIP(1:DIM)/AbsJgwDAtIP
-
-
-      DO i=1,DIM
-        fluxXcG(i) = (1.0_dp - SalinityAtIP) * Mc /(GasConstant * T0 * dc0) * SUM(KcAtIP(1:DIM,i)*Gravity(1:DIM))
-      END DO
-
-      TimeWeight = PorosityAtIP * (XiAtIP  + (rhoi0/rhow0) * XixcAtIP * SalinityAtIP)
-      ReactionWeight = (rhoi0/rhow0) * PorosityAtIP * XixcAtIP * TemperatureTimeDerAtIP
-      Weight = IP % s(t) * DetJ
-
-      ! remove that part
-      !KcXcXcAtIP = 0.0_dp
-      !KcXcXcAtIP(1,1) = 0.0001
-      !KcXcXcAtIP(2,2) = 0.0001
-      !XiAtIP = 1.0
-      !PorosityAtIP = 1.0
-      !TimeWeight = 1.0
-      ! ---------------
-      
-      DO p=1,nd
-        DO q=1,nd
-          ! diffusion term (Xi * eta * KcXcXcAtIP.grad(u) - fluxXcG * u),grad(v)):
-          DO i=1,DIM
-            DO j=1,DIM
-              Stiff(p,q) = Stiff(p,q) + Weight * XiAtIP * PorosityAtIP * KcXcXcAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
-              !PRINT *, "Diff: Stiff = XiAtIP * PorosityAtIP * KcXcXcAtIP(i,j)", Stiff(p,q),XiAtIP,PorosityAtIP,KcXcXcAtIP(i,j)
-              !Stiff(p,q) = Stiff(p,q) - Weight * XiAtIP * PorosityAtIP * fluxXcG(i) * Basis(p) * dBasisdx(q,i)
-            END DO
-          END DO
-          ! advection term ( JgwD.grad(u),v)
-          ! -----------------------------------
-          IF (.NOT.NoGWFlux .OR. ComputeGWFlux) &
-               STIFF (p,q) = STIFF(p,q) + Weight * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-
-          ! reaction term (Rc*u,v)
-          ! -----------------------------------
-          STIFF(p,q) = STIFF(p,q) + ReactionWeight * Weight *Basis(q) * Basis(p)
-
-          ! time derivative (TimeWeight du/dt,v):
-          ! ------------------------------
-          MASS(p,q) = MASS(p,q) +  TimeWeight * Weight * Basis(q) * Basis(p)
-          !MASS(p,q) = MASS(p,q) + 0.0001 * Weight * Basis(q) * Basis(p)
-          !PRINT *,"Mass=TimeWeight * CGTTAtIP", MASS(p,q), TimeWeight
-        END DO
-      END DO
-
-      !FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
-    END DO
-
-    IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
-    CALL LCondensate( nd-nb, nb, STIFF, FORCE )
-    CALL DefaultUpdateEquations(STIFF,FORCE)
-    !------------------------------------------------------------------------------
-  END SUBROUTINE LocalMatrixSalinity
-  !------------------------------------------------------------------------------
-
-
-  ! Assembly of the matrix entries arising from the Neumann and Robin conditions
-  !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixSalinityBC( Element, n, nd )
-    !------------------------------------------------------------------------------
-    INTEGER :: n, nd
-    TYPE(Element_t), POINTER :: Element
-    !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: Flux(n), ImposedSalinity, Salinity(n), F,Ext, Weight
-    REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,LoadAtIP
-    REAL(KIND=dp) :: STIFF(nd,nd), FORCE(nd), LOAD(n)
-    REAL(KIND=dp), PARAMETER :: C=1000.0_dp
-    LOGICAL :: Stat,Fluxcondition,Robincondition
-    INTEGER :: i,t,p,q,dim
-    TYPE(GaussIntegrationPoints_t) :: IP
-
-    TYPE(ValueList_t), POINTER :: BoundaryCondition
-
-    TYPE(Nodes_t) :: Nodes
-    SAVE Nodes
-    !------------------------------------------------------------------------------
-    BoundaryCondition => GetBC()
-    IF (.NOT.ASSOCIATED(BoundaryCondition) ) RETURN
-
-    dim = CoordinateSystemDimension()
-
-    CALL GetElementNodes( Nodes )
-    STIFF = 0._dp
-    FORCE = 0._dp
-    LOAD = 0._dp
-
-    Flux(1:n)  = GetReal( BoundaryCondition,'Salinity Flux', FluxCondition )
-    Salinity(1:n) = GetReal( BoundaryCondition,'Imposed Salinity', RobinCondition )
-
-    IF (FluxCondition .OR. RobinCondition)  THEN
-      ! Numerical integration:
-      !-----------------------
-      IP = GaussPoints( Element )
-      DO t=1,IP % n
-        ! Basis function values & derivatives at the integration point:
-        !--------------------------------------------------------------
-        stat = ElementInfo( Element, Nodes, IP % U(t), IP % V(t), &
-             IP % W(t), detJ, Basis, dBasisdx )
-
-        Weight = IP % s(t) * DetJ
-
-        ! Robin condition (C*(u-u_0)):
-        ! ---------------------------     
-        ImposedSalinity = SUM(Basis(1:n)*Salinity(1:n))
-
-        IF (Robincondition) THEN
-          DO p=1,nd
-            DO q=1,nd
-              STIFF(p,q) = STIFF(p,q) + Weight * C * Basis(q) * Basis(p)
-            END DO
-          END DO
-          FORCE(1:nd) = FORCE(1:nd) + Weight * C * ImposedSalinity * Basis(1:nd)
-        ELSE IF (Fluxcondition) THEN
-          ! Given flux:
-          ! -----------
-          F = SUM(Basis(1:n)*flux(1:n))
-          FORCE(1:nd) = FORCE(1:nd) + Weight * F  * Basis(1:nd)
-        END IF
-      END DO
-    END IF
-    CALL DefaultUpdateEquations(STIFF,FORCE)
-    !------------------------------------------------------------------------------
-  END SUBROUTINE LocalMatrixSalinityBC
-  !------------------------------------------------------------------------------
-
-  ! Perform static condensation in case bubble dofs are present
-  !------------------------------------------------------------------------------
-  SUBROUTINE LCondensate( N, Nb, K, F )
-    !------------------------------------------------------------------------------
-    USE LinearAlgebra
-    INTEGER :: N, Nb
-    REAL(KIND=dp) :: K(:,:),F(:),Kbb(Nb,Nb), &
-         Kbl(Nb,N), Klb(N,Nb), Fb(Nb)
-
-    INTEGER :: m, i, j, l, p, Ldofs(N), Bdofs(Nb)
-
-    IF ( Nb <= 0 ) RETURN
-
-    Ldofs = (/ (i, i=1,n) /)
-    Bdofs = (/ (i, i=n+1,n+nb) /)
-
-    Kbb = K(Bdofs,Bdofs)
-    Kbl = K(Bdofs,Ldofs)
-    Klb = K(Ldofs,Bdofs)
-    Fb  = F(Bdofs)
-
-    CALL InvertMatrix( Kbb,nb )
-
-    F(1:n) = F(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
-    K(1:n,1:n) = K(1:n,1:n) - MATMUL( Klb, MATMUL( Kbb, Kbl ) )
-    !------------------------------------------------------------------------------
-  END SUBROUTINE LCondensate
-  !------------------------------------------------------------------------------
-
-  !------------------------------------------------------------------------------
-END SUBROUTINE PermafrostSalinityTransport
-!------------------------------------------------------------------------------
-
+!>  initialization of Porosity to given reference value in material
+!----------------------------------------------------------------------------
 !==============================================================================
 SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   !==============================================================================
@@ -4233,6 +3959,9 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
 END SUBROUTINE PorosityInit
 !==============================================================================
 
+!-----------------------------------------------------------------------------
+!>  initialization of arbitrary scalar given by nodal file
+!----------------------------------------------------------------------------
 !==============================================================================
 SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   !==============================================================================
