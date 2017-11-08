@@ -1220,10 +1220,19 @@ CONTAINS
     GeneralIntegral = outval
   END FUNCTION GeneralIntegral
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+  REAL (KIND=dp) FUNCTION rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
+       ks0,cks,cksl,&
+       as0,aas,aasl)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhos0,TemperatureAtIP,PressureAtIP
-    rhos = rhos0
+    REAL(KIND=dp), INTENT(IN) :: rhos0,T0,p0,TemperatureAtIP,PressureAtIP,ks0,as0
+    REAL(KIND=DP), DIMENSION(0:5) ::cks,aas
+    INTEGER, INTENT(IN) :: cksl,aasl
+    !----------------------
+    REAL(KIND=dp) :: aux1, aux2
+    !----------------------
+    aux1 = GeneralIntegral(PressureAtIP,p0,p0,ks0,cks,cksl)
+    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,as0,aas,aasl)
+    rhos = rhos0 * EXP(aux1 - aux2)
   END FUNCTION rhos
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
@@ -1241,32 +1250,24 @@ CONTAINS
     aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,aw0,aaw,aawl)
     watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
     aux3 = GeneralIntegral(watercont,1.0_dp,1.0_dp,zw0,bzw,bzwl)
-    !PRINT *,"aux1-3",aux1,aux2,aux3
-    !PRINT *,"watercont,zw0,bzw,bzwl", watercont,zw0,bzw,bzwl
     rhow = rhow0 * EXP(aux1 - aux2 + aux3)
   END FUNCTION rhow
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
+  REAL (KIND=dp) FUNCTION rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
        ki0,cki,ckil,&
        ai0,aai,aail)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,ki0,ai0
+    REAL(KIND=dp), INTENT(IN) :: rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,ki0,ai0
     REAL(KIND=DP), DIMENSION(0:5) ::cki,aai
     INTEGER, INTENT(IN) :: ckil,aail
     !----------------------
-    REAL(KIND=dp) :: aux1, aux2, aux3, watercont
+    REAL(KIND=dp) :: aux1, aux2
     !----------------------
     aux1 = GeneralIntegral(PressureAtIP,p0,p0,ki0,cki,ckil)
     aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ai0,aai,aail)
     rhoi = rhoi0 * EXP(aux1 - aux2)
   END FUNCTION rhoi
-
   !---------------------------------------------------------------------------------------------
-  !REAL (KIND=dp) FUNCTION rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
-  !  IMPLICIT NONE
-  !  REAL(KIND=dp), INTENT(IN) :: rhoc0,TemperatureAtIP,PressureAtIP
-  !  rhoc = rhoc0
-  !END FUNCTION rhoc
   REAL (KIND=dp) FUNCTION rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
        kc0,ckc,ckcl,&
        ac0,aac,aacl,&
@@ -1281,8 +1282,6 @@ CONTAINS
     aux1 = GeneralIntegral(PressureAtIP,p0,p0,kc0,ckc,ckcl)
     aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ac0,aac,aacl)
     aux3 = GeneralIntegral(SalinityAtIP,0.0_dp,1.0_dp,zc0,bzc,bzcl)
-    !PRINT *,"aux1-3",aux1,aux2,aux3
-    !PRINT *,"zw0,bzw,bzwl", zw0,bzw,bzwl
     rhoc = rhoc0 * EXP(aux1 - aux2 + aux3)
   END FUNCTION rhoc
   !---------------------------------------------------------------------------------------------
@@ -1305,21 +1304,6 @@ CONTAINS
     aux2 = GeneralPolynomial(watercont,1.0_dp,1.0_dp,bcw,bcwl)
     cw = cw0*aux1*aux2
   END FUNCTION cw
-!!$  !---------------------------------------------------------------------------------------------
-!!$  REAL (KIND=dp) FUNCTION cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
-!!$    IMPLICIT NONE
-!!$    REAL(KIND=dp), INTENT(IN) :: cw0,acw(0:2),bcw(0:2),T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
-!!$    INTEGER :: i
-!!$    REAL(KIND=dp) :: xw, xw0, aux(2)
-!!$    xw = 1.0_dp - SalinityAtIP
-!!$    xw0 = 1.0_dp
-!!$    aux = 0.0_dp
-!!$    DO i=1,3
-!!$      aux(1) = aux(1) + acw(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
-!!$      aux(2) = aux(2) + acw(i)* ( ( xw - xw0 )**(1.0_dp*i - 1.0_dp))
-!!$    END DO
-!!$    cw = cw0 * aux(1) * aux(2) 
-!!$  END FUNCTION cw
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION ci(T0,TemperatureAtIP,&
        ci0,aci,acil)
@@ -1330,16 +1314,6 @@ CONTAINS
     !----------------------
     ci = ci0 * GeneralPolynomial(TemperatureAtIP,T0,T0,aci,acil)
   END FUNCTION ci
-!!$  REAL (KIND=dp) FUNCTION ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !! NEW
-!!$    IMPLICIT NONE
-!!$    REAL(KIND=dp), INTENT(IN) :: ci0,aci(0:1),T0,TemperatureAtIP,PressureAtIP
-!!$    INTEGER :: i
-!!$    REAL(KIND=dp) :: aux
-!!$    DO i=1,2
-!!$      aux = aux + aci(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
-!!$    END DO
-!!$    ci = ci0 * aux
-!!$  END FUNCTION ci
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
     IMPLICIT NONE
@@ -1920,11 +1894,17 @@ CONTAINS
       END SELECT
 
       !Materialproperties needed at IP
-      rhosAtIP = rhos0 !rhos(rhos0,TemperatureAtIP,PressureAtIP)  
+      !rhosAtIP = rhos0 !rhos(rhos0,TemperatureAtIP,PressureAtIP)
+      rhosAtIP = rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
+           ks0,cks,cksl,&
+           as0,aas,aasl)
       rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kw0,ckw,ckwl,&
            aw0,aaw,aawl,&
            zw0,bzw,bzwl) !!! NEW
+      rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
+           ki0,cki,ckil,&
+           ai0,aai,aail)
       rhocAtIP = rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kc0,ckc,ckcl,&
            ac0,aac,aacl,&
@@ -3226,16 +3206,18 @@ CONTAINS
       ! densities
       rhosAtIP = rhos0 ! replace
       !rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
-       ki0,cki,ckil,&
-       ai0,aai,aail) !!! NEW
+      rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
+           ki0,cki,ckil,&
+           ai0,aai,aail) !!! NEW
       !rhowAtIp = rhow0 ! replace
       rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kw0,ckw,ckwl,&
            aw0,aaw,aawl,&
            zw0,bzw,bzwl) !!! NEW
       IF (rhowAtIP .NE. rhowAtIP) PRINT *,"rhowAtIP",rhowAtIP
-      rhocAtIP = rhoc0
+      rhosAtIP = rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
+           ks0,cks,cksl,&
+           as0,aas,aasl)
       !rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
       rhocAtIP = rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kc0,ckc,ckcl,&
