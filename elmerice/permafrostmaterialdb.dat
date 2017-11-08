@@ -20,7 +20,15 @@ Sand      1
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
-0.0       As0
+0.0       RadGen
+0.0 0.0 0.0 0.0 0.0 0.0 acs
+0.0       as0
+0.0       aas
+0.0       ks0
+0.0 0.0 0.0 0.0 0.0 0.0 cks
+0         acsl
+0         aasl
+0         cksl
 Granite   2
 0.1       Xi0
 0.01      eta0
@@ -42,7 +50,15 @@ Granite   2
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
-0.0       As0
+0.0       RadGen
+0.0 0.0 0.0 0.0 0.0 0.0 acs
+0.0       as0
+0.0       aas
+0.0       ks0
+0.0 0.0 0.0 0.0 0.0 0.0 cks
+0         acsl
+0         aasl
+0         cksl
 Till      3
 0.6       Xi0
 0.25      eta0
@@ -64,7 +80,15 @@ Till      3
 4.0       qexp
 0.0       alphaL
 0.0       alphaT
-0.0       As0
+0.0       RadGen
+0.0 0.0 0.0 0.0 0.0 0.0 acs
+0.0       as0
+0.0       aas
+0.0       ks0
+0.0 0.0 0.0 0.0 0.0 0.0 cks
+0         acsl
+0         aasl
+0         cksl
 Gravel    4
 0.1       Xi0
 0.25      eta0
@@ -86,7 +110,15 @@ Gravel    4
 4.65      qexp
 0.05      alphaL
 0.01      alphaT
-0.0       As0
+0.0       RadGen
+0.0 0.0 0.0 0.0 0.0 0.0 acs
+0.0       as0
+0.0       aas
+0.0       ks0
+0.0 0.0 0.0 0.0 0.0 0.0 cks
+0         acsl
+0         aasl
+0         cksl
 Sill      5
 0.45      Xi0
 0.38      eta0
@@ -108,4 +140,12 @@ Sill      5
 4.0       qexp
 0.00      alphaL
 0.00      alphaT
-0.0       As0
+0.0       RadGen
+0.0 0.0 0.0 0.0 0.0 0.0 acs
+0.0       as0
+0.0       aas
+0.0       ks0
+0.0 0.0 0.0 0.0 0.0 0.0 cks
+0         acsl
+0         aasl
+0         cksl
