@@ -1198,12 +1198,12 @@ CONTAINS
     REAL(KIND=dp) outval
     ! ------
     REAL(KIND=dp) currpot
-    INTEGER :: currdeg
+    INTEGER :: i
 
-    outval = 1.0_dp
+    outval = 0.0_dp
     currpot = 1.0_dp
-    DO currdeg=0,pdeg
-      outval = outval * coeff(currdeg) * currpot
+    DO i=0,pdeg
+      outval = outval + coeff(i) * currpot
       currpot = currpot * (VariableAtIP - ReferenceVariable)/Normation
     END DO
     GeneralPolynomial = outval
@@ -1230,67 +1230,91 @@ CONTAINS
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
        ks0,cks,cksl,&
-       as0,aas,aasl)
+       as0,aas,aasl,&
+       ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhos0,T0,p0,TemperatureAtIP,PressureAtIP,ks0,as0
     REAL(KIND=DP), DIMENSION(0:5) ::cks,aas
     INTEGER, INTENT(IN) :: cksl,aasl
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2
     !----------------------
-    aux1 = GeneralIntegral(PressureAtIP,p0,p0,ks0,cks,cksl)
-    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,as0,aas,aasl)
-    rhos = rhos0 * EXP(aux1 - aux2)
+    IF (ConstVal) THEN
+      rhos = rhos0
+    ELSE
+      aux1 = GeneralIntegral(PressureAtIP,p0,p0,ks0,cks,cksl)
+      aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,as0,aas,aasl)
+      rhos = rhos0 * EXP(aux1 - aux2)
+    END IF
   END FUNCTION rhos
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
        kw0,ckw,ckwl,&
        aw0,aaw,aawl,&
-       zw0,bzw,bzwl)
+       zw0,bzw,bzwl,&
+       ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,kw0,aw0,zw0
     REAL(KIND=dp), DIMENSION(0:5) :: ckw, aaw, bzw
     INTEGER, INTENT(IN) :: ckwl,aawl,bzwl
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, aux3, watercont
     !----------------------
-    aux1 = GeneralIntegral(PressureAtIP,p0,p0,kw0,ckw,ckwl)
-    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,aw0,aaw,aawl)
-    watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
-    aux3 = GeneralIntegral(watercont,1.0_dp,1.0_dp,zw0,bzw,bzwl)
-    rhow = rhow0 * EXP(aux1 - aux2 + aux3)
+    IF (ConstVal) THEN
+      rhow = rhow0
+    ELSE
+      aux1 = GeneralIntegral(PressureAtIP,p0,p0,kw0,ckw,ckwl)
+      aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,aw0,aaw,aawl)
+      watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
+      aux3 = GeneralIntegral(watercont,1.0_dp,1.0_dp,zw0,bzw,bzwl)
+      rhow = rhow0 * EXP(aux1 - aux2 + aux3)
+    END IF
   END FUNCTION rhow
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
        ki0,cki,ckil,&
-       ai0,aai,aail)
+       ai0,aai,aail,&
+       ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,ki0,ai0
     REAL(KIND=DP), DIMENSION(0:5) ::cki,aai
     INTEGER, INTENT(IN) :: ckil,aail
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2
     !----------------------
-    aux1 = GeneralIntegral(PressureAtIP,p0,p0,ki0,cki,ckil)
-    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ai0,aai,aail)
-    rhoi = rhoi0 * EXP(aux1 - aux2)
+    IF (ConstVal) THEN
+      rhoi = rhoi0
+    ELSE
+      aux1 = GeneralIntegral(PressureAtIP,p0,p0,ki0,cki,ckil)
+      aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ai0,aai,aail)
+      rhoi = rhoi0 * EXP(aux1 - aux2)
+    END IF
   END FUNCTION rhoi
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
        kc0,ckc,ckcl,&
        ac0,aac,aacl,&
-       zc0,bzc,bzcl)
+       zc0,bzc,bzcl,&
+       ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,kc0,ac0,zc0
     REAL(KIND=DP), DIMENSION(0:5) :: ckc, aac, bzc
     INTEGER, INTENT(IN) :: ckcl,aacl,bzcl
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, aux3
     !----------------------
-    aux1 = GeneralIntegral(PressureAtIP,p0,p0,kc0,ckc,ckcl)
-    aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ac0,aac,aacl)
-    aux3 = GeneralIntegral(SalinityAtIP,0.0_dp,1.0_dp,zc0,bzc,bzcl)
-    rhoc = rhoc0 * EXP(aux1 - aux2 + aux3)
+    IF (ConstVal) THEN
+      rhoc = rhoc0
+    ELSE
+      aux1 = GeneralIntegral(PressureAtIP,p0,p0,kc0,ckc,ckcl)
+      aux2 = GeneralIntegral(TemperatureAtIP,T0,T0,ac0,aac,aacl)
+      aux3 = GeneralIntegral(SalinityAtIP,0.0_dp,1.0_dp,zc0,bzc,bzcl)
+      rhoc = rhoc0 * EXP(aux1 - aux2 + aux3)
+    END IF
   END FUNCTION rhoc
   !---------------------------------------------------------------------------------------------
 !!$  REAL (KIND=dp) FUNCTION cs(cs0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
@@ -1299,37 +1323,50 @@ CONTAINS
 !!$    cs = cs0
 !!$  END FUNCTION cs
   REAL (KIND=dp) FUNCTION cs(T0,TemperatureAtIP,&
-       cs0,acs,acsl)
+       cs0,acs,acsl,&
+       ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: cs0,T0,TemperatureAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: acs
     INTEGER, INTENT(IN) :: acsl
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
-    cs = cs0 * GeneralPolynomial(TemperatureAtIP,T0,T0,acs,acsl)
+    cs = cs0
+    IF (.NOT.ConstVal) &
+         cs = cs * GeneralPolynomial(TemperatureAtIP,T0,T0,acs,acsl)
   END FUNCTION cs
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
-       acw,bcw,acwl,bcwl)
+       acw,bcw,acwl,bcwl,ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: cw0,T0,TemperatureAtIP,SalinityAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: acw,bcw
     INTEGER, INTENT(IN) :: acwl,bcwl
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, watercont
-    watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
-    aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acw,acwl)
-    aux2 = GeneralPolynomial(watercont,1.0_dp,1.0_dp,bcw,bcwl)
-    cw = cw0*aux1*aux2
+    IF (ConstVal) THEN
+      cw = cw0
+    ELSE
+      watercont = MAX(1.0_dp - SalinityAtIP,0.0_dp)
+      aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acw,acwl)
+      aux2 = GeneralPolynomial(watercont,1.0_dp,1.0_dp,bcw,bcwl)
+      !PRINT *,"inside cw",watercont,1.0_dp,1.0_dp,bcw,bcwl
+      cw = cw0*aux1*aux2
+    END IF
   END FUNCTION cw
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION ci(T0,TemperatureAtIP,&
-       ci0,aci,acil)
+       ci0,aci,acil,ConstVal)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: ci0,T0,TemperatureAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: aci
     INTEGER, INTENT(IN) :: acil
+    LOGICAL, OPTIONAL :: ConstVal
     !----------------------
-    ci = ci0 * GeneralPolynomial(TemperatureAtIP,T0,T0,aci,acil)
+    ci = ci0
+    IF (.NOT.ConstVal) &
+         ci = ci * GeneralPolynomial(TemperatureAtIP,T0,T0,aci,acil)
   END FUNCTION ci
   !---------------------------------------------------------------------------------------------
 !!$  REAL (KIND=dp) FUNCTION cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
@@ -1340,16 +1377,21 @@ CONTAINS
 !!$    
 !!$  END FUNCTION cc
   REAL (KIND=dp) FUNCTION cc(T0,TemperatureAtIP,SalinityAtIP,cc0,&
-       acc,bcc,accl,bccl)
+       acc,bcc,accl,bccl,ConstVal)
         IMPLICIT NONE
         REAL(KIND=dp), INTENT(IN) :: cc0,T0,TemperatureAtIP,SalinityAtIP
         REAL(KIND=DP), DIMENSION(0:5) :: acc,bcc
         INTEGER, INTENT(IN) :: accl,bccl
+        LOGICAL, OPTIONAL :: ConstVal
         !----------------------
         REAL(KIND=dp) :: aux1, aux2
-        aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acc,accl)
-        aux2 = GeneralPolynomial(SalinityAtIP,0.0_dp,1.0_dp,bcc,bccl)
-        cc = cc0*aux1*aux2
+        IF (ConstVal) THEN
+          cc = cc0
+        ELSE
+          aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acc,accl)
+          aux2 = GeneralPolynomial(SalinityAtIP,0.0_dp,1.0_dp,bcc,bccl)
+          cc = cc0*aux1*aux2
+        END IF
   END FUNCTION cc
   !---------------------------------------------------------------------------------------------
   ! General consistuent thermal conductivity
@@ -1358,6 +1400,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: kalpha0th,balpha,T0,Temperature
     REAL(KIND=dp) :: kalphath
     kalphath = kalpha0th/( 1.0_dp + balpha*(Temperature - T0)/T0)
+    !kalphath = kalpha0th
   END FUNCTION GetKAlphaTh
   !---------------------------------------------------------------------------------------------
   FUNCTION GetKGTT(ksth,kwth,kith,kcth,Xi,&
@@ -1782,7 +1825,7 @@ CONTAINS
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
     REAL(KIND=dp) , POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
-    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
+    LOGICAL :: Stat,Found, ConstantsRead=.FALSE., ConstVal=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
@@ -1921,18 +1964,18 @@ CONTAINS
       !rhosAtIP = rhos0 !rhos(rhos0,TemperatureAtIP,PressureAtIP)
       rhosAtIP = rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
            ks0,cks,cksl,&
-           as0,aas,aasl)
+           as0,aas,aasl,ConstVal)
       rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kw0,ckw,ckwl,&
            aw0,aaw,aawl,&
-           zw0,bzw,bzwl) !!! NEW
+           zw0,bzw,bzwl,ConstVal) !!! NEW
       rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
            ki0,cki,ckil,&
-           ai0,aai,aail)
+           ai0,aai,aail,ConstVal)
       rhocAtIP = rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kc0,ckc,ckcl,&
            ac0,aac,aacl,&
-           zc0,bzc,bzcl) !!! NEW
+           zc0,bzc,bzcl,ConstVal) !!! NEW
       fTildewTAtIP = fTildewT(B1AtIP,TemperatureAtIP,D1InElement,deltaInElement,e1,l0,cw0,ci0,T0,XiAtIP,Xi0)
       fTildewpAtIP = fTildewp(B1AtIP,D1InElement,deltaInElement,e1,rhow0,rhoi0,XiAtIP,Xi0)
       
@@ -1968,7 +2011,7 @@ CONTAINS
           gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
         END DO
         DO i=1,DIM
-          fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+          !fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
           fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhowAtIP  + SalinityAtIP * rhocAtIP)& 
                * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!! NEW
           !fluxgAtIP(i) =rhow0*SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
@@ -1981,7 +2024,7 @@ CONTAINS
           END IF
         END DO
         DO p=1,nd     
-          FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
+          !FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
           FORCE(p) = FORCE(p) + Weight * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
         END DO
         FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
@@ -3096,7 +3139,7 @@ CONTAINS
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
     REAL(KIND=dp), POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
-    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.
+    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.,ConstVal=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
@@ -3228,39 +3271,45 @@ CONTAINS
       !Materialproperties needed at IP:
       
       ! densities
-      rhosAtIP = rhos0 ! replace
+      !rhosAtIP = rhos0 ! replace
       !rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
       rhoiAtIP = rhoi(rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,&
            ki0,cki,ckil,&
-           ai0,aai,aail) !!! NEW
+           ai0,aai,aail,ConstVal) !!! NEW
       !rhowAtIp = rhow0 ! replace
       rhowAtIP = rhow(rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kw0,ckw,ckwl,&
            aw0,aaw,aawl,&
-           zw0,bzw,bzwl) !!! NEW
+           zw0,bzw,bzwl,ConstVal) !!! NEW
       IF (rhowAtIP .NE. rhowAtIP) PRINT *,"rhowAtIP",rhowAtIP
       rhosAtIP = rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
            ks0,cks,cksl,&
-           as0,aas,aasl)
+           as0,aas,aasl,ConstVal)
       !rhoc(rhoc0,TemperatureAtIP,PressureAtIP)  !!! NEW
       rhocAtIP = rhoc(rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,&
            kc0,ckc,ckcl,&
            ac0,aac,aacl,&
-           zc0,bzc,bzcl) !!! NEW
+           zc0,bzc,bzcl,ConstVal) !!! NEW
+
+      !PRINT *,"rhosAtIP,rhoiAtIP,rhowAtIP,rhocAtIP",rhosAtIP,rhoiAtIP,rhowAtIP,rhocAtIP
       ! heat capacities
       csAtIP   =cs(T0,TemperatureAtIP,&
-           cs0,acs,acsl)
+           cs0,acs,acsl,ConstVal)
       !!cs(cs0,TemperatureAtIP,PressureAtIP)  !!
       cwAtIP   = cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
-           acw,bcw,acwl,bcwl) !!! NEW
+           acw,bcw,acwl,bcwl,ConstVal) !!! NEW
+      !PRINT *,"cw",T0,TemperatureAtIP,SalinityAtIP,cw0,&
+      !     acw,bcw,acwl,bcwl
       !cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
       !PRINT *, "cwAtIP", cwAtIP, "cw0",cw0,"acw",acw,"bcw",bcw,"T0",T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
       ciAtIP   = ci(T0,TemperatureAtIP,&
-           ci0,aci,acil)
+           ci0,aci,acil,ConstVal)
       !ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !!! NEW
       ccAtIP   = cc(T0,TemperatureAtIP,SalinityAtIP,cc0,&
-           acc,bcc,accl,bccl)
+           acc,bcc,accl,bccl,ConstVal)
       !!cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
+
+      !PRINT *,"cw,ci,cs,cc",cwAtIP,ciAtIP,csAtIP,ccAtIP
       
       ! heat conductivity at IP
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
@@ -3269,7 +3318,7 @@ CONTAINS
       kcthAtIP = GetKalphath(kc0th,bc,T0,TemperatureAtIP)      
       KGTTAtIP = GetKGTT(ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,XiAtIP,&
            SalinityATIP,PorosityAtIP,meanfactor)
-      
+      !PRINT *, "KGTTAtIP",KGTTAtIP,ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP
       ! heat capacities at IP
       CGTTAtIP = &
            GetCGTT(XiAtIP,XiTAtIP,rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,cwAtIP,ciAtIP,csAtIP,ccAtIP,l0,&
@@ -3278,6 +3327,7 @@ CONTAINS
       CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP)
       !PRINT *,"CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
       ! compute groundwater flux for advection term
+            !PRINT *, "KGTTAtIP", KGTTAtIP,"CgwTTAtIP",CgwTTAtIP
       JgwDAtIP = 0.0_dp
       IF (GivenGWFlux) THEN
         DO I=1,DIM
@@ -3291,7 +3341,7 @@ CONTAINS
         KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
         KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
         KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
-        !PRINT *,"KgwppAtIP",KgwppAtIP
+       !PRINT *,"KgwppAtIP",KgwppAtIP
 
         DO i=1,DIM
           gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
@@ -3299,8 +3349,8 @@ CONTAINS
         END DO
 
         DO i=1,DIM
-          fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0) * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
+          !fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+          fluxgAtIP(i) = ( (1.0_dp - SalinityAtIP) * rhowAtIP  + SalinityAtIP * rhocAtIP) * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
           fluxPAtIP(i) =  -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
           !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
           JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)
@@ -3326,9 +3376,18 @@ CONTAINS
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
           !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
+          !PRINT *,"Pe1", CgwTTAtIP*JgwDAtIP(1),"/",KGTTAtIP(1,1)
+          !PRINT *,"Pe2", CgwTTAtIP*JgwDAtIP(2),"/",KGTTAtIP(2,2)
+          
+          CgwTTAtIP = 0.0_dp !!! REMOVE THIS !!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+          
           STIFF (p,q) = STIFF(p,q) + Weight * &
                 CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) ! REMOVE THE FACTOR 10
-            !PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+          ! PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
+         
           !END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
