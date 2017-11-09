@@ -887,17 +887,25 @@ CONTAINS
     CALL INFO(FunctionName,Message,Level=9)
     WRITE(Message,*) accl,bccl,aacl,bzcl,ckcl
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) "acw,bcw,ckw,aaw,bzw:"
-    CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) acw,bcw,ckw,aaw,bzw
+    WRITE(Message,*) "acw,bcw:"
+    CALL INFO(FunctionName,Message,Level=9)    
+    WRITE(Message,*) acw(0:5),bcw(0:5)
+    CALL INFO(FunctionName,Message,Level=9) 
+    WRITE(Message,*) "ckw,aaw,bzw:"
+    CALL INFO(FunctionName,Message,Level=9)    
+    WRITE(Message,*) ckw(0:5),aaw(0:5),bzw(0:5)
     CALL INFO(FunctionName,Message,Level=9)
     WRITE(Message,*) "aci,aai,cki:"
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) aci,aai,cki
+    WRITE(Message,*) aci(0:5),aai(0:5),cki(0:5)
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) "acc,bcc,aac,bzc,ckc:"
+    WRITE(Message,*) "acc,bcc"
     CALL INFO(FunctionName,Message,Level=9)
-    WRITE(Message,*) acc,bcc,aac,bzc,ckc
+    WRITE(Message,*) acc(0:5),bcc(0:5)
+    CALL INFO(FunctionName,Message,Level=9)
+    WRITE(Message,*) "aac,bzc,ckc:"
+    CALL INFO(FunctionName,Message,Level=9)
+    WRITE(Message,*) aac(0:5),bzc(0:5),ckc(0:5)
     CALL INFO(FunctionName,Message,Level=9)
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
   END FUNCTION ReadPermafrostConstants
@@ -1285,10 +1293,19 @@ CONTAINS
     rhoc = rhoc0 * EXP(aux1 - aux2 + aux3)
   END FUNCTION rhoc
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION cs(cs0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+!!$  REAL (KIND=dp) FUNCTION cs(cs0,TemperatureAtIP,PressureAtIP)  !!! Replace with function
+!!$    IMPLICIT NONE
+!!$    REAL(KIND=dp), INTENT(IN) :: cs0,TemperatureAtIP,PressureAtIP
+!!$    cs = cs0
+!!$  END FUNCTION cs
+  REAL (KIND=dp) FUNCTION cs(T0,TemperatureAtIP,&
+       cs0,acs,acsl)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: cs0,TemperatureAtIP,PressureAtIP
-    cs = cs0
+    REAL(KIND=dp), INTENT(IN) :: cs0,T0,TemperatureAtIP
+    REAL(KIND=DP), DIMENSION(0:5) :: acs
+    INTEGER, INTENT(IN) :: acsl
+    !----------------------
+    cs = cs0 * GeneralPolynomial(TemperatureAtIP,T0,T0,acs,acsl)
   END FUNCTION cs
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
@@ -1315,17 +1332,24 @@ CONTAINS
     ci = ci0 * GeneralPolynomial(TemperatureAtIP,T0,T0,aci,acil)
   END FUNCTION ci
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: cc0,acc(0:2),bcc(0:2),T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
-    INTEGER :: i
-    REAL(KIND=dp) :: aux(2)
-    aux = 0.0_dp
-    DO i=1,3
-      aux(1) = aux(1) + acc(i)* ( ( (TemperatureAtIP - T0)/T0 )**(1.0_dp*i - 1.0_dp)) 
-      aux(2) = aux(2) + acc(i)* ( ( SalinityAtIP )**(1.0_dp*i))
-    END DO
-    cc = cc0 * aux(1) * aux(2) 
+!!$  REAL (KIND=dp) FUNCTION cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !! NEW
+!!$    IMPLICIT NONE
+!!$    REAL(KIND=dp), INTENT(IN) :: cc0,acc(0:2),bcc(0:2),T0,SalinityAtIP,TemperatureAtIP,PressureAtIP
+!!$    INTEGER :: i
+!!$    REAL(KIND=dp) :: aux(2)
+!!$    
+!!$  END FUNCTION cc
+  REAL (KIND=dp) FUNCTION cc(T0,TemperatureAtIP,SalinityAtIP,cc0,&
+       acc,bcc,accl,bccl)
+        IMPLICIT NONE
+        REAL(KIND=dp), INTENT(IN) :: cc0,T0,TemperatureAtIP,SalinityAtIP
+        REAL(KIND=DP), DIMENSION(0:5) :: acc,bcc
+        INTEGER, INTENT(IN) :: accl,bccl
+        !----------------------
+        REAL(KIND=dp) :: aux1, aux2
+        aux1 = GeneralPolynomial(TemperatureAtIP,T0,T0,acc,accl)
+        aux2 = GeneralPolynomial(SalinityAtIP,0.0_dp,1.0_dp,bcc,bccl)
+        cc = cc0*aux1*aux2
   END FUNCTION cc
   !---------------------------------------------------------------------------------------------
   ! General consistuent thermal conductivity
@@ -3224,7 +3248,9 @@ CONTAINS
            ac0,aac,aacl,&
            zc0,bzc,bzcl) !!! NEW
       ! heat capacities
-      csAtIP   = cs(cs0,TemperatureAtIP,PressureAtIP)  !!
+      csAtIP   =cs(T0,TemperatureAtIP,&
+           cs0,acs,acsl)
+      !!cs(cs0,TemperatureAtIP,PressureAtIP)  !!
       cwAtIP   = cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
            acw,bcw,acwl,bcwl) !!! NEW
       !cw(cw0,acw,bcw,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
@@ -3232,7 +3258,9 @@ CONTAINS
       ciAtIP   = ci(T0,TemperatureAtIP,&
            ci0,aci,acil)
       !ci(ci0,aci,T0,TemperatureAtIP,PressureAtIP)  !!! NEW
-      ccAtIP   = cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
+      ccAtIP   = cc(T0,TemperatureAtIP,SalinityAtIP,cc0,&
+           acc,bcc,accl,bccl)
+      !!cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
       
       ! heat conductivity at IP
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
