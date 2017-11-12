@@ -53,7 +53,7 @@
 
 !==============================================================================
 FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
-  !==============================================================================
+!==============================================================================
 
   USE DefUtils
   USE types
@@ -157,6 +157,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
     !IF (.NOT. Found) THEN
     !   CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
     !ENDIF
+
     !Cr = GetCReal( Material, 'Permafrost Heat Capacity Rock', Found )
     !IF (.NOT. Found) THEN
     !   CALL FATAL('Permafrost', 'Could not find Permafrost Heat Capacity Rock')
@@ -238,7 +239,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   END IF
 
   ! In case there is no lower layer, use the only layer
-  if (Depth == 0.0) Depth = Depth2
+  if (Depth == 0.0_dp) Depth = Depth2
 
   ! Get porosity
   N = GetElementNOFNodes(Element)
@@ -266,7 +267,7 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
     If (Node .EQ. k) THEN
       por = Porosity(i)
       Cr = Capacity(i)
-      rhor = Density(i)
+      rhor = Density(i)  ! Solid density
       EXIT
     END IF
   END DO
@@ -282,18 +283,16 @@ FUNCTION PermafrostEnthalpy(Model, Node, Temp) RESULT(enthalpy)
   ELSE
     pordepth = por * EXP(-Depth/porscale)
   ENDIF
-
   phir = 1.0_dp - pordepth
 
   !----------------------
   ! Compute Tpmp at depth
-  ! There is a slight approximation here because the value of rhor assumes the entire thickness above is at rhor which it is not
   !----------------------
   iceDepth = Depth2 - Depth
   pice = iceDepth * rhoi * 9.81_dp
-  prock = Depth * rhow * 9.81_dp ! replaced rhor with rhow, because we assume pore-pressure to be determined by saturated aquifer
+  prock = Depth * rhow * 9.81_dp   ! This is for the fluid so use hydrostatic pressure
   press = pice + prock
-  Tpmp = 273.15_dp - ClausiusClapeyron*press ! ### 7.42E-08 for air free water - lets move to read in value with 9.8E-08 as default
+  Tpmp = 273.15_dp - ClausiusClapeyron*press
 
   IF (TRIM(PermafrostModel) .EQ. "power law") THEN
     Tstar = Tpmp - Temp
@@ -361,6 +360,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
   REAL(KIND=dp) :: rhor, rhow, rhoi    ! Densities 
   REAL(KIND=dp) :: Cr, Cw, Ci          ! Heat capacities
   REAL(KIND=dp) :: L                   ! Latent heat
+  REAL(KIND=dp) :: ClausiusClapeyron   ! Clausius-Clapeyron constant
   REAL(KIND=dp) :: Tpmp                ! Melting point temperature of ice
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
@@ -419,6 +419,12 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
     L = GetCReal( Material, 'Latent Heat', Found )
     IF (.NOT. Found) THEN
       CALL FATAL('Permafrost', 'Could not find Latent Heat')
+    ENDIF
+
+    ClausiusClapeyron = GetCReal( Material, 'Clausius Clapeyron Constant', Found )
+    IF (.NOT. Found) THEN
+      CALL INFO('Permafrost', 'Could not find Latent Heat, using default SI value ', Level=3)
+      ClausiusClapeyron = 9.8d-08 ! ### 7.42E-08 for air free water
     ENDIF
 
     !--- Rock parameters ---
@@ -488,7 +494,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
-    Depth = 0.0
+    Depth = 0.0_dp
   END IF
 
   !-----------------------------------------------
@@ -503,11 +509,11 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
   ELSE
-    Depth2 = 0.0
+    Depth2 = 0.0_dp
   END IF
 
   ! In case there is no lower layer, use the only layer
-  if (Depth == 0.0) Depth = Depth2
+  if (Depth == 0.0_dp) Depth = Depth2
 
   ! Get porosity
   N = GetElementNOFNodes(Element)
@@ -546,7 +552,7 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
   !-------------------
   ! Start calculations
   !-------------------
-  IF (porscale .LE. 0.0) THEN
+  IF (porscale .LE. 0.0_dp) THEN
     pordepth = por
   ELSE
     pordepth = por * EXP(-Depth/porscale)
@@ -556,24 +562,23 @@ FUNCTION PermafrostCapacity(Model, Node, Temp) RESULT(effectivecapacity)
 
   !----------------------
   ! Compute Tpmp at depth
-  ! There is a slight approximation here because the value of rhor assumes the entire thickness above is at rhor which it is not
   !----------------------
   iceDepth = Depth2 - Depth
-  pice = iceDepth * rhoi * 9.81
-  prock = Depth * rhor * 9.81
+  pice = iceDepth * rhoi * 9.81_dp
+  prock = Depth * rhow * 9.81_dp   ! This is for the fluid so use hydrostatic pressure
   press = pice + prock
-  Tpmp = 273.15 - 9.8E-08*press
+  Tpmp = 273.15_dp - ClausiusClapeyron*press 
 
   IF (TRIM(PermafrostModel) .EQ. "power law") THEN
     Tstar = Tpmp - Temp
     IF (Tstar <= dT) THEN
       phiw =  pordepth
     ELSE 
-      phiw = (rhor * (1 - pordepth)/ rhow) * a * (Tstar)**b
+      phiw = (rhor * (1.0_dp - pordepth)/ rhow) * a * (Tstar)**b
     ENDIF
   ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
     IF (Temp > Tpmp) then 
-      fw = 1.0
+      fw = 1.0_dp
     ELSE
       fw = EXP(-((Temp - Tpmp)/a)**2)
     ENDIF
@@ -626,6 +631,7 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   ! r = rock, w = water, i = ice
   REAL(KIND=dp) :: rhor, rhow, rhoi    ! Densities 
   REAL(KIND=dp) :: Tpmp                ! Melting point temperature of ice
+  REAL(KIND=dp) :: ClausiusClapeyron   ! Clausius-Clapeyron constant
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press
@@ -672,6 +678,12 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
       CALL FATAL('Permafrost', 'Could not find Permafrost Model')
+    ENDIF
+
+    ClausiusClapeyron = GetCReal( Material, 'Clausius Clapeyron Constant', Found )
+    IF (.NOT. Found) THEN
+      CALL INFO('Permafrost', 'Could not find Latent Heat, using default SI value ', Level=3)
+      ClausiusClapeyron = 9.8d-08 ! ### 7.42E-08 for air free water
     ENDIF
 
     porscale = GetCReal( Material, 'Permafrost Porosity Depth Scale', Found )
@@ -729,7 +741,7 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
-    Depth = 0.0
+    Depth = 0.0_dp
   END IF
 
   !-----------------------------------------------
@@ -739,7 +751,7 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
   ELSE
-    Depth2 = 0.0
+    Depth2 = 0.0_dp
   END IF
 
   ! In case there is no lower layer, use the only layer
@@ -789,9 +801,9 @@ FUNCTION PermafrostDensity(Model, Node, Temp) RESULT(Dens)
   !----------------------
   iceDepth = Depth2 - Depth
   pice = iceDepth * rhoi * 9.81_dp
-  prock = Depth * rhow * 9.81_dp
+  prock = Depth * rhow * 9.81_dp   ! This is for the fluid so use hydrostatic pressure
   press = pice + prock
-  Tpmp = 273.15 - 9.8E-08*press
+  Tpmp = 273.15_dp - ClausiusClapeyron*press ! ### 7.42E-08 for air free water - lets move to read in value with 9.8E-08 as default
 
   IF (TRIM(PermafrostModel) .EQ. "power law") THEN
     Tstar = Tpmp - Temp
@@ -864,6 +876,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   REAL(KIND=dp) :: rhoi, rhor, rhow    ! Densities 
   REAL(KIND=dp) :: Kr, Kw, Ki          ! Heat conductivities
   REAL(KIND=dp) :: L                   ! Latent heat
+  REAL(KIND=dp) :: ClausiusClapeyron   ! Clausius-Clapeyron constant
   REAL(KIND=dp) :: Tpmp                ! Melting point temperature of ice
   REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
   REAL(KIND=dp) :: fw                  ! Params for exponential model
@@ -911,6 +924,12 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
     PermafrostModel = GetString( Material, 'Permafrost Model', Found )
     IF (.NOT. Found) THEN
       CALL FATAL('Permafrost', 'Could not find Permafrost Model')
+    ENDIF
+
+    ClausiusClapeyron = GetCReal( Material, 'Clausius Clapeyron Constant', Found )
+    IF (.NOT. Found) THEN
+      CALL INFO('Permafrost', 'Could not find Latent Heat, using default SI value ', Level=3)
+      ClausiusClapeyron = 9.8d-08 ! ### 7.42E-08 for air free water
     ENDIF
 
     porscale = GetCReal( Material, 'Permafrost Porosity Depth Scale', Found )
@@ -970,7 +989,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
-    Depth = 0.0
+    Depth = 0.0_dp
   END IF
 
   !-----------------------------------------------
@@ -980,13 +999,13 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
   ELSE
-    Depth2 = 0.0
+    Depth2 = 0.0_dp
   END IF
 
   !-----------------------------------------------
   ! In case there is no lower layer, use the only layer
   !-----------------------------------------------
-  if (Depth == 0.0) Depth = Depth2
+  if (Depth == 0.0_dp) Depth = Depth2
 
   !----------------------------------------------------------------------------
   ! Get the porosity
@@ -1025,7 +1044,7 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   !-------------------
   ! Start calculations
   !-------------------
-  IF (porscale .LE. 0.0) THEN
+  IF (porscale .LE. 0.0_dp) THEN
     pordepth = por
   ELSE
     pordepth = por * EXP(-Depth/porscale)
@@ -1037,21 +1056,21 @@ FUNCTION PermafrostConductivity(Model, Node, Temp) RESULT(Cond)
   ! Compute Tpmp at depth
   !----------------------
   iceDepth = Depth2 - Depth
-  pice = iceDepth * rhoi * 9.81
-  prock = Depth * rhor * 9.81
+  pice = iceDepth * rhoi * 9.81_dp
+  prock = Depth * rhow * 9.81_dp   ! This is for the fluid so use hydrostatic pressure
   press = pice + prock
-  Tpmp = 273.15 - 9.8E-08*press
+  Tpmp = 273.15_dp - ClausiusClapeyron*press
 
   IF (TRIM(PermafrostModel) .EQ. "power law") THEN
     Tstar = Tpmp - Temp
     IF (Tstar <= dT) THEN
       phiw =  pordepth
     ELSE 
-      phiw = (rhor * (1 - pordepth)/ rhow) * a * (Tstar)**b
+      phiw = (rhor * (1.0_dp - pordepth)/ rhow) * a * (Tstar)**b
     ENDIF
   ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
     IF (Temp > Tpmp) then
-      fw = 1.0
+      fw = 1.0_dp
     ELSE
       fw = EXP(-((Temp - Tpmp)/a)**2.0_dp)
     ENDIF
@@ -1100,64 +1119,36 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   ! Local variables
   TYPE(Element_t),POINTER :: Element
   TYPE(ValueList_t), POINTER :: Material
-  !REAL(KIND=dp), ALLOCATABLE :: Porosity(:)
 
   TYPE(Variable_t), POINTER :: DepthVar, DepthVar2
   REAL(KIND=dp) :: Depth, Depth2
   REAL(KIND=dp), PARAMETER :: factor = 1.0d-06
 
-  !REAL(KIND=dp) :: por                 ! Porosity
-  !REAL(KIND=dp) :: porscale            ! Porosity length scale
-  !REAL(KIND=dp) :: pordepth            ! Porosity as a function of depth
-  ! r = rock, w = water, i = ice
-  !REAL(KIND=dp) :: phir, phiw          ! Volume fractions
   REAL(KIND=dp) :: rhor, rhow, rhoi     ! Densities 
-  !REAL(KIND=dp) :: Cr, Cw, Ci          ! Heat capacities
-  !REAL(KIND=dp) :: L                   ! Latent heat
-  !REAL(KIND=dp) :: Tpmp                ! Melting point temperature of ice
-  !REAL(KIND=dp) :: a, b, Tstar, dT     ! Params for powerlaw/exponential model
-  !REAL(KIND=dp) :: fw                  ! Params for exponential model
   REAL(KIND=dp) :: iceDepth, pice, prock, press ! For computing pressures
-
-  !INTEGER :: N, istat, i, k
-
-  !CHARACTER(LEN=MAX_NAME_LEN) :: PermafrostModel
 
   LOGICAL :: FirstTime = .TRUE.
   LOGICAL :: Found, ScaleSystem
 
-  ! SAVE porscale
   SAVE rhor, rhow, rhoi
-  ! SAVE Cr, Cw, Ci, L
-  ! SAVE a, b, dT
   SAVE FirstTime
-  ! SAVE Porosity
 
   Element => Model % CurrentElement
   Material => GetMaterial(Element)
   IF (FirstTime) THEN
     FirstTime = .FALSE.
 
-    !N = Model % MaxElementNodes
-    !ALLOCATE(Porosity(N), STAT=istat)
-    !IF (istat /= 0) THEN
-    !   CALL FATAL(  'USF_Permafrost', 'Memory allocation error' )
-    !ELSE
-    !   WRITE(Message,'(a)') 'Memory allocation done'
-    !   CALL INFO("Permafrost",Message,Level=4)
-    !END IF
-    !
     !--- Rock parameters ---
-    rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
-    IF (.NOT. Found) THEN
-      CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
-    ENDIF
+    !rhor = GetCReal( Material, 'Permafrost Density Rock', Found )
+    !IF (.NOT. Found) THEN
+    !  CALL FATAL('Permafrost', 'Could not find Permafrost Density Rock')
+    !ENDIF
 
     !--- Water parameters ---
-    !rhow = GetCReal( Material, 'Permafrost Density Water', Found )
-    !IF (.NOT. Found) THEN
-    !   CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
-    !ENDIF
+    rhow = GetCReal( Material, 'Permafrost Density Water', Found )
+    IF (.NOT. Found) THEN
+       CALL FATAL('Permafrost', 'Could not find Permafrost Density Water')
+    ENDIF
 
     !--- Ice parameters ---
     rhoi = GetCReal( Material, 'Permafrost Density Ice', Found )
@@ -1174,7 +1165,7 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   IF ( ASSOCIATED(DepthVar) ) THEN
     Depth = DepthVar % Values ( DepthVar % Perm(Node) )
   ELSE 
-    Depth = 0.0
+    Depth = 0.0_dp
   END IF
 
   !-----------------------------------------------
@@ -1184,29 +1175,18 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
   IF ( ASSOCIATED(DepthVar2) ) THEN
     Depth2 = DepthVar2 % Values ( DepthVar2 % Perm(Node) )
   ELSE
-    Depth2 = 0.0
+    Depth2 = 0.0_dp
   END IF
 
   ! In case there is no lower layer, use the only layer
-  if (Depth == 0.0) Depth = Depth2
-
-  !-------------------
-  ! Start calculations
-  !-------------------
-  !IF (porscale .LE. 0.0) THEN
-  !  pordepth = por
-  !ELSE
-  !  pordepth = por * EXP(-Depth/porscale)
-  !ENDIF
-
-  !phir = 1 - pordepth
+  if (Depth == 0.0_dp) Depth = Depth2
 
   !----------------------
-  ! Compute Tpmp at depth
+  ! Compute fluid pressure at depth
   !----------------------
   iceDepth = Depth2 - Depth
-  pice = iceDepth * rhoi * 9.81
-  prock = Depth * rhor * 9.81
+  pice = iceDepth * rhoi * 9.81_dp
+  prock = Depth * rhow * 9.81_dp   ! This is for the fluid so use hydrostatic pressure
   pressure = pice + prock
   
   Material => GetMaterial(Model % CurrentElement)
@@ -1219,33 +1199,6 @@ FUNCTION PermafrostPressure(Model, Node, dumm) RESULT(pressure)
     CALL INFO('PermafrostPressure','Applying Mpa-m-a scaling',Level=9)
     pressure = pressure * factor
   END IF
-  !write (*,*) Depth, Depth2, iceDepth, pressure
-  !Tpmp = 273.15 - 9.8E-08*press
-
-  !IF (TRIM(PermafrostModel) .EQ. "power law") THEN
-  !  Tstar = Tpmp - Temp
-  !  IF (Tstar <= dT) THEN
-  !    phiw =  pordepth
-  !  ELSE 
-  !    phiw = (rhor * (1 - pordepth)/ rhow) * a * (Tstar)**b
-  !  ENDIF
-  !ELSE IF (TRIM(PermafrostModel) .EQ. "exponential") THEN
-  !  IF (Temp > Tpmp) then 
-  !    fw = 1.0
-  !  ELSE
-  !    fw = EXP(-((Temp - Tpmp)/a)**2)
-  !  ENDIF
-  !  phiw =  pordepth * fw
-  !ELSE
-  !  CALL FATAL('Permafrost', 'Unknown Permafrost Model')
-  !ENDIF
-
-  ! Check that phiw does not exceed porosity
-  !IF (phiw > pordepth) THEN
-  !  phiw = pordepth
-  !ENDIF
-
-  !enthalpy = (phir*rhor*Cr + (pordepth-phiw)*rhoi*Ci + phiw*rhow*Cw)*(Temp) + phiw*rhow*L
 
 END FUNCTION PermafrostPressure
 
