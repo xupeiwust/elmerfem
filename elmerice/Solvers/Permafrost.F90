@@ -478,7 +478,6 @@ CONTAINS
              LocalRockMaterial % acsl, &
              LocalRockMaterial % aasl, &
              LocalRockMaterial % cksl, &
-            
              LocalRockMaterial % VariableBaseName)
       END IF
       ALLOCATE(&
@@ -495,7 +494,7 @@ CONTAINS
            LocalRockMaterial % alphaL(NumerOfRockRecords), &
            LocalRockMaterial % alphaT(NumerOfRockRecords), &
            LocalRockMaterial % RadGen(NumerOfRockRecords), &
-           LocalRockMaterial % acs(NumerOfRockRecords,0:5), &
+           LocalRockMaterial % acs(0:5,NumerOfRockRecords), &
            LocalRockMaterial % as0(NumerOfRockRecords), &
            LocalRockMaterial % aas(0:5,NumerOfRockRecords), &
            LocalRockMaterial % ks0(NumerOfRockRecords), &
@@ -544,14 +543,17 @@ CONTAINS
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % alphaL(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % alphaT(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % RadGen(I), Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % acs(0:5,NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % as0(NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aas(0:5,NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % ks0(NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % cks(0:5,NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % acsl(NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aasl(NumerOfRockRecords),  Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % cksl(NumerOfRockRecords),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % acs(0:5,I),  Comment
+        PRINT *, Comment, LocalRockMaterial % acs(0:5,I)!, acs(1,I), acs(2,I), acs(3,I)
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % as0(I),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aas(0:5,I),  Comment
+        PRINT *, Comment, LocalRockMaterial % aas(0:5,I)
+        
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % ks0(I),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % cks(0:5,I),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % acsl(I),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aasl(I),  Comment
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % cksl(I),  Comment
       END DO
       WRITE(Message,'(A,I2,A,A)') "Read ",NumerOfRockRecords," rock material records from file ", TRIM(MaterialFileName)
       CALL INFO(FunctionName,Message,Level=1)
@@ -1190,10 +1192,10 @@ CONTAINS
     END IF
   END FUNCTION XiEta
   !---------------------------------------------------------------------------------------------
-  REAL(KIND=dp) FUNCTION GeneralPolynomial(VariableAtIP,ReferenceVariable,Normation,coeff,pdeg)
+  REAL(KIND=dp) FUNCTION GeneralPolynomial(VariableAtIP,ReferenceValue,Normation,coeff,pdeg)
     IMPLICIT NONE
     !-------
-    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff(0:5)
+    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceValue,Normation,coeff(0:5)
     INTEGER, INTENT(IN) :: pdeg
     REAL(KIND=dp) outval
     ! ------
@@ -1203,27 +1205,28 @@ CONTAINS
     outval = 0.0_dp
     currpot = 1.0_dp
     DO i=0,pdeg
+      !IF (pdeg == 0) PRINT*,i,"of",pdeg, currpot, VariableAtIP, ReferenceValue, Normation
       outval = outval + coeff(i) * currpot
-      currpot = currpot * (VariableAtIP - ReferenceVariable)/Normation
+      currpot = currpot * (VariableAtIP - ReferenceValue)/Normation
     END DO
     GeneralPolynomial = outval
   END FUNCTION GeneralPolynomial
     !---------------------------------------------------------------------------------------------
-  REAL(KIND=dp) FUNCTION GeneralIntegral(VariableAtIP,ReferenceVariable,Normation,coeff0,coeff,pdeg)
+  REAL(KIND=dp) FUNCTION GeneralIntegral(VariableAtIP,ReferenceValue,Normation,coeff0,coeff,pdeg)
     IMPLICIT NONE
     !-------
-    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceVariable,Normation,coeff0,coeff(0:5)
+    REAL(KIND=dp), INTENT(IN) :: VariableAtIP,ReferenceValue,Normation,coeff0,coeff(0:5)
     INTEGER, INTENT(IN) :: pdeg
     REAL(KIND=dp) outval
     ! ------
     REAL(KIND=dp) currpot
     INTEGER :: currdeg
     !PRINT *,"Integral"
-    outval = coeff0*(VariableAtIP - ReferenceVariable)
+    outval = coeff0*(VariableAtIP - ReferenceValue)
     currpot = 1.0_dp
     DO currdeg=0,pdeg
       outval = outval * coeff(currdeg) * currpot/(DBLE(currdeg) + 1.0_dp)
-      currpot = currpot * (VariableAtIP - ReferenceVariable)/Normation
+      currpot = currpot * (VariableAtIP - ReferenceValue)/Normation
     END DO
     GeneralIntegral = outval
   END FUNCTION GeneralIntegral
@@ -1236,7 +1239,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: rhos0,T0,p0,TemperatureAtIP,PressureAtIP,ks0,as0
     REAL(KIND=DP), DIMENSION(0:5) ::cks,aas
     INTEGER, INTENT(IN) :: cksl,aasl
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2
     !----------------------
@@ -1258,7 +1261,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: rhow0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,kw0,aw0,zw0
     REAL(KIND=dp), DIMENSION(0:5) :: ckw, aaw, bzw
     INTEGER, INTENT(IN) :: ckwl,aawl,bzwl
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, aux3, watercont
     !----------------------
@@ -1281,7 +1284,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: rhoi0,T0,p0,TemperatureAtIP,PressureAtIP,ki0,ai0
     REAL(KIND=DP), DIMENSION(0:5) ::cki,aai
     INTEGER, INTENT(IN) :: ckil,aail
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2
     !----------------------
@@ -1303,7 +1306,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: rhoc0,T0,p0,TemperatureAtIP,PressureAtIP,SalinityAtIP,kc0,ac0,zc0
     REAL(KIND=DP), DIMENSION(0:5) :: ckc, aac, bzc
     INTEGER, INTENT(IN) :: ckcl,aacl,bzcl
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, aux3
     !----------------------
@@ -1329,11 +1332,15 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: cs0,T0,TemperatureAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: acs
     INTEGER, INTENT(IN) :: acsl
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
+    REal(KIND=dp) :: aux
     !----------------------
-    cs = cs0
+    aux = cs0
+    !PRINT *,"cs0",aux,ConstVal
     IF (.NOT.ConstVal) &
-         cs = cs * GeneralPolynomial(TemperatureAtIP,T0,T0,acs,acsl)
+         aux = aux * GeneralPolynomial(TemperatureAtIP,T0,T0,acs,acsl)
+    !PRINT *,"aux",aux,TemperatureAtIP,T0,T0,acs,acsl
+    cs = aux
   END FUNCTION cs
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
@@ -1342,7 +1349,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: cw0,T0,TemperatureAtIP,SalinityAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: acw,bcw
     INTEGER, INTENT(IN) :: acwl,bcwl
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     REAL(KIND=dp) :: aux1, aux2, watercont
     IF (ConstVal) THEN
@@ -1362,7 +1369,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: ci0,T0,TemperatureAtIP
     REAL(KIND=DP), DIMENSION(0:5) :: aci
     INTEGER, INTENT(IN) :: acil
-    LOGICAL, OPTIONAL :: ConstVal
+    LOGICAL :: ConstVal
     !----------------------
     ci = ci0
     IF (.NOT.ConstVal) &
@@ -1382,7 +1389,7 @@ CONTAINS
         REAL(KIND=dp), INTENT(IN) :: cc0,T0,TemperatureAtIP,SalinityAtIP
         REAL(KIND=DP), DIMENSION(0:5) :: acc,bcc
         INTEGER, INTENT(IN) :: accl,bccl
-        LOGICAL, OPTIONAL :: ConstVal
+        LOGICAL :: ConstVal
         !----------------------
         REAL(KIND=dp) :: aux1, aux2
         IF (ConstVal) THEN
@@ -1912,8 +1919,11 @@ CONTAINS
     CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,&
          RockmaterialID, DIM, T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
          ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
-         acs,as0,aas,ks0,cks,acsl,aasl,cksl,&
+         acs(0:5),as0,aas(0:5),ks0,cks(0:5),acsl,aasl,cksl,&
          deltaInElement,D1InElement,D2InElement)
+    !PRINT *, "HTEQ: ReadPermafrostRockMaterialVariables"
+    !PRINT *,  DIM, T0, p0, l0, Mw, cw0,ci0
+    !PRINT *,  acs(0:5),as0,aas(0:5),ks0,cks(0:5)
    
 
     ! Numerical integration:
@@ -2829,20 +2839,20 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
-        
-        IF (NumberOfRockRecords < 1) THEN
-          CALL FATAL(SolverName,'No Rock Material specified')
-        ELSE
-          CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
-          FirstTime = .FALSE.
-        END IF 
-        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material, Model % COnstants, CurrentRockMaterial )        
+
         IF (NumberOfRockRecords < 1) THEN
           CALL FATAL(SolverName,'No Rock Material specified')
         ELSE
           CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
           FirstTime = .FALSE.
         END IF
+!!$        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material, Model % COnstants, CurrentRockMaterial )        
+!!$        IF (NumberOfRockRecords < 1) THEN
+!!$          CALL FATAL(SolverName,'No Rock Material specified')
+!!$        ELSE
+!!$          CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
+!!$          FirstTime = .FALSE.
+!!$        END IF
         CALL ReadPermafrostSoluteMaterial( Material,Model % Constants,CurrentSoluteMaterial )
         CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
       END IF
@@ -2850,7 +2860,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       n  = GetElementNOFNodes()
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
-      
+
       PhaseChangeModel = ListGetString(Material, &
            'Permafrost Phase Change Model', Found )
       IF (Found) THEN
@@ -2906,7 +2916,7 @@ CONTAINS
   SUBROUTINE ReadVarsHTEQ(N)
     INTEGER :: N
     REAL(KIND=dp) :: p0
-    
+
     NodalPressure(1:N) = 0.0_dp
     NodalSalinity(1:N) = 0.0_dp
     NodalGWflux(1:3,1:N) = 0.0_dp
@@ -3040,7 +3050,7 @@ CONTAINS
       NoSalinity=.FALSE.
     END IF
 
-    
+
     GWfluxName = ListGetString(Params, &
          'Groundwater Flux Variable', GivenGWFlux )
     IF (GivenGWFlux) THEN
@@ -3077,21 +3087,21 @@ CONTAINS
       END IF
       !ComputeGWFlux = .FALSE.
       CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
-    !ELSE
-    !  IF (NoPressure) THEN
-    !    CALL WARN(SolverName,'Neither Pressure nor Groundwater Flux variable found. No convection will be computed')
-    !    ComputeGWFlux = .FALSE.
-    !  ELSE
-    !    CALL INFO(SolverName,'Using Pressure and Temperature to compute flux',Level=9)
-    !    ComputeGWFlux = .TRUE.
-    !  END IF
+      !ELSE
+      !  IF (NoPressure) THEN
+      !    CALL WARN(SolverName,'Neither Pressure nor Groundwater Flux variable found. No convection will be computed')
+      !    ComputeGWFlux = .FALSE.
+      !  ELSE
+      !    CALL INFO(SolverName,'Using Pressure and Temperature to compute flux',Level=9)
+      !    ComputeGWFlux = .TRUE.
+      !  END IF
     END IF
   END SUBROUTINE AssignVarsHTEQ
 
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
- ! SUBROUTINE LocalMatrixHTEQ( Element, ElementNo, NoElements, n, nd, NodalTemperature, NodalPressure, &
- !      NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
+  ! SUBROUTINE LocalMatrixHTEQ( Element, ElementNo, NoElements, n, nd, NodalTemperature, NodalPressure, &
+  !      NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, NoGWFlux, NoPressure,&
   !      CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords, PhaseChangeModel )
   SUBROUTINE LocalMatrixHTEQ(  Element, ElementNo, NoElements, n, nd,&
        NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
@@ -3116,8 +3126,8 @@ CONTAINS
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fTildewTAtIP,fTildewpAtIP !  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1InElement,D2InElement
-    REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,RadGen,acs(0:5),&
-         as0,aas(0:5),ks0,cks(0:5)  ! stuff comming from RockMaterial
+    REAL(KIND=dp) :: ks0th,e1,bs,rhos0,cs0,Xi0,eta0,Kgwh0(3,3),qexp,alphaL,alphaT,RadGen,&
+         acs(0:5),as0,aas(0:5),ks0,cks(0:5)  ! stuff comming from RockMaterial
     INTEGER :: acsl,aasl,cksl       ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, Mw,Mc,DeltaT, T0, p0,rhow0,rhoi0,rhoc0,&
          l0,vi0,vc0,cw0,kw0,aw0,zw0,ci0,ki0,ai0,cc0,ac0,kc0,zc0,&
@@ -3203,26 +3213,29 @@ CONTAINS
          'Hydraulic Conductivity Limit', Found)
     IF (.NOT.Found .OR. (MinKgw <= 0.0_dp))  &
          MinKgw = 1.0D-14
-    
+
     ! read variable material parameters from CurrentRockMaterial
-    MaterialFileName = GetString( Material, 'Element Rock Material File', Found )
+    !MaterialFileName = GetString( Material, 'Element Rock Material File', Found )
     !IF (.NOT.Found) THEN ! we read the material from the regular database
-      !CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,&
-      ! RockmaterialID, DIM, T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
-      ! ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
-      ! deltaInElement,D1InElement,D2InElement)
+    !CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,&
+    ! RockmaterialID, DIM, T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
+    ! ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
+    ! deltaInElement,D1InElement,D2InElement)
     CALL ReadPermafrostRockMaterialVariables(CurrentRockMaterial,&
          RockmaterialID, DIM, T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
          ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
-         acs,as0,aas,ks0,cks,acsl,aasl,cksl,&
+         acs(0:5),as0,aas(0:5),ks0,cks(0:5),acsl,aasl,cksl,&
          deltaInElement,D1InElement,D2InElement)
-!    ELSE   ! Call element wise material parameters
-!      CALL ReadPermafrostRockMaterialElementVariables(MaterialFileName,t,NoElements,DIM,&
-!           T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
-!           ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
- !          acs,as0,aas,ks0,cks,acsl,aasl,cksl,&
-!           deltaInElement,D1InElement,D2InElement)
-!    END IF
+    !PRINT *, "ReadPermafrostRockMaterialVariables",ElementWiseRockMaterial
+    !PRINT *, RockmaterialID,CurrentRockMaterial % acsl(RockMaterialID),&
+    !     CurrentRockMaterial % acs(0:5,RockmaterialID),CurrentRockMaterial % cs0(RockmaterialID)
+    !    ELSE   ! Call element wise material parameters
+    !      CALL ReadPermafrostRockMaterialElementVariables(MaterialFileName,t,NoElements,DIM,&
+    !           T0, p0, l0, Mw, cw0,ci0,GasConstant,DeltaT,eps,&
+    !           ks0th, e1, bs,rhos0,cs0,Xi0,eta0,Kgwh0,qexp,alphaL,alphaT,RadGen,&
+    !          acs,as0,aas,ks0,cks,acsl,aasl,cksl,&
+    !           deltaInElement,D1InElement,D2InElement)
+    !    END IF
 
     ! Numerical integration:
     !-----------------------
@@ -3241,10 +3254,10 @@ CONTAINS
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))      
       !IF (NoPressure) THEN
       !  PressureAtIP = p0
-        !PRINT *,"PressureAtIP",PressureAtIP
+      !PRINT *,"PressureAtIP",PressureAtIP
       !END IF
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
-            
+
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('Anderson')
@@ -3269,7 +3282,7 @@ CONTAINS
       END SELECT
 
       !Materialproperties needed at IP:
-      
+
       ! densities
       !rhosAtIP = rhos0 ! replace
       !rhos(rhos0,TemperatureAtIP,PressureAtIP)  !!! NEW
@@ -3293,8 +3306,11 @@ CONTAINS
 
       !PRINT *,"rhosAtIP,rhoiAtIP,rhowAtIP,rhocAtIP",rhosAtIP,rhoiAtIP,rhowAtIP,rhocAtIP
       ! heat capacities
-      csAtIP   =cs(T0,TemperatureAtIP,&
-           cs0,acs,acsl,ConstVal)
+      !PRINT *,"csAtIP",T0,TemperatureAtIP,&
+      !     cs0,acs(0:5),acsl,ConstVal
+      csAtIP   = cs(T0,TemperatureAtIP,&
+           cs0,acs(0:5),acsl,ConstVal)
+      !STOP
       !!cs(cs0,TemperatureAtIP,PressureAtIP)  !!
       cwAtIP   = cw(T0,TemperatureAtIP,SalinityAtIP,cw0,&
            acw,bcw,acwl,bcwl,ConstVal) !!! NEW
@@ -3310,7 +3326,7 @@ CONTAINS
       !!cc(cc0,acc,bcc,T0,SalinityAtIP,TemperatureAtIP,PressureAtIP)  !!! NEW
 
       !PRINT *,"cw,ci,cs,cc",cwAtIP,ciAtIP,csAtIP,ccAtIP
-      
+
       ! heat conductivity at IP
       ksthAtIP = GetKalphath(ks0th,bs,T0,TemperatureAtIP)
       kwthAtIP = GetKalphath(kw0th,bw,T0,TemperatureAtIP)
@@ -3327,7 +3343,7 @@ CONTAINS
       CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP)
       !PRINT *,"CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
       ! compute groundwater flux for advection term
-            !PRINT *, "KGTTAtIP", KGTTAtIP,"CgwTTAtIP",CgwTTAtIP
+      !PRINT *, "KGTTAtIP", KGTTAtIP,"CgwTTAtIP",CgwTTAtIP
       JgwDAtIP = 0.0_dp
       IF (GivenGWFlux) THEN
         DO I=1,DIM
@@ -3341,7 +3357,7 @@ CONTAINS
         KgwAtIP = GetKgw(mu0,mu0,XiAtIP,rhow0,qexp,Kgwh0,MinKgw)
         KgwpTAtIP = GetKgwpT(rhow0,fTildewTATIP,KgwAtIP)
         KgwppAtIP = GetKgwpp(rhow0,fTildewpATIP,KgwAtIP)
-       !PRINT *,"KgwppAtIP",KgwppAtIP
+        !PRINT *,"KgwppAtIP",KgwppAtIP
 
         DO i=1,DIM
           gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
@@ -3358,8 +3374,8 @@ CONTAINS
         END DO
         !PRINT *,"JgwDAtIP=(",JgwDAtIP(1:DIM),")=(",fluxgAtIP(1:DIM),") + (",fluxPAtIP(1:DIM),")"
         !PRINT *,"KgwppAtIP",KgwppAtIP(1:DIM,1:DIM),"gradPAtIP",gradPAtIP(1:DIM),"fluxPAtIP",fluxPAtIP(1:DIM)
-      !ELSE ! nothing at all is computed or read in
-      !  JgwDAtIP(1:DIM) = 0.0_dp
+        !ELSE ! nothing at all is computed or read in
+        !  JgwDAtIP(1:DIM) = 0.0_dp
       END IF
 
       Weight = IP % s(t) * DetJ
@@ -3378,16 +3394,16 @@ CONTAINS
           !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
           !PRINT *,"Pe1", CgwTTAtIP*JgwDAtIP(1),"/",KGTTAtIP(1,1)
           !PRINT *,"Pe2", CgwTTAtIP*JgwDAtIP(2),"/",KGTTAtIP(2,2)
-          
-          CgwTTAtIP = 0.0_dp !!! REMOVE THIS !!!
+
+          !CgwTTAtIP = 0.0_dp !!! REMOVE THIS !!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
-          
+
           STIFF (p,q) = STIFF(p,q) + Weight * &
-                CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) ! REMOVE THE FACTOR 10
+               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) ! REMOVE THE FACTOR 10
           ! PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-         
+
           !END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
