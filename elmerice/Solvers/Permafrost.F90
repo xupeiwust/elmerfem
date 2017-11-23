@@ -2870,6 +2870,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
 
       CALL ReadVarsHTEQ(N)
 
+      
       !CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb, NodalTemperature, NodalPressure, &
       !     NodalPorosity, NodalSalinity, NodalGWflux, ComputeGWFlux, &
       !     NoGWflux, NoPressure, CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
@@ -2914,7 +2915,7 @@ CONTAINS
 
   ! compute element-wise nodal variables
   SUBROUTINE ReadVarsHTEQ(N)
-    INTEGER :: N
+    INTEGER :: N,I
     REAL(KIND=dp) :: p0
 
     NodalPressure(1:N) = 0.0_dp
@@ -2923,6 +2924,10 @@ CONTAINS
     NodalPorosity(1:N) = 0.0_dp
     ! Nodal variable dependencies
     NodalTemperature(1:N) = Temperature(TemperaturePerm(Element % NodeIndexes(1:N)))
+    PRINT *, "ReadVars:", NodalTemperature(1:N)
+    !DO I=1,N
+    !   IF (NodalTemperature(1:N)
+    !END DO
     IF (ConstantPorosity) THEN
       NodalPorosity(1:N) = ListGetReal(Material,PorosityName,N,Element % NodeIndexes, Found)
       IF (.NOT.Found) THEN
@@ -3294,7 +3299,10 @@ CONTAINS
            kw0,ckw,ckwl,&
            aw0,aaw,aawl,&
            zw0,bzw,bzwl,ConstVal) !!! NEW
-      IF (rhowAtIP .NE. rhowAtIP) PRINT *,"rhowAtIP",rhowAtIP
+      IF (rhowAtIP .NE. rhowAtIP) THEN
+        PRINT *,"rhowAtIP:",rhowAtIP
+        STOP
+      END IF
       rhosAtIP = rhos(rhos0,T0,p0,TemperatureAtIP,PressureAtIP,&
            ks0,cks,cksl,&
            as0,aas,aasl,ConstVal)
