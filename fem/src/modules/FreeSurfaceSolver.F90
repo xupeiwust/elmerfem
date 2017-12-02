@@ -407,7 +407,7 @@ SUBROUTINE FreeSurfaceSolver( Model,Solver,dt,TransientSimulation )
      CALL Info(SolverName, Message,Level=6 )
   ELSE 
      RotateFS = .FALSE.
-     CALL Info(SolverName, 'No Free Surface Orientation Vector found, assuming normal to z-axis',&
+     CALL Info(SolverName, 'No Free Surface Orientation Vector found, assuming normal to highest dimension axis',&
           Level=6 )
   END IF
 
