@@ -1958,8 +1958,8 @@ CONTAINS
         XiPAtIP   = &
              XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,d1,d2,&
+             GasConstant,TemperatureAtIP,PressureAtIP,SalinityAtIP)
         B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
         B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
@@ -2510,8 +2510,8 @@ CONTAINS
           XiPAtIP   = &
                XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
         CASE DEFAULT ! Hartikainen model
-          deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-               TemperatureAtIP,PressureAtIP,SalinityAtIP)
+          deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,d1,d2,&
+             GasConstant,TemperatureAtIP,PressureAtIP,SalinityAtIP)
           B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
           B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
           Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
@@ -3273,8 +3273,8 @@ CONTAINS
         XiPAtIP   = &
              XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,d1,d2,&
+             GasConstant,TemperatureAtIP,PressureAtIP,SalinityAtIP)
         B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
         B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
@@ -3770,8 +3770,8 @@ CONTAINS
         XiPAtIP   = &
              XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,d1,d2,&
+             GasConstant,TemperatureAtIP,PressureAtIP,SalinityAtIP)
         B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
         B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
@@ -4406,8 +4406,8 @@ CONTAINS
         XiPAtIP   = &
              XiAndersonP(XiAtIp,0.011_dp,-0.66_dp,9.8d-08,rhow0,rhos0,T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,GasConstant,d1,d2,&
-             TemperatureAtIP,PressureAtIP,SalinityAtIP)
+        deltaGAtIP = deltaG(e1,eps,DeltaT,T0,p0,Mw,Mc,l0,cw0,ci0,rhow0,rhoi0,d1,d2,&
+             GasConstant,TemperatureAtIP,PressureAtIP,SalinityAtIP)
         B1AtIP = GetB1(deltaInElement,deltaGAtIP,e1,Mw,GasConstant,TemperatureAtIP)
         B2AtIP = GetB2(deltaInElement,deltaGAtIP,GasConstant,Mw,TemperatureAtIP)
         Xi0Tilde = GetXi0Tilde(Xi0,mu0,PorosityAtIP)
