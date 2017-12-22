@@ -62,7 +62,7 @@ MODULE PermafrostMaterials
   !---------------------------------
   TYPE SoluteMaterial_t
      REAL(KIND=dp) ::  Mc,vc0,kc0th,&
-          Dm0,d1,d2,dc0,dc1,bc,&
+          d1,d2,dc0,dc1,bc,&
           cc0,acc(0:5),bcc(0:5),&
           rhoc0,ac0,kc0,zc0,aac(0:5),ckc(0:5),bzc(0:5),&
           nu20,anc(0:5),bnc(0:5)
@@ -203,7 +203,6 @@ CONTAINS
         LocalSoluteMaterial % Mc=        0.0323_dp
         LocalSoluteMaterial % vc0=       0.00057372_dp
         LocalSoluteMaterial % kc0th=     0.56_dp      
-        LocalSoluteMaterial % Dm0=       1.0d-09
         LocalSoluteMaterial % d1=       0.87_dp		       
         LocalSoluteMaterial % d2=       1.30_dp		       
         LocalSoluteMaterial % dc0=       0.81_dp
@@ -256,12 +255,11 @@ CONTAINS
           ! 
           !     Mc, rhoc0
           !     vc0,cc0,acc(0:2),bcc(0:2)
-          !     kc0th,muw0,Dm0,d1,d2,dc0,dc1,bc
+          !     kc0th,muw0,d1,d2,dc0,dc1,bc
           !------------------------------------------------------------------------------
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % Mc, Comment 
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % vc0, Comment
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % kc0th, Comment
-          READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % Dm0, Comment
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % d1, Comment
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % d2, Comment
           READ (io, *, END=10, IOSTAT=OK, ERR=20) LocalSoluteMaterial % dc0, Comment
@@ -302,7 +300,7 @@ CONTAINS
     WRITE(Message,*) "Mc",CurrentSoluteMaterial % Mc,"vc0",CurrentSoluteMaterial % vc0,&
          "kc0th", CurrentSoluteMaterial %kc0th
     CALL INFO(SubroutineName,Message,Level=9)    
-    WRITE(Message,*) "Dm0",CurrentSoluteMaterial % Dm0,"d1",CurrentSoluteMaterial % d1,"d2",&
+    WRITE(Message,*) "d1",CurrentSoluteMaterial % d1,"d2",&
          CurrentSoluteMaterial % d2,"dc0",CurrentSoluteMaterial % dc0,"dc1",&
          CurrentSoluteMaterial % dc1,"bc",CurrentSoluteMaterial % bc
     CALL INFO(SubroutineName,Message,Level=9)
@@ -1775,39 +1773,70 @@ CONTAINS
     Kgwpp(1:3,1:3) = (1.0_dp + fw*XiP)*Kgw(1:3,1:3)
   END FUNCTION GetKgwpp
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetKc(alphaL,alphaT,Dm0,Xi,absJgwD,eL,Porosity)RESULT(Kc) ! CHANGE
+  FUNCTION GetKc(CurrentRockMaterial,RockMaterialID,Xi,JgwD,Porosity)RESULT(Kc) ! CHANGE
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: alphaL,alphaT,Dm0,Xi,absJgwD,eL(3),Porosity
-    REAL(KIND=dp) :: Kc(3,3), unittensor(3,3), aux
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    REAL(KIND=dp), INTENT(IN) :: Xi,JgwD(3),Porosity
+    INTEGER, INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp) :: Dm,alphaL,alphaT,Kc(3,3), unittensor(3,3), aux, eL(3),absJgwD
     INTEGER :: I,J
     unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
     IF (Porosity <= 0.0_dp) &
          CALL FATAL("GetKc","Negative/Zero Porosity detected")
     IF (Xi <= 0.0_dp) &
          CALL FATAL("GetKc","Negative/Zero water content detected")
+
+    alphaL = CurrentRockMaterial % alphaL(RockMaterialID)
+    alphaT = CurrentRockMaterial % alphaT(RockMaterialID)
+    
+    absJgwD = SQRT(SUM(JgwD(1:3) * JgwD(1:3)))
+    eL = 0.0_dp
+    IF (absJgwD > 0.0_dp) &
+         eL = JgwD/absJgwD
+    
     aux = absJgwD/(Porosity * Xi)
     Kc = 0.0_dp
     DO I=1,3
       DO J=1,3
-        Kc(I,J) = Kc(I,J) + Dm0 * unittensor(I,J) &
+        Kc(I,J) = Kc(I,J) + Dm * unittensor(I,J) &
              + aux*((alphaL - alphaT)*eL(I)*eL(J)  + alphaT * unittensor(I,J))
       END DO
     END DO
   END FUNCTION GetKc
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetKcXcXc(T0,rhoc0,d1,d2,dc0,dc1,Kc,Temperature,Salinity,Pressure)RESULT(KcXcXc) ! CHANGE
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: T0,rhoc0,d1,d2,dc0,dc1,Kc(3,3),Temperature,Salinity,Pressure
-    REAL(KIND=dp) :: KcXcXc(3,3), aux, relSalinity
+  FUNCTION GetR(CurrentSoluteMaterial,GasConstant,rhoc,Xi,Temperature,Salinity) RESULT(r12)
+    TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
+    REAL(KIND=dp), INTENT(IN) :: GasConstant,rhoc,Xi,Salinity,Temperature
+    REAL(KIND=dp) :: r12(2)
+    REAL(KIND=dp) :: d1, d2, Mc, aux
+    
+    d1 = CurrentSoluteMaterial % d1
+    d2 = CurrentSoluteMaterial % d2
+    Mc = CurrentSoluteMaterial % Mc
 
-    aux = rhoc0 * Temperature/(T0 * rhoc0)
-    KcXcXc(1:3,1:3) = aux * Kc(1:3,1:3)
-    IF (Salinity >= 1.0_dp) &
-         CALL FATAL("GetKcXcXc","(Larger than) unity Salinity detected")
-    relSalinity = Salinity/(1.0_dp - Salinity)
-    aux = 1.0_dp + ((d1 + dc1)/dc0) * relSalinity + 2.0_dp * (d2/dc0) * (relSalinity**2.0_dp)
-    KcXcXc(1:3,1:3) = aux * KcXcXc(1:3,1:3)    
-  END FUNCTION GetKcXcXc
+    aux = Salinity/(Xi - Salinity)
+    
+    r12(1) = Mc*(1.0_dp - Salinity/Xi)/(rhoc * GasConstant * Temperature)
+    r12(2) = d1 + (d1 + d2)*aux + d2*aux*aux    
+  END FUNCTION GetR
+  !---------------------------------------------------------------------------------------------
+  FUNCTION  GetKcYcYc(Kc,r12) RESULT(KcYcYc)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Kc(3,3),r12(2)
+    REAL(KIND=dp) :: KcYcYc(3,3)
+    KcYcYc(1:3,1:3) = r12(2) * Kc(1:3,1:3) 
+  END FUNCTION GetKcYcYc
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetFc(rhoc,rhow,Gravity,r12,XiT,XiP,Xi,gradP,gradT) RESULT(fc)
+    REAL(KIND=dp), INTENT(IN) :: rhoc,rhow,Gravity(3),r12(2),XiT,XiP,Xi,gradP(3),gradT(3)
+    REAL(KIND=dp) :: fc(3)
+    
+    fc(1:3) = r12(1)*(rhoc - rhow)*Gravity(1:3) + r12(2)*(XiT*gradT(1:3) + XiP*gradP(1:3))/Xi
+    
+  END FUNCTION GetFc
+  !---------------------------------------------------------------------------------------------
+
+  
 END MODULE PermafrostMaterials
 !---------------------------------------------------------------------------------------------
 !---------------------------------------------------------------------------------------------
