@@ -1084,7 +1084,7 @@ CONTAINS
 
     aux = 1.0_dp/(Xi0tilde - Salinity)
     bijYc(1,1) = (d1 + d2*Salinity*aux)*Xi0tilde*aux*aux
-    bijYc(1,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*(Xi0tilde**2.0_dp)*aux + bij(1,2))
+    bijYc(1,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*(Xi0tilde**2.0_dp)*aux*aux + bij(1,2))
     aux = 1.0_dp/(1.0_dp - Salinity)
     bijYc(2,1) = aux*(d1 + d2*Salinity*aux)
     bijYc(2,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*aux*aux + bij(2,2))        
@@ -1168,13 +1168,14 @@ CONTAINS
     !-----------------
     REAL(KIND=dp) :: Mw, e1
     !----------------
-    IF (Xi > Xi0tilde) THEN
-      fw = 0.0_dp
-    ELSE
-      e1 = CurrentRockMaterial % e1(RockMaterialID)
-      Mw = CurrentSolventMaterial % Mw
-      fw = rhow*GasConstant*Temperature*e1*Xi0tilde/(Mw*Xi)
-    END IF
+ !   IF (Xi > Xi0tilde) THEN
+ !     fw = 0.0_dp
+ !   ELSE
+ !     e1 = CurrentRockMaterial % e1(RockMaterialID)
+ !     Mw = CurrentSolventMaterial % Mw
+ !     fw = rhow*GasConstant*Temperature*e1*Xi0tilde/(Mw*Xi)
+ !   END IF
+    fw = 0.0_dp !! CHANGE BACK WHEN JUHA TELLS US TO DO SO !!
   END FUNCTION fw
   !---------------------------------------------------------------------------------------------
   FUNCTION GetXi(B1,B2,D1,D2,Xi0tilde) RESULT(Xi)
@@ -1230,12 +1231,12 @@ CONTAINS
   END FUNCTION XiT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-       B1,B2,D1,D2,Xi0Tilde,delta,GasConstant,Temperature)
+       B1,B2,D1,D2,bij,gwap,giap,Xi0Tilde,delta,GasConstant,Temperature)
     IMPLICIT NONE
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
     INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0Tilde,delta,GasConstant,Temperature
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,bij(2,2),gwap,giap,Xi0Tilde,delta,GasConstant,Temperature
     !local
     REAL(KIND=dp) :: aux1, aux2, rhow0,rhoi0, Mw,e1
     LOGICAL :: FirstTime=.TRUE.
@@ -1251,37 +1252,28 @@ CONTAINS
     IF (Temperature <= 0.0_dp) CALL FATAL("Permafrost (XiP)","(sub-)Zero Temperature detected")
     aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)
     aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
-    XiP = (0.5_dp*Xi0Tilde*aux1/(e1 + delta) + 0.5_dp*(1.0_dp - Xi0Tilde)*aux2/delta) &
-         *((1.0_dp/rhoi0) - (1.0_dp/rhow0))* Mw/(GasConstant*Temperature)
+    XiP = (0.5_dp*Xi0Tilde*aux1/(e1 + delta + bij(1,2)) + 0.5_dp*(1.0_dp - Xi0Tilde)*aux2/(delta + bij(2,2))) &
+         *(giap - gwap)* Mw/(GasConstant*Temperature)
   END FUNCTION XiP
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION XiYc(CurrentRockMaterial,RockMaterialID,CurrentSoluteMaterial,&
-       B1,B2,D1inelement,D2inelement,Xi0Tilde,Xi,delta,Salinity)
+  REAL (KIND=dp) FUNCTION XiYc(CurrentRockMaterial,RockMaterialID,&
+       B1,B2,D1,D2,bij,bijYc,Xi0Tilde,Xi,delta,Salinity)
     IMPLICIT NONE
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1inelement,D2inelement,Xi0Tilde,Xi,delta,Salinity
+    REAL(KIND=dp), INTENT(IN) :: B1,B2,bij(2,2),bijYc(2,2),D1,D2,&
+         Xi0Tilde,Xi,delta,Salinity
     !local
-    REAL(KIND=dp) :: aux1, aux2, aux3, e1,d1,d2
-    LOGICAL :: FirstTime=.TRUE.
-    
-    SAVE d1,d2,FirstTime
-    
-    IF (FirstTime) THEN
-      d1      = CurrentSoluteMaterial % d1      
-      d2      = CurrentSoluteMaterial % d2
-      FirstTime=.FALSE.
-    END IF
+    REAL(KIND=dp) :: aux1, aux2, aux3, e1
+
     e1 = CurrentRockMaterial % e1(RockMaterialID)
     IF ((Salinity < 1.0_dp) .AND. (Salinity >= 0.0_dp)) THEN
-      aux1 = (1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))/&
-           ((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1inelement))**2.0_dp)
-      aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))/&
-           ((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2inelement))**2.0_dp)
-      aux3 = 1.0_dp - Salinity
-      XiYc = (0.5_dp*Xi0Tilde*aux1/(e1 + delta) + 0.5_dp*(1.0_dp - Xi0Tilde)*aux2/delta) &
-           *(d1/(aux3**2.0_dp) + 0.5_dp * d2*Salinity/(aux3**3.0_dp)) 
+      aux1 = 0.5_dp*((1.0_dp + B1/SQRT(B1*B1 + 4.0_dp*D1))*(bijYc(1,1) + B1*bijYc(1,2)) + bijYc(1,2)/SQRT(B1*B1 + 4.0_dp*D1))
+      aux1 = aux1*(0.5_dp*Xi0Tilde*aux1/(e1 + delta + bij(1,2)))/((1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1))**2.0_dp)      
+      aux2 = (1.0_dp + B2/SQRT(B2*B2 + 4.0_dp*D2))*(bijYc(2,1) + B2*bijYc(2,2)) + bijYc(1,2)/SQRT(B2*B2 + 4.0_dp*D2)
+      aux2 = 0.5_dp*((1.0_dp - Xi0Tilde)/delta + bij(2,2))*aux2/((1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))**2.0_dp)
+      XiYc = aux1 + aux2
     ELSE
       CALL WARN("Permafrost(XiXc)","Salinity out of physical range - returning zero")
       XiYc = 0.0_dp
@@ -1456,7 +1448,7 @@ CONTAINS
     REAL(KIND=dp) :: xc    
     !------------
     xc = Salinity/Xi
-    rhogw=rhow + xc*(rhoc - rhow)
+    rhogw = rhow + xc*(rhoc - rhow)
   END FUNCTION rhogw
   
   !---------------------------------------------------------------------------------------------
@@ -1692,7 +1684,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: rhoi,hi,hw,XiP,Porosity
     REAL(KIND=dp) :: CGTp
     CGTp = Porosity*rhoi*(hw - hi)*XiP
-  END FUNCTION GetCGTp
+  END FUNCTION GetCGTp  
   !---------------------------------------------------------------------------------------------
   FUNCTION GetCGTyc(rhoi,hi,hw,XiYc,Porosity)RESULT(CGTyc)! All state variables or derived values
     IMPLICIT NONE
@@ -2220,7 +2212,7 @@ CONTAINS
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
         XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,&
+             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
              deltaInElement,GasConstant,TemperatureAtIP)         
       END SELECT
 
@@ -2239,7 +2231,8 @@ CONTAINS
       KgwppAtIP = 0.0_dp
       KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
       !PRINT *,"KgwppAtIP(1,1)",KgwppAtIP(1,1)
-      
+      !PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM),"rhowAtIP=",rhowAtIP,&
+      !         "SalinityAtIP=",SalinityAtIP,"rhocAtIP=",rhocAtIP
 
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
@@ -2261,14 +2254,13 @@ CONTAINS
         END DO
       END DO
       !IF (XiAtIP > 0.0_dp) THEN
-      ! body forcexs
+      ! body forces
       DO i=1,DIM
         gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
       END DO
       DO i=1,DIM
-        !fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+        fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
         fluxgAtIP(i) = rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!! NEW
-        !fluxgAtIP(i) =rhow0*SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
         IF ((fluxgAtIP(i) .NE. fluxgAtIP(i)) .OR. (fluxTAtIP(i) .NE. fluxTAtIP(i))) THEN
           PRINT *, "NaN in r.h.s. of Darcy fluxes"
           PRINT *, "flux(",i,")= Jgwg",fluxgAtIP(i),"+ JgwpT", fluxTAtIP(i)
@@ -2278,7 +2270,7 @@ CONTAINS
         END IF
       END DO
       DO p=1,nd     
-        !FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
+        FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
         FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
       END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
@@ -2744,8 +2736,8 @@ CONTAINS
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
           XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-               B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,&
-               deltaInElement,GasConstant,TemperatureAtIP)
+             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
+             deltaInElement,GasConstant,TemperatureAtIP)
         END SELECT
         mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
              XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
@@ -2759,7 +2751,7 @@ CONTAINS
         KgwppAtIP = 0.0_dp
         KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
         rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
-        
+        !PRINT *,"Flux:", rhogwAtIP,rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
         Weight = IntegStuff % s(t) * detJ
 
         DO p=1,nd
@@ -2772,17 +2764,13 @@ CONTAINS
         fluxTAtIP = 0.0_dp
         fluxgAtIp = 0.0_dp
         DO i=1,dim
-          !fluxpAtIP(i) = 1.0_dp * i
           fluxpAtIP(i) = -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradpAtIP(1:DIM))
-          !fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          !fluxgAtIp(i) = ( (1.0_dp - SalinityAtIP) * rhow0  + SalinityAtIP * rhoc0)&
-          !SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM)
+          fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
           fluxgAtIp(i) =    rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
         END DO
         !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
         DO i=1,dim
-          !Coeff = 1.0_dp * Weight * (FluxpAtIP(i) + fluxgAtIp(i) + fluxTAtIP(i))
-          Coeff = 1.0_dp * Weight *  (FluxpAtIP(i)+ fluxgAtIp(i))
+          Coeff = 1.0_dp * Weight *  (FluxpAtIP(i)+ fluxgAtIp(i) + fluxTAtIP(i))
           !PRINT *,i,Coeff,FluxpAtIP(i),fluxgAtIp(i),fluxTAtIP(i)
           FORCE(i,1:nd) = FORCE(i,1:nd) + Coeff * Basis(1:nd)
         END DO
@@ -3461,11 +3449,9 @@ CONTAINS
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
         !PRINT *,"HTEQ: gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP",&
         !     gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP
-        XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,&
-             deltaInElement,GasConstant,TemperatureAtIP)
-        XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,CurrentSoluteMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
+        XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
+             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
+             Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
       END SELECT
 
       !Materialproperties needed at IP:
@@ -3949,7 +3935,7 @@ CONTAINS
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
         XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,&
+             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
              deltaInElement,GasConstant,TemperatureAtIP)
       END SELECT
 
@@ -4583,7 +4569,7 @@ CONTAINS
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
         XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,&
+             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
              deltaInElement,GasConstant,TemperatureAtIP)
       END SELECT
 
