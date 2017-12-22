@@ -82,7 +82,6 @@ MODULE PermafrostMaterials
      CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   END TYPE RockMaterial_t
   
-
 CONTAINS
   !---------------------------------------------------------------------------------------------
   !---------------------------------------------------------------------------------------------
@@ -758,23 +757,23 @@ CONTAINS
     GeneralIntegral = outval
   END FUNCTION GeneralIntegral
   !---------------------------------------------------------------------------------------------
-  FUNCTION groundwaterflux(Salinity,Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhow,rhoc,DIM) RESULT(JgwD)
+  FUNCTION GetJgwD(Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhogw,DIM) RESULT(JgwD)
     IMPLICIT NONE
-    REAL (KIND=dp), INTENT(IN) :: Salinity,Kgwpp(3,3),KgwpT(3,3),Kgw(3,3),gradp(3),gradT(3),Gravity(3),&
-         rhow,rhoc
+    REAL (KIND=dp), INTENT(IN) :: Kgwpp(3,3),KgwpT(3,3),Kgw(3,3),gradp(3),gradT(3),Gravity(3),&
+         rhogw
     REAL (KIND=dp)  :: JgwD(3)
     INTEGER, INTENT(IN) :: DIM
     INTEGER :: i
-    REAL (KIND=dp) :: Fluxp(3),fluxT(3),gFlux(3)
-
-    JgwD(1:3) = 0.0
-    DO i=1,DIM
-      fluxp(i) = -1.0_dp * SUM(Kgwpp(i,1:DIM)*gradp(1:DIM))          
-      !fluxT(i) =  -1.0_dp * SUM(KgwpT(i,1:DIM)*gradT(1:DIM))
-      gFlux(i) = ((1.0_dp - Salinity) * rhow + Salinity * rhoc) * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
+    REAL (KIND=dp) :: fluxp(3),fluxT(3),fluxg(3)    
+    !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
+    DO i=1,dim
+      fluxp(i) = -1.0_dp * SUM(Kgwpp(i,1:DIM)*gradp(1:DIM))
+      fluxT(i) = -1.0_dp * SUM(KgwpT(i,1:DIM)*gradT(1:DIM))
+      fluxg(i) =   rhogw * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
     END DO
-    JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + gFlux(1:DIM)    
-  END FUNCTION groundwaterflux
+    JgwD(1:3) = 0.0
+    JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + fluxg(1:DIM)    
+  END FUNCTION GetJgwD
     !---------------------------------------------------------------------------------------------
   FUNCTION GetXiAnderson(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
     REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
@@ -2536,13 +2535,13 @@ CONTAINS
     TYPE(GaussIntegrationPoints_t), TARGET :: IntegStuff
     TYPE(Nodes_t) :: Nodes
     TYPE(Element_t), POINTER :: Element
-    REAL(KIND=dp) :: weight,coeff,detJ,GradAtIp(3)
+    REAL(KIND=dp) :: weight,detJ,GradAtIp(3)
     REAL(KIND=dp), ALLOCATABLE :: Basis(:), dBasisdx(:,:)
     LOGICAL :: Found, ConstVal=.FALSE.,ConstantsRead=.FALSE., FirstTime=.TRUE., ElementWiseRockMaterial
     TYPE(ValueList_t), POINTER :: Material
     REAL(KIND=dp) :: GasConstant, meanfactor,DeltaT, T0, p0, eps, Gravity(3) ! constants read only once
     REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),MinKgw,gradTAtIP(3),gradPAtIP(3),&
-         fluxTAtIP(3),fluxpAtIP(3),fluxgAtIP(3) ! needed in equation
+         JgwDAtIP(3) ! needed in equation
     REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, &
          bijAtIP(2,2), bijYcAtIP(2,2),gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
@@ -2760,19 +2759,9 @@ CONTAINS
           END DO
         END DO
 
-        FluxpAtIp = 0.0_dp
-        fluxTAtIP = 0.0_dp
-        fluxgAtIp = 0.0_dp
+        JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM)
         DO i=1,dim
-          fluxpAtIP(i) = -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradpAtIP(1:DIM))
-          fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          fluxgAtIp(i) =    rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
-        END DO
-        !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
-        DO i=1,dim
-          Coeff = 1.0_dp * Weight *  (FluxpAtIP(i)+ fluxgAtIp(i) + fluxTAtIP(i))
-          !PRINT *,i,Coeff,FluxpAtIP(i),fluxgAtIp(i),fluxTAtIP(i)
-          FORCE(i,1:nd) = FORCE(i,1:nd) + Coeff * Basis(1:nd)
+          FORCE(i,1:nd) = FORCE(i,1:nd) + Weight *  JgwDAtIP(i) * Basis(1:nd)
         END DO
       END DO
 
@@ -3317,14 +3306,13 @@ CONTAINS
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,hiAtIP,hwAtIP  ! function values needed for C's and KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, bijAtIP(2,2), bijYcAtIP(2,2),&
          gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
-    REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3),MinKgw,KgwppAtIP(3,3),fwAtIP,mugwAtIP!  JgwD stuff
+    REAL(KIND=dp) ::  gradTAtIP(3),gradPAtIP(3),JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3),MinKgw,KgwppAtIP(3,3),fwAtIP,mugwAtIP!  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1AtIP,D2AtIP
     REAL(KIND=dp) :: GasConstant, DeltaT, T0, p0, eps, Gravity(3) ! constants read only once
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP,csAtIP,cwAtIP,ciAtIP,ccAtIP ! material properties at IP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
-         GWfluxAtIP(3),StiffPQ, meanfactor
-    REAL(KIND=dp) :: gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),fluxPAtIP(3),fluxgAtIP(3)
+         StiffPQ, meanfactor
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
     REAL(KIND=dp), POINTER :: gWork(:,:)
     INTEGER :: i,t,p,q,DIM, RockMaterialID
@@ -3511,8 +3499,7 @@ CONTAINS
         DO I=1,DIM
           JgwDAtIP(I) = SUM( Basis(1:N) * NodalGWflux(I,1:N)) 
         END DO
-      ELSE
-        
+      ELSE        
         !PRINT *, "HTEQ: Compute Flux"
         mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
              XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
@@ -3523,26 +3510,16 @@ CONTAINS
              Xi0tilde,rhowAtIP,XiAtIP,GasConstant,TemperatureAtIP)
         KgwpTAtIP = GetKgwpT(fwAtIP,XiTAtIP,KgwAtIP)
         KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
-        !PRINT *,"KgwppAtIP",KgwppAtIP
+        !PRINT *,"HTEQ: KgwppAtIP",KgwppAtIP
         rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
         
         DO i=1,DIM
           gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
           gradPAtIP(i) =  SUM(NodalPressure(1:N) * dBasisdx(1:N,i))
         END DO
+        
+        JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM)
 
-        DO i=1,DIM
-          !fluxTAtIP(i) =  -1.0_dp * SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-          fluxgAtIP(i) =  rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))
-          fluxPAtIP(i) =  -1.0_dp * SUM(KgwppAtIP(i,1:DIM)*gradPAtIP(1:DIM))
-          !JgwDAtIP(i) = fluxgAtIP(i) - fluxTAtIP(i) - fluxPAtIP(i)
-          JgwDAtIP(i) = fluxgAtIP(i) + fluxPAtIP(i)
-          !PRINT *,"JgwDAtIP_",i,"=",JgwDAtIP(i)," =", fluxgAtIP(i)," +", fluxPAtIP(i)
-        END DO
-        !PRINT *,"JgwDAtIP=(",JgwDAtIP(1:DIM),")=(",fluxgAtIP(1:DIM),") + (",fluxPAtIP(1:DIM),")"
-        !PRINT *,"KgwppAtIP",KgwppAtIP(1:DIM,1:DIM),"gradPAtIP",gradPAtIP(1:DIM),"fluxPAtIP",fluxPAtIP(1:DIM)
-        !ELSE ! nothing at all is computed or read in
-        !  JgwDAtIP(1:DIM) = 0.0_dp
       END IF
 
       Weight = IP % s(t) * DetJ
@@ -3823,7 +3800,7 @@ CONTAINS
     REAL(KIND=dp) :: rhowAtIP, rhoiAtIP, rhosAtIP, rhocAtIP
     REAL(KIND=dp) :: Basis(n),dBasisdx(n,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
-         GWfluxAtIP(3),StiffPQ, meanfactor
+         StiffPQ, meanfactor
     REAL(KIND=DP) :: gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),fluxPAtIP(3),fluxgAtIP(3)
     REAL(KIND=dp) :: MASS(n,n), STIFF(n,n), FORCE(n), LOAD(n)
     REAL(KIND=dp), POINTER :: gWork(:,:)
@@ -4458,7 +4435,7 @@ CONTAINS
     REAL(KIND=dp) :: rhowAtIP, rhoiAtIP, rhosAtIP, rhocAtIP
     REAL(KIND=dp) :: Basis(n),dBasisdx(n,3),DetJ,Weight,LoadAtIP,&
          TemperatureAtIP,PorosityAtIP,PressureAtIP,SalinityAtIP,&
-         GWfluxAtIP(3),StiffPQ, meanfactor
+         StiffPQ, meanfactor
     REAL(KIND=DP) :: PropertyAtIP
     REAL(KIND=dp) :: MASS(n,n), STIFF(n,n), FORCE(n), LOAD(n)
     REAL(KIND=dp), POINTER :: gWork(:,:)
