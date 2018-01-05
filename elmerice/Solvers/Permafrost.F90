@@ -1304,7 +1304,6 @@ CONTAINS
     END IF
   END FUNCTION XiEta
   !---------------------------------------------------------------------------------------------
-
   REAL (KIND=dp) FUNCTION rhos(CurrentRockMaterial,RockMaterialID,&
        T0,p0,Temperature,Pressure,ConstVal)
     IMPLICIT NONE
@@ -1332,6 +1331,15 @@ CONTAINS
       rhos = rhos0 * EXP(aux1 - aux2)
     END IF
   END FUNCTION rhos
+    !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION rhosT(rhos,as0,aas,aasl,T0,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhos,as0,aas(0:5),T0,Temperature
+    INTEGER , INTENT(IN) :: aasl
+    REAL(KIND=dp) :: alphaS
+    alphaS = as0 * GeneralPolynomial(Temperature,T0,T0,aas,aasl)
+    rhosT = rhos * alphaS
+  END FUNCTION rhosT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhow(CurrentSolventMaterial,&
        T0,p0,Temperature,Pressure,Salinity,ConstVal)
@@ -1370,6 +1378,15 @@ CONTAINS
     END IF
   END FUNCTION rhow
   !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION rhowT(rhow,aw0,aaw,aawl,T0,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhow,aw0,aaw(0:5),T0,Temperature
+    INTEGER , INTENT(IN) :: aawl
+    REAL(KIND=dp) :: alphaW
+    alphaW = aw0 * GeneralPolynomial(Temperature,T0,T0,aaw,aawl)
+    rhowT = rhow * alphaW
+  END FUNCTION rhowT
+  !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhoi(CurrentSolventMaterial,&
        T0,p0,Temperature,Pressure,ConstVal)
     IMPLICIT NONE
@@ -1401,6 +1418,15 @@ CONTAINS
       rhoi = rhoi0 * EXP(aux1 - aux2)
     END IF
   END FUNCTION rhoi
+  !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION rhoiT(rhoi,ai0, aai, aail,T0,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhoi, ai0, aai(0:5),T0,Temperature
+    INTEGER , INTENT(IN) :: aail
+    REAL(KIND=dp):: alphaI    
+    alphaI = ai0 * GeneralPolynomial(Temperature,T0,T0,aai,aail) 
+    rhoiT = rhoi * alphaI
+  END FUNCTION rhoiT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhoc(CurrentSoluteMaterial,&
        T0,p0,Temperature,Pressure,Salinity,ConstVal)
@@ -1437,6 +1463,15 @@ CONTAINS
       rhoc = rhoc0 * EXP(aux1 - aux2 + aux3)
     END IF
   END FUNCTION rhoc
+  !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION rhocT(rhoc,ac0, aac, aacl,T0,Temperature)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhoc, ac0, aac(0:5),T0,Temperature
+    INTEGER , INTENT(IN) :: aacl
+    REAL(KIND=dp):: alphaC    
+    alphaC = ac0 * GeneralPolynomial(Temperature,T0,T0,aac,aacl) 
+    rhocT = rhoc * alphaC
+  END FUNCTION rhocT
  !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhogw(rhow,rhoc,Xi,Salinity)
     IMPLICIT NONE
@@ -1446,8 +1481,7 @@ CONTAINS
     !------------
     xc = Salinity/Xi
     rhogw = rhow + xc*(rhoc - rhow)
-  END FUNCTION rhogw
-  
+  END FUNCTION rhogw  
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cs(CurrentRockMaterial,RockMaterialID,&
        T0,Temperature,ConstVal)
@@ -1828,14 +1862,39 @@ CONTAINS
   END FUNCTION GetKcYcYc
   !---------------------------------------------------------------------------------------------
   FUNCTION GetFc(rhoc,rhow,Gravity,r12,XiT,XiP,Xi,gradP,gradT) RESULT(fc)
+    IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoc,rhow,Gravity(3),r12(2),XiT,XiP,Xi,gradP(3),gradT(3)
     REAL(KIND=dp) :: fc(3)
     
     fc(1:3) = r12(1)*(rhoc - rhow)*Gravity(1:3) + r12(2)*(XiT*gradT(1:3) + XiP*gradP(1:3))/Xi
     
   END FUNCTION GetFc
-  !---------------------------------------------------------------------------------------------
 
+  !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION CcYcT(rhocT,Porosity,Salinity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhocT,Porosity, Salinity
+
+    CcYcT = Porosity*Salinity*rhocT
+    
+  END FUNCTION CcYcT
+  !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION CcYcP(rhocP,Porosity, Salinity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhocP,Porosity, Salinity
+
+    CcYcP = Porosity*Salinity*rhocp
+    
+  END FUNCTION CcYcP
+  !---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION CcYcYc(rhoc,rhocYc,Porosity, Salinity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhoc,rhocYc,Porosity, Salinity
+
+    CcYcYc = Porosity*(rhoc + Salinity*rhocYc)
+    
+  END FUNCTION CcYcYc
+  
   
 END MODULE PermafrostMaterials
 !---------------------------------------------------------------------------------------------
