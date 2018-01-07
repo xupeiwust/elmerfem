@@ -103,7 +103,7 @@ CONTAINS
 
     IF (FirstTime) THEN
       !------------------------------------------------------------------------------
-      ! set constants for water and ice (Will be moved away)
+      ! set constants for water and ice 
       ! Mw,rhow0,rhoi0,hw0,hi0,vi0,cw0,ci0,acw(3),bcw(0:2),aci(0:1),kw0th,ki0th, bi, bw
       !------------------------------------------------------------------------------
       LocalSolventMaterial % Mw =    0.018_dp 
@@ -715,6 +715,9 @@ CONTAINS
   !---------------------------
   !---------------------------------------------------------------------------------------------
   !---------------------------------------------------------------------------------------------
+  !
+  !---------------------------------------------------------------------------------------------
+  ! general functions 
   !---------------------------------------------------------------------------------------------
   REAL(KIND=dp) FUNCTION GeneralPolynomial(Variable,ReferenceValue,Normation,coeff,pdeg)
     IMPLICIT NONE
@@ -735,7 +738,7 @@ CONTAINS
     END DO
     GeneralPolynomial = outval
   END FUNCTION GeneralPolynomial
-    !---------------------------------------------------------------------------------------------
+  !---------------------------------------------------------------------------------------------
   REAL(KIND=dp) FUNCTION GeneralIntegral(Variable,ReferenceValue,Normation,coeff0,coeff,pdeg)
     IMPLICIT NONE
     !-------
@@ -755,24 +758,8 @@ CONTAINS
     GeneralIntegral = outval
   END FUNCTION GeneralIntegral
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetJgwD(Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhogw,DIM) RESULT(JgwD)
-    IMPLICIT NONE
-    REAL (KIND=dp), INTENT(IN) :: Kgwpp(3,3),KgwpT(3,3),Kgw(3,3),gradp(3),gradT(3),Gravity(3),&
-         rhogw
-    REAL (KIND=dp)  :: JgwD(3)
-    INTEGER, INTENT(IN) :: DIM
-    INTEGER :: i
-    REAL (KIND=dp) :: fluxp(3),fluxT(3),fluxg(3)    
-    !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
-    DO i=1,dim
-      fluxp(i) = -1.0_dp * SUM(Kgwpp(i,1:DIM)*gradp(1:DIM))
-      fluxT(i) = -1.0_dp * SUM(KgwpT(i,1:DIM)*gradT(1:DIM))
-      fluxg(i) =   rhogw * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
-    END DO
-    JgwD(1:3) = 0.0
-    JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + fluxg(1:DIM)    
-  END FUNCTION GetJgwD
-    !---------------------------------------------------------------------------------------------
+  ! functions specific to heat transfer and phase change
+  !---------------------------------------------------------------------------------------------
   FUNCTION GetXiAnderson(A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity) RESULT(XiAnderson)
     REAL(KIND=dp), INTENT(IN) :: A,B,Beta,rhow,rhos0,T0,Temperature,Pressure,Porosity
     REAL(KIND=dp) :: Tstar, XiAnderson
@@ -1664,25 +1651,10 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: kalpha0th,balpha,T0,Temperature
     REAL(KIND=dp) :: kalphath
+    !-------------------------
     kalphath = kalpha0th/( 1.0_dp + balpha*(Temperature - T0)/T0)
     !kalphath = kalpha0th
   END FUNCTION GetKAlphaTh
-  !---------------------------------------------------------------------------------------------
-  FUNCTION GetKGTT(ksth,kwth,kith,kcth,Xi,&
-       Salinity,Porosity,meanfactor)RESULT(KGTT) ! All state variables or derived values
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: ksth,kwth,kith,kcth,Xi,&
-         Salinity,Porosity,meanfactor
-    ! local
-    REAL(KIND=dp) :: KGTT(3,3), KGaTT, KghTT, unittensor(3,3),xc
-    xc = Salinity/Xi
-    unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
-    KGhTT = 1.0_dp/((1.0_dp - Porosity)/ksth + (1.0_dp - xc)*Xi*Porosity/kwth &
-         + Salinity*Porosity/kcth + (1.0_dp - Xi)*Porosity/kith)
-    KGaTT = (1.0_dp - Porosity)*ksth + (1.0_dp - xc)*Xi*Porosity*kwth &
-         + Salinity*Porosity*kcth + (1.0_dp - Xi)*Porosity*kith
-    KGTT = unittensor*((1.0_dp - meanfactor)*KGhTT + meanfactor * KGaTT)    
-  END FUNCTION GetKGTT
   !---------------------------------------------------------------------------------------------
   FUNCTION GetCGTT(Xi,XiT,rhos,rhow,rhoi,rhoc,cw,ci,cs,cc,hi,hw,&
        Porosity,Salinity)RESULT(CGTT)! All state variables or derived values
@@ -1690,6 +1662,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: Xi,XiT,rhos,rhow,rhoi,rhoc,cw,ci,cs,cc,&
          hi,hw,Porosity,Salinity
     REAL(KIND=dp) :: CGTT
+    !-------------------------
     CGTT = (1.0_dp - Porosity)*rhos*cs &
          + (Xi - Salinity) * Porosity * rhow * cw &
          + Salinity * Porosity * rhoc * cc &
@@ -1701,19 +1674,11 @@ CONTAINS
     !     + (1.0_dp - Xi)*Porosity*rhoi*ci, rhoi*(hw - hi)*Porosity*XiT
   END FUNCTION GetCGTT
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwTT(rhow,rhoc,cw,cc,Xi,Salinity)RESULT(CgwTT)! All state variables or derived values
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhow,rhoc,cw,cc,Xi,Salinity
-    REAL(KIND=dp) :: CgwTT
-    REAL(KIND=dp) :: xc
-    xc = Salinity/Xi
-    CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
-  END FUNCTION GetCgwTT
-  !---------------------------------------------------------------------------------------------
   FUNCTION GetCGTp(rhoi,hi,hw,XiP,Porosity)RESULT(CGTp)! All state variables or derived values
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoi,hi,hw,XiP,Porosity
     REAL(KIND=dp) :: CGTp
+    !-------------------------
     CGTp = Porosity*rhoi*(hw - hi)*XiP
   END FUNCTION GetCGTp  
   !---------------------------------------------------------------------------------------------
@@ -1721,8 +1686,59 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoi,hi,hw,XiYc,Porosity
     REAL(KIND=dp) :: CGTyc
+    !-------------------------
     CGTyc = Porosity*rhoi*(hw - hi)*XiYc
   END FUNCTION GetCGTyc
+  !---------------------------------------------------------------------------------------------
+  ! functions specific to groundwater flow
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetJgwD(Kgwpp,KgwpT,Kgw,gradp,gradT,Gravity,rhogw,DIM) RESULT(JgwD)
+    IMPLICIT NONE
+    REAL (KIND=dp), INTENT(IN) :: Kgwpp(3,3),KgwpT(3,3),Kgw(3,3),gradp(3),gradT(3),Gravity(3),&
+         rhogw
+    REAL (KIND=dp)  :: JgwD(3)
+    !-------------------------
+    INTEGER, INTENT(IN) :: DIM
+    INTEGER :: i
+    REAL (KIND=dp) :: fluxp(3),fluxT(3),fluxg(3)
+    !-------------------------
+    !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
+    DO i=1,dim
+      fluxp(i) = -1.0_dp * SUM(Kgwpp(i,1:DIM)*gradp(1:DIM))
+      fluxT(i) = -1.0_dp * SUM(KgwpT(i,1:DIM)*gradT(1:DIM))
+      fluxg(i) =   rhogw * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
+    END DO
+    JgwD(1:3) = 0.0
+    JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + fluxg(1:DIM)    
+  END FUNCTION GetJgwD
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetKGTT(ksth,kwth,kith,kcth,Xi,&
+       Salinity,Porosity,meanfactor)RESULT(KGTT) ! All state variables or derived values
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: ksth,kwth,kith,kcth,Xi,&
+         Salinity,Porosity,meanfactor
+    !-------------------------
+    REAL(KIND=dp) :: KGTT(3,3), KGaTT, KghTT, unittensor(3,3),xc
+    !-------------------------
+    xc = Salinity/Xi
+    unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
+    KGhTT = 1.0_dp/((1.0_dp - Porosity)/ksth + (1.0_dp - xc)*Xi*Porosity/kwth &
+         + Salinity*Porosity/kcth + (1.0_dp - Xi)*Porosity/kith)
+    KGaTT = (1.0_dp - Porosity)*ksth + (1.0_dp - xc)*Xi*Porosity*kwth &
+         + Salinity*Porosity*kcth + (1.0_dp - Xi)*Porosity*kith
+    KGTT = unittensor*((1.0_dp - meanfactor)*KGhTT + meanfactor * KGaTT)    
+  END FUNCTION GetKGTT
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetCgwTT(rhow,rhoc,cw,cc,Xi,Salinity)RESULT(CgwTT)! All state variables or derived values
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhow,rhoc,cw,cc,Xi,Salinity
+    REAL(KIND=dp) :: CgwTT
+    !-------------------------
+    REAL(KIND=dp) :: xc
+    !-------------------------
+    xc = Salinity/Xi
+    CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
+  END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
        Xi,T0,Salinity,Temperature,ConstVal)
@@ -1731,9 +1747,11 @@ CONTAINS
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     REAL(KIND=dp), INTENT(IN) :: Xi,T0,Salinity,Temperature
     LOGICAL :: ConstVal
+    !-------------------------
     REAL(KIND=dp) :: nu10, nu20, muw0, nu1, nu2, xc
     REAL(KIND=dp) :: anw(0:5), bnc(0:5)
     INTEGER :: anwl,bncl
+    !-------------------------
     muw0 = CurrentSolventMaterial % muw0
     IF (ConstVal) THEN
       mugw = muw0
@@ -1768,20 +1786,16 @@ CONTAINS
     REAL(KIND=dp) :: muw0,rhow0,qexp,Kgwh0(3,3),kGpe(3,3),kG0pe(3,3),factor
     REAL(KIND=dp), PARAMETER :: gval=9.81_dp !hard coded, so match Kgwh0 with this value
     INTEGER :: I, J
-    
-    
+    !-------------------------
     IF (mugw <= 0.0_dp) &
          CALL FATAL("Permafrost(GetKgw)","Unphysical viscosity detected")
-    
     muw0 = CurrentSolventMaterial % muw0
     rhow0 = CurrentSolventMaterial % rhow0
     qexp = CurrentRockMaterial % qexp(RockMaterialID)
     Kgwh0(1:3,1:3) = CurrentRockMaterial % Kgwh0(1:3,1:3,RockMaterialID)
     ! transformation factor from hydr. conductivity to hydr. conductivity tensor
     factor = (muw0/mugw)*(Xi**qexp)/(rhow0*gval)
-
     !PRINT *,"Kgw:",muw0,mugw,rhow0,Kgwh0,Xi,factor
-    
     Kgw = 0.0_dp
     DO I=1,3
       DO J=1,3
@@ -1797,6 +1811,7 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: fw,XiT,Kgw(3,3)
     REAL(KIND=dp) :: KgwpT(3,3)
+    !-------------------------
     KgwpT(1:3,1:3) = fw*XiT*Kgw(1:3,1:3)
   END FUNCTION GetKgwpT
   !---------------------------------------------------------------------------------------------
@@ -1804,8 +1819,11 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: fw,XiP,Kgw(3,3)
     REAL(KIND=dp) :: Kgwpp(3,3)
+    !-------------------------
     Kgwpp(1:3,1:3) = (1.0_dp + fw*XiP)*Kgw(1:3,1:3)
   END FUNCTION GetKgwpp
+  !---------------------------------------------------------------------------------------------
+  ! functions specific to solute transport
   !---------------------------------------------------------------------------------------------
   FUNCTION GetKc(CurrentRockMaterial,RockMaterialID,Xi,JgwD,Porosity)RESULT(Kc) ! CHANGE
     IMPLICIT NONE
@@ -1814,20 +1832,18 @@ CONTAINS
     INTEGER, INTENT(IN) :: RockMaterialID
     REAL(KIND=dp) :: Dm,alphaL,alphaT,Kc(3,3), unittensor(3,3), aux, eL(3),absJgwD
     INTEGER :: I,J
+    !-------------------------
     unittensor=RESHAPE([1.0,0.0,0.0,0.0,1.0,0.0,0.0,0.0,1.0], SHAPE(unittensor))
     IF (Porosity <= 0.0_dp) &
          CALL FATAL("GetKc","Negative/Zero Porosity detected")
     IF (Xi <= 0.0_dp) &
          CALL FATAL("GetKc","Negative/Zero water content detected")
-
     alphaL = CurrentRockMaterial % alphaL(RockMaterialID)
     alphaT = CurrentRockMaterial % alphaT(RockMaterialID)
-    
     absJgwD = SQRT(SUM(JgwD(1:3) * JgwD(1:3)))
     eL = 0.0_dp
     IF (absJgwD > 0.0_dp) &
          eL = JgwD/absJgwD
-    
     aux = absJgwD/(Porosity * Xi)
     Kc = 0.0_dp
     DO I=1,3
@@ -1843,13 +1859,11 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: GasConstant,rhoc,Xi,Salinity,Temperature
     REAL(KIND=dp) :: r12(2)
     REAL(KIND=dp) :: d1, d2, Mc, aux
-    
+    !-------------------------
     d1 = CurrentSoluteMaterial % d1
     d2 = CurrentSoluteMaterial % d2
     Mc = CurrentSoluteMaterial % Mc
-
     aux = Salinity/(Xi - Salinity)
-    
     r12(1) = Mc*(1.0_dp - Salinity/Xi)/(rhoc * GasConstant * Temperature)
     r12(2) = d1 + (d1 + d2)*aux + d2*aux*aux    
   END FUNCTION GetR
@@ -1858,6 +1872,7 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: Kc(3,3),r12(2)
     REAL(KIND=dp) :: KcYcYc(3,3)
+    !-------------------------
     KcYcYc(1:3,1:3) = r12(2) * Kc(1:3,1:3) 
   END FUNCTION GetKcYcYc
   !---------------------------------------------------------------------------------------------
@@ -1865,34 +1880,28 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoc,rhow,Gravity(3),r12(2),XiT,XiP,Xi,gradP(3),gradT(3)
     REAL(KIND=dp) :: fc(3)
-    
+    !-------------------------
     fc(1:3) = r12(1)*(rhoc - rhow)*Gravity(1:3) + r12(2)*(XiT*gradT(1:3) + XiP*gradP(1:3))/Xi
-    
   END FUNCTION GetFc
-
   !---------------------------------------------------------------------------------------------
   REAL(KIND=dp) FUNCTION CcYcT(rhocT,Porosity,Salinity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhocT,Porosity, Salinity
-
     CcYcT = Porosity*Salinity*rhocT
-    
   END FUNCTION CcYcT
   !---------------------------------------------------------------------------------------------
   REAL(KIND=dp) FUNCTION CcYcP(rhocP,Porosity, Salinity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhocP,Porosity, Salinity
-
+    !-------------------------
     CcYcP = Porosity*Salinity*rhocp
-    
   END FUNCTION CcYcP
   !---------------------------------------------------------------------------------------------
   REAL(KIND=dp) FUNCTION CcYcYc(rhoc,rhocYc,Porosity, Salinity)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhoc,rhocYc,Porosity, Salinity
-
+    !-------------------------
     CcYcYc = Porosity*(rhoc + Salinity*rhocYc)
-    
   END FUNCTION CcYcYc
   
   
