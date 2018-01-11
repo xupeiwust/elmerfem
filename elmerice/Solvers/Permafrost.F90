@@ -4354,16 +4354,9 @@ CONTAINS
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
           !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
-          !PRINT *,"Pe1", CgwTTAtIP*JgwDAtIP(1),"/",KGTTAtIP(1,1)
-          !PRINT *,"Pe2", CgwTTAtIP*JgwDAtIP(2),"/",KGTTAtIP(2,2)
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-
-
           STIFF (p,q) = STIFF(p,q) + Weight * &
-               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) ! REMOVE THE FACTOR 10
+               CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) !
           ! PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-
           !END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
@@ -5068,11 +5061,10 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   SolverParams => GetSolverParams()
 
   NodalVariableName = ListGetString(SolverParams, &
-       'Nodal Variable', GotIt, Unfoundfatal=.TRUE. )
-!  IF (.NOT.GotIt) THEN
-!    NodalVariableName = "NodalVariableerature"
-!    CALL WARN(SolverName, ' "NodalVariableerature Variable" not found - trying default "NodalVariableerature"')
-!  END IF
+       'Nodal Variable', GotIt )
+  IF (.NOT.GotIt) THEN
+    CALL FATAL(SolverName, ' "Nodal Variable" not found')
+  END IF
   NodalVariable => VariableGet( Solver % Mesh % Variables, NodalVariableName,GotIt )
 
   IF ( ASSOCIATED( NodalVariable ) ) THEN
@@ -5100,21 +5092,21 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     ! Read in the number of records in file (first line integer)
     !------------------------------------------------------------------------------
     DO i=1,NumberOfNodes
-      READ (io, *, END=10, IOSTAT=OK, ERR=20) counter, InputField
+      READ (io, *, END=70, IOSTAT=OK, ERR=80) counter, InputField
       IF (counter .NE. i) CALL FATAL(SolverName,'No concecutive numbering in file')
       IF (NodalVariablePerm(i)==0) CALL FATAL(SolverName,'No corresponding entry of target variable')
       NodalVariableValues(NodalVariablePerm(i)) = InputField
      ! PRINT *,i,counter
     END DO
     !PRINT *, "END", i,counter
-10  IF (i-1 .NE. NumberOfNodes) THEN
+70  IF (i-1 .NE. NumberOfNodes) THEN
       WRITE (Message,*) 'Number of records ',i,' in file ',&
            TRIM(NodalVariableFileName),' does not match number of nodes ', NumberOfNodes, ' in mesh'
       CALL FATAL(SolverName,Message)
     END IF
     CLOSE (io)
     RETURN
-20  CALL FATAL(SolverName,"I/O error")
+80  CALL FATAL(SolverName,"I/O error")
   END IF
 END SUBROUTINE NodalVariableInit
 
