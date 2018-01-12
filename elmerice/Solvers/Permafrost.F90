@@ -1190,7 +1190,7 @@ CONTAINS
     REAL(KIND=dp) :: Xi
     Xi= Xi0tilde/(1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1)) &
          + (1.0_dp - Xi0tilde)/(1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))
-    IF (Xi < 0.0_dp) Xi = 0.0_dp
+    IF (Xi <= 0.0_dp) Xi = 0.0000001_dp
     IF (Xi > 1.0_dp) Xi = 1.0_dp
   END FUNCTION GetXi
   !---------------------------------------------------------------------------------------------
@@ -1386,6 +1386,8 @@ CONTAINS
            CurrentSolventMaterial % bzw(0:5),&
            CurrentSolventMaterial % bzwl)
       rhow = rhow * EXP(aux1 - aux2 + aux3)
+      !PRINT *,"rhow: 1) ", rhow,  aux1, aux2, aux3
+      !PRINT *,"rhow: 2) ", CurrentSolventMaterial % rhow0, watercont, Xi,Temperature,Pressure,Salinity
       IF (rhow .NE. rhow) THEN
         PRINT *, "rhow"
         STOP
@@ -2299,6 +2301,7 @@ CONTAINS
       !Materialproperties needed at IP
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal) !!! NEW
+      rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
       !PRINT *,"Densities",rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP
       
       ! unfrozen pore-water content at IP
@@ -2326,26 +2329,30 @@ CONTAINS
              p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!
         gwapAtIP = 1.0_dp/rhowAtIP
         giaAtIP = gia(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP) !NEW        
+             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP) !NEW
+        !PRINT *, "Darcy:",rhoiAtIP
         giaTAtIP = giaT(CurrentSolventMaterial,&
              p0,T0,rhoiAtIP,TemperatureAtIP) ! NEW
         giapAtIP = 1.0_dp/rhoiAtIP
         deltaGAtIP = deltaG(gwaAtIP,giaAtIP) ! NEW
+        !PRINT *, "Darcy:",gwaAtIP,giaAtIP
         D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
         D2AtIP= D2(deltaInElement,bijAtIP)! NEW
         B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
              GasConstant,bijAtIP,TemperatureAtIP)
+        !PRINT *, "Darcy:",deltaInElement,deltaGAtIP,bijAtIP
         B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
         XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
         XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
+        !PRINT *, "Darcy:",B1AtIP,B2AtIP,deltaGAtIP
         XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
              deltaInElement,GasConstant,TemperatureAtIP)         
       END SELECT
       
-      rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
+
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
       
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
@@ -2354,18 +2361,13 @@ CONTAINS
       KgwAtIP = 0.0_dp
       KgwAtIP = GetKgw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            mugwAtIP,XiAtIP,MinKgw)
-      !PRINT *,"KgwppAt(1,1)",KgwAtIP(1,1)
       fwAtIP = fw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            Xi0Tilde,rhowAtIP,XiAtIP,GasConstant,TemperatureAtIP)
-      !PRINT *,"mugw,fw", mugwAtIP, fwAtIP
       KgwpTAtIP = 0.0_dp
       KgwpTAtIP = GetKgwpT(fwAtIP,XiTAtIP,KgwAtIP)
       KgwppAtIP = 0.0_dp
       KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
-      !PRINT *,"KgwppAtIP(1,1)",KgwppAtIP(1,1)
-      !PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM),"rhowAtIP=",rhowAtIP,&
-      !         "SalinityAtIP=",SalinityAtIP,"rhocAtIP=",rhocAtIP
-
+      
       ! diffusion term (D*grad(u),grad(v)):
       ! -----------------------------------
       DO p=1,nd
@@ -2396,8 +2398,8 @@ CONTAINS
         IF ((fluxgAtIP(i) .NE. fluxgAtIP(i)) .OR. (fluxTAtIP(i) .NE. fluxTAtIP(i))) THEN
           PRINT *, "NaN in r.h.s. of Darcy fluxes"
           PRINT *, "flux(",i,")= Jgwg",fluxgAtIP(i),"+ JgwpT", fluxTAtIP(i)
-          PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM),"rhowAtIP=",rhowAtIP,&
-               "SalinityAtIP=",SalinityAtIP,"rhocAtIP=",rhocAtIP
+          PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM)
+          PRINT *, "rhowAtIP=",rhowAtIP," rhocAtIP=",rhocAtIP
           STOP
         END IF
       END DO
@@ -2818,7 +2820,8 @@ CONTAINS
         !Materialproperties needed at IP
         rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
         rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal) !!! NEW
-
+        rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
+        
         ! unfrozen pore-water content at IP
         SELECT CASE(PhaseChangeModel)
         CASE('Anderson')
@@ -2868,8 +2871,7 @@ CONTAINS
           XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
              deltaInElement,GasConstant,TemperatureAtIP)
-        END SELECT
-        rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
+        END SELECT   
         rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
         mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
              XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
@@ -4962,10 +4964,12 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   DO i = 1, Active
     CurrentElement => GetActiveElement(i)
     NodeIndexes => CurrentElement % NodeIndexes
-    Material => GetMaterial()
+    Material => GetMaterial(CurrentElement)
+    IF (.NOT.ASSOCIATED(Material)) CALL FATAL(SolverName,'No Material pointer found')
     IF (.NOT.Visited) THEN
       ! check, whether we have globally or element-wise defined values of rock-material parameters
-      ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
+      ElementRockMaterialName = ListGetString(Material,"Element Rock Material File",ElementWiseRockMaterial)
+      !PRINT *,"PorosityInit:",TRIM(ElementRockMaterialName),ElementWiseRockMaterial
       IF (ElementWiseRockMaterial) THEN
         WRITE (Message,*) 'Found "Element Rock Material File"'
         CALL INFO(SolverName,Message,Level=3)
@@ -5035,7 +5039,7 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   INTEGER, POINTER :: NodalVariablePerm(:)
   INTEGER,PARAMETER :: io=26
   REAL(KIND=dp), POINTER :: NodalVariableValues(:)
-  REAL(KIND=dp) :: InputField
+  REAL(KIND=dp) :: InputField, ValueOffset
   INTEGER :: DIM, i, CurrentNode, NumberOfNodes, OK,  counter
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="NodalVariableInit"
   CHARACTER(LEN=MAX_NAME_LEN) :: NodalVariableName,NodalVariableFileName
@@ -5080,6 +5084,14 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
 
   NodalVariableFileName = ListGetString(SolverParams, &
        'Nodal Variable File', GotIt, Unfoundfatal=.TRUE. )
+
+  ValueOffset = GetConstReal(SolverParams,'Variable Offset',GotIt)
+  IF (.NOT.GotIt) THEN
+    ValueOffset = 0.0_dp
+  ELSE
+    WRITE (Message,*) ' "Variable Offset" found and set to: ', ValueOffset
+    CALL INFO(SolverName,Message,Level=3)
+  END IF
   
   NumberOfNodes = Model % Mesh % NumberOfNodes
   
@@ -5095,7 +5107,7 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
       READ (io, *, END=70, IOSTAT=OK, ERR=80) counter, InputField
       IF (counter .NE. i) CALL FATAL(SolverName,'No concecutive numbering in file')
       IF (NodalVariablePerm(i)==0) CALL FATAL(SolverName,'No corresponding entry of target variable')
-      NodalVariableValues(NodalVariablePerm(i)) = InputField
+      NodalVariableValues(NodalVariablePerm(i)) = InputField + ValueOffset
      ! PRINT *,i,counter
     END DO
     !PRINT *, "END", i,counter
