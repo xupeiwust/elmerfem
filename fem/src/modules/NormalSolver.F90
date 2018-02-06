@@ -135,7 +135,7 @@ SUBROUTINE NormalSolver( Model,Solver,dt,Transient )
   CALL Info( 'NormalSolver', Message, Level=5 )
 !        
 !------------------------------------------------------------------------------     
-  SetD = GetLogical(GetSolverParams(), 'Set Dirichlet Conditions',GotIt)
+  SetD = GetLogical(SolverParams, 'Set Dirichlet Conditions',GotIt)
   IF ( SetD ) THEN
     ALLOCATE(Values(SIZE(Solver % Matrix % Values)))
     Vname = Solver % Variable % Name
@@ -196,13 +196,24 @@ CONTAINS
     REAL(KIND=dp), ALLOCATABLE :: STIFF(:,:), FORCE(:,:), Basis(:)
     REAL(KIND=dp) :: Weight,Normal(3),detJ
 
-    LOGICAL :: Found
+    LOGICAL :: Found, Swap
 
     INTEGER :: elem,t,i,j,p,q,n,nd, Rank
 
     TYPE(Element_t), POINTER :: Element
     TYPE(Nodes_t), SAVE :: Nodes
     TYPE(GaussIntegrationPoints_t), TARGET :: IntegStuff
+    LOGICAL, ALLOCATABLE :: SwapNormal(:)
+    TYPE(Solver_t), POINTER :: PSolver
+    
+    
+    Swap = ListGetLogical( SolverParams,'Check Consistent Normals',Found ) 
+    IF( Swap ) THEN
+      ALLOCATE( SwapNormal( Solver % NumberOfActiveElements ) )
+      PSolver => Solver
+      CALL SwapElementNormals( PSolver, SwapNormal ) 
+    END IF
+
     
     n = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
     ALLOCATE( STIFF(n,n), FORCE(dim,n), Basis(n) )
@@ -239,6 +250,11 @@ CONTAINS
         
         Normal = NormalVector( Element, Nodes, &
            IntegStuff % u(t), IntegStuff % v(t), .TRUE. )
+
+        IF( Swap ) THEN
+          IF( SwapNormal(elem) ) Normal = -Normal
+        END IF
+
         DO i=1,dim
           FORCE(i,1:nd) = FORCE(i,1:nd) + Weight*Normal(i)*Basis(1:nd)
         END DO
@@ -259,6 +275,8 @@ CONTAINS
     END DO
     
     DEALLOCATE( STIFF, FORCE, Basis )
+
+    IF( Swap ) DEALLOCATE( SwapNormal ) 
 !------------------------------------------------------------------------------
   END SUBROUTINE BulkAssembly
 !------------------------------------------------------------------------------

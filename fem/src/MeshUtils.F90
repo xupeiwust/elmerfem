@@ -3278,6 +3278,196 @@ END SUBROUTINE GetMaxDefs
 
 
 
+  !> Swap normals of a solver such that all are consistent.
+  !---------------------------------------------------------------------------------
+  SUBROUTINE SwapElementNormals( Solver, SwapNormal )
+
+    TYPE(Solver_t), POINTER :: Solver
+    LOGICAL, OPTIONAL :: SwapNormal(:)
+    
+    TYPE(Mesh_t), POINTER :: Mesh
+    INTEGER :: i,j,n,m,t,t2
+    TYPE(Element_t), POINTER :: Element
+    TYPE(Nodes_t) :: Nodes
+    INTEGER, POINTER :: Indexes(:)
+    REAL(KIND=dp) :: Normal(3), Normal2(3), dotpro
+    INTEGER :: NoActive, SwapP, SwapM
+    
+    
+    IF( ParEnv % PEs > 1 ) THEN
+      CALL Warn('SwapElementNormals','Implemented only for serial meshes, doing nothing!')
+      RETURN
+    END IF
+
+    Mesh => Solver % Mesh
+    n = Mesh % MaxElementNodes
+    NoActive = Solver % NumberOfActiveElements    
+    ALLOCATE( Nodes % x(n), Nodes % y(n), Nodes % z(n) )
+           
+    SwapP = 0
+    SwapM = 0
+    
+    CALL SwapElementNormalsByPoints()
+    
+    IF( SwapP + SwapM < NoActive ) THEN
+      CALL SwapElementNormalsByConsistency()       
+    END IF
+   
+
+    DEALLOCATE( Nodes % x, Nodes % y, Nodes % z )     
+    
+    CALL Info('SwapElementNormals','Number of swapped element normals: '//TRIM(I2S(SwapM)),Level=5)
+    CALL Info('SwapElementNormals','Number of unswapped element normals: '//TRIM(I2S(SwapP)),Level=5)
+
+
+    
+  CONTAINS 
+
+
+    SUBROUTINE SwapElementNormalsByPoints( )
+
+      LOGICAL :: SolverPoint, BodyPoint
+      TYPE(ValueList_t), POINTER :: PointLst      
+      REAL(KIND=dp) :: Center(3)
+      REAL(KIND=dp), POINTER :: Point(:)
+      
+      PointLst => Solver % Values
+      Point => ListGetConstRealArray1( PointLst,'Normal Target Point', SolverPoint ) 
+      IF( SolverPoint ) THEN
+        BodyPoint = .FALSE.
+      ELSE
+        BodyPoint = ListCheckPresentAnyBody( CurrentModel, 'Normal Target Point' ) 
+      END IF
+        
+      IF( .NOT. ( SolverPoint .OR. BodyPoint ) ) RETURN
+
+      CALL Info('SwapElementNormals','Determining Normal direction by > Normal Target Point < ',Level=8)
+      
+      DO t = 1, NoActive
+        Element => Mesh % Elements( Solver % ActiveElements(t) )     
+        Indexes => Element % NodeIndexes
+        n = Element % TYPE % NumberOfNodes
+
+        Nodes % x(1:n) = Mesh % Nodes % x( Indexes )
+        Nodes % y(1:n) = Mesh % Nodes % y( Indexes )
+        Nodes % z(1:n) = Mesh % Nodes % z( Indexes )
+
+        Normal = NormalVector( Element, Nodes )          
+
+        Center(1) = SUM( Nodes % x(1:n) ) / n
+        Center(2) = SUM( Nodes % y(1:n) ) / n
+        Center(3) = SUM( Nodes % z(1:n) ) / n
+
+        IF( BodyPoint ) THEN
+          PointLst => CurrentModel % Bodies(Element % BodyId) % Values 
+          Point => ListGetConstRealArray1( PointLst,'Normal Target Point',UnfoundFatal = .TRUE.)
+        END IF        
+        
+        Normal2(1:3) = Center(1:3) - Point(1:3)
+
+        dotpro = SUM( Normal * Normal2 )
+        IF( dotpro < 0.0_dp ) THEN
+          SwapNormal(t) = .TRUE.
+        ELSE
+          SwapNormal(t) = .FALSE.
+        END IF
+      END DO          
+     
+    END SUBROUTINE SwapElementNormalsByPoints
+      
+
+    
+    SUBROUTINE SwapElementNormalsByConsistency( ) 
+
+      INTEGER, ALLOCATABLE :: ElemSwap(:), NodalSwap(:)
+      REAL(KIND=dp), ALLOCATABLE :: ElemNormal(:)
+      INTEGER :: dSwap
+      
+      
+      n = Mesh % NumberOfNodes
+      ALLOCATE( ElemNormal(3*NoActive), ElemSwap(NoActive), NodalSwap(n) )
+      
+      ElemNormal = 0.0_dp      
+      ElemSwap = 0
+      NodalSwap = 0       
+     
+      ! Tabulate the normal vectors
+      CALL Info('SwapElementNormals','Computing initial elemental normals',Level=6)
+      DO t = 1, NoActive
+        Element => Mesh % Elements( Solver % ActiveElements(t) )     
+        Indexes => Element % NodeIndexes
+        n = Element % TYPE % NumberOfNodes
+
+        Nodes % x(1:n) = Mesh % Nodes % x( Indexes )
+        Nodes % y(1:n) = Mesh % Nodes % y( Indexes )
+        Nodes % z(1:n) = Mesh % Nodes % z( Indexes )
+
+        Normal = NormalVector( Element, Nodes )          
+        ElemNormal(3*t-2:3*t) = Normal(1:3) 
+      END DO
+
+
+      dSwap = 0
+
+      CALL Info('SwapElementNormals','Checking consistent normal directions',Level=6)
+      DO WHILE ( SwapP + SwapM < NoActive )  
+
+        ! Find the 1st element that has not been set
+        IF( dSwap == 0 ) THEN
+          DO t = 1, NoActive
+            IF( ElemSwap(t) == 0 ) EXIT
+          END DO
+          Element => Mesh % Elements( Solver % ActiveElements(t) )
+          Indexes => Element % NodeIndexes
+          ElemSwap(t) = 1
+          NodalSwap(Indexes) = t
+          SwapP = SwapP + 1
+          CALL Info('SwapElementNormals','Starting new independent section from: '//TRIM(I2S(t)),Level=10)
+        END IF
+
+        dSwap = 0 
+
+        DO t = 1, NoActive
+          IF( ElemSwap(t) /= 0 ) CYCLE
+
+          Element => Mesh % Elements( Solver % ActiveElements(t) )
+          Indexes => Element % NodeIndexes
+
+          t2 = MAXVAL( NodalSwap(Indexes) )
+          IF( t2 == 0 ) CYCLE
+
+          Normal = ElemNormal(3*t-2:3*t)
+          Normal2 = ElemNormal(3*t2-2:3*t2)
+
+          dotpro = SUM( Normal * Normal2 )
+          IF( dotpro < 0.0_dp ) THEN
+            ElemSwap(t) = -ElemSwap(t2)
+            SwapM = SwapM + 1
+          ELSE
+            ElemSwap(t) = ElemSwap(t2)
+            SwapP = SwapP + 1
+          END IF
+
+          dSwap = dSwap + 1
+          NodalSwap(Indexes) = t      
+        END DO
+
+      END DO
+
+      IF( PRESENT( SwapNormal ) ) THEN
+        SwapNormal = ( ElemSwap < 0 )
+      END IF
+
+      DEALLOCATE( ElemNormal, ElemSwap, NodalSwap )
+
+
+    END SUBROUTINE SwapElementNormalsByConsistency
+      
+    
+      
+  END SUBROUTINE SwapElementNormals
+
+
 
 !------------------------------------------------------------------------------
 !> Given two interface meshes check the angle between them using the normal

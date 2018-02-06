@@ -305,8 +305,9 @@ SUBROUTINE ShellSolver(Model, Solver, dt, TransientSimulation)
   ! corresponding to the data is created, if not already available
   ! via reading the director data from the file mesh.elements.data. 
   !----------------------------------------------------------------------------------
-  Director => VariableGet(Mesh % Variables, 'Director', .TRUE.)
-  CALL ReadSurfaceDirector(Mesh % Name, Mesh % NumberOfNodes, SolverPars, Director)
+  !Director => VariableGet(Mesh % Variables, 'Director', .TRUE.)
+  NULLIFY( Director ) 
+  CALL ReadSurfaceDirector(Mesh % Name, Mesh % NumberOfNodes, SolverPars )
   CALL CheckSurfaceOrientation()
   
   ! --------------------------------------------------------------------------------
@@ -414,7 +415,7 @@ SUBROUTINE ShellSolver(Model, Solver, dt, TransientSimulation)
         ! Get the elementwise average of director data for orientation purposes
         ! (check also for body flatness):
         !----------------------------------------------------------------------
-        d = AverageDirector(BGElement, n, PlateBody)
+        d = AverageDirector(BGElement, n, PlateBody, k)
         !-------------------------------------------------------------------------
         ! Create an improved geometry approximation by using the finite element 
         ! blending technique and create a local coordinate frame whose orientation
@@ -716,16 +717,15 @@ CONTAINS
 !       been implemented. Parallel execution is thus possible only when the
 !       director is available as an ordinary field variable.
 !------------------------------------------------------------------------------
-  SUBROUTINE ReadSurfaceDirector(MeshName, NumberOfNodes, SolverPars, Director)
+  SUBROUTINE ReadSurfaceDirector(MeshName, NumberOfNodes, SolverPars )
 !------------------------------------------------------------------------------
     IMPLICIT NONE
 
     CHARACTER(LEN=MAX_NAME_LEN), INTENT(IN) :: MeshName
     INTEGER, INTENT(IN) :: NumberOfNodes
     TYPE(ValueList_t), POINTER, INTENT(IN) :: SolverPars
-    TYPE(Variable_t), POINTER, INTENT(IN) :: Director    
     !------------------------------------------------------------------------------
-    LOGICAL :: UseFieldVariable, ReadNodalDirectors, WriteElementsData, Found
+    LOGICAL :: ReadNodalDirectors, WriteElementsData, Found
     INTEGER :: n, iostat, i, j, k, i0
     REAL(KIND=dp), POINTER :: NodalDirector(:,:)  
     REAL(KIND=dp), POINTER :: DirectorValues(:)
@@ -734,46 +734,34 @@ CONTAINS
     !------------------------------------------------------------------------------
     ReadNodalDirectors = .FALSE.
 
-    UseFieldVariable = ASSOCIATED(Director)
-    IF (UseFieldVariable) THEN
-      CALL Info('ReadSurfaceDirector', '&
-          Using the field Director to define the mid-surface normal', Level=4)
-      IF (Director % DOFs /= 3) CALL Fatal('ReadSurfaceDirector', &
-          'The director field should have three components')
-      IF (.NOT.ASSOCIATED(Director % Perm) .OR. .NOT.ASSOCIATED(Director % Values)) &
-          CALL Fatal('ReadSurfaceDirector', 'The director solution is not associated')
-    ELSE
-      ! -----------------------------------------------------------------------------
-      ! Check whether mesh.director can be read:
-      ! -----------------------------------------------------------------------------
-      n = LEN_TRIM(MeshName)
-      DirectorFile = TRIM(MeshName)//'/'//'mesh.director'//CHAR(0)
-      
-      INQUIRE(FILE = DirectorFile(1:n+15), EXIST = ReadNodalDirectors)
-    END IF
+    ! -----------------------------------------------------------------------------
+    ! Check whether mesh.director can be read:
+    ! -----------------------------------------------------------------------------
+    n = LEN_TRIM(MeshName)
+    DirectorFile = TRIM(MeshName)//'/'//'mesh.director'//CHAR(0)
+    
+    INQUIRE(FILE = DirectorFile(1:n+15), EXIST = ReadNodalDirectors)
 
-    IF (UseFieldVariable .OR. ReadNodalDirectors) THEN
-      IF (ReadNodalDirectors) THEN
-        CALL AllocateArray(NodalDirector, NumberOfNodes, 3, 'ReadSurfaceDirector', &
-            'NodalDirector array could not be allocated')
-      
-        OPEN(10, FILE = DirectorFile(1:n+15), status='OLD', IOSTAT = iostat)
-        IF ( iostat /= 0 ) THEN
-          CALL Fatal('ReadSurfaceDirector', 'Opening mesh.director file failed.')     
-        ELSE
-          DO i=1,NumberOfNodes
-            READ(10,*,IOSTAT=iostat) k, d
+    IF (ReadNodalDirectors) THEN
+      CALL AllocateArray(NodalDirector, NumberOfNodes, 3, 'ReadSurfaceDirector', &
+          'NodalDirector array could not be allocated')
 
-            IF (k /= i) CALL Fatal('mesh.director', &
-                'Trivial correspondence between rows and node numbers assumed currently')
+      OPEN(10, FILE = DirectorFile(1:n+15), status='OLD', IOSTAT = iostat)
+      IF ( iostat /= 0 ) THEN
+        CALL Fatal('ReadSurfaceDirector', 'Opening mesh.director file failed.')     
+      ELSE
+        DO i=1,NumberOfNodes
+          READ(10,*,IOSTAT=iostat) k, d
 
-            Norm = SQRT(SUM(d(1:3)**2))
-            NodalDirector(i,1) = d(1)/Norm
-            NodalDirector(i,2) = d(2)/Norm
-            NodalDirector(i,3) = d(3)/Norm
-          END DO
-          CLOSE(10)
-        END IF
+          IF (k /= i) CALL Fatal('mesh.director', &
+              'Trivial correspondence between rows and node numbers assumed currently')
+
+          Norm = SQRT(SUM(d(1:3)**2))
+          NodalDirector(i,1) = d(1)/Norm
+          NodalDirector(i,2) = d(2)/Norm
+          NodalDirector(i,3) = d(3)/Norm
+        END DO
+        CLOSE(10)
       END IF
       ! ---------------------------------------------------------------------
       ! Create director data as elementwise property
@@ -872,10 +860,11 @@ CONTAINS
 ! field. The director data is supposed to be found as the elementwise property
 ! 'director'. If this property does not exits, the normal is computed otherwise.
 !-------------------------------------------------------------------------------
-  FUNCTION GetElementalDirector(Element, ElementNodes) RESULT(DirectorValues) 
+  FUNCTION GetElementalDirector(Element, ElementNodes, ActiveInd ) RESULT(DirectorValues) 
 !-------------------------------------------------------------------------------    
     TYPE(Element_t), POINTER, INTENT(IN) :: Element
     TYPE(Nodes_t), OPTIONAL, INTENT(IN) :: ElementNodes
+    INTEGER, OPTIONAL, INTENT(IN) :: ActiveInd 
     REAL(KIND=dp), POINTER :: DirectorValues(:)
     !-------------------------------------------------------------------------------
     TYPE(Nodes_t) :: Nodes
@@ -883,31 +872,61 @@ CONTAINS
     REAL(KIND=dp), POINTER :: NodalNormals(:)
     REAL(KIND=dp) :: Normal(3)
     INTEGER :: n
+    TYPE(Solver_t), POINTER :: PSolver
+    LOGICAL, ALLOCATABLE :: SwapNormal(:)
+    LOGICAL :: Swap
     
-    SAVE Visited, UseElementProperty, NodalNormals, Nodes
+    SAVE Visited, UseElementProperty, UseNormalSolver, NodalNormals, Nodes, Swap, SwapNormal
     !-------------------------------------------------------------------------------
 
     IF (.NOT. Visited) THEN
       DirectorValues => GetElementProperty('director', Element)
       UseElementProperty = ASSOCIATED( DirectorValues ) 
-
+      
+      Director => VariableGet( CurrentModel % Mesh % Variables, 'Director', .TRUE.)
+      UseNormalSolver = ASSOCIATED( Director ) 
+      IF( UseNormalSolver ) THEN
+        CALL Info('ReadSurfaceDirector', '&
+            Using the field Director to define the mid-surface normal', Level=6)
+        IF (Director % DOFs /= 3) CALL Fatal('ReadSurfaceDirector', &
+            'The director field should have three components')
+      END IF
+      
       IF (.NOT. UseElementProperty) THEN
         n = CurrentModel % MaxElementNodes
         ALLOCATE( NodalNormals(3*n) ) 
       END IF
+
+      PSolver => CurrentModel % Solver
+      Swap = ListGetLogical( PSolver % Values,'Check Consistent Normals',Found ) 
+      IF( Swap ) THEN
+        ALLOCATE( SwapNormal( PSolver % NumberOfActiveElements ) ) 
+        CALL SwapElementNormals( PSolver, SwapNormal )        
+      END IF
+
       Visited = .TRUE.
     END IF
-
+      
     IF ( UseElementProperty ) THEN    
       DirectorValues => GetElementProperty('director', Element)
-    ELSE
+    ELSE IF( UseNormalSolver ) THEN
+      n = Element % TYPE % NumberOfNodes
+      NodalNormals(1:3*n:3) = Director % Values( 3*(Director % Perm(Element % NodeIndexes(1:n))-1)+1)
+      NodalNormals(2:3*n:3) = Director % Values( 3*(Director % Perm(Element % NodeIndexes(1:n))-1)+2)
+      NodalNormals(3:3*n:3) = Director % Values( 3*(Director % Perm(Element % NodeIndexes(1:n))-1)+3)
+      DirectorValues => NodalNormals      
+    ELSE      
       IF( PRESENT( ElementNodes ) ) THEN
         Normal = NormalVector( Element, ElementNodes, Check = .TRUE. ) 
       ELSE
         CALL GetElementNodes( Nodes, Element ) 
         Normal = NormalVector( Element, Nodes, Check = .TRUE. ) 
       END IF
-        
+
+      IF( Swap .AND. PRESENT( ActiveInd ) ) THEN       
+        IF( SwapNormal( ActiveInd ) ) Normal = -Normal
+      END IF
+      
       n = Element % TYPE % NumberOfNodes
       NodalNormals(1:3*n:3) = Normal(1)
       NodalNormals(2:3*n:3) = Normal(2)
@@ -979,7 +998,7 @@ CONTAINS
       e3 = e3/Norm     
 
       ! Check that all directors point to the same side of the oriented surface:
-      DirectorValues => GetElementalDirector(Element, Nodes)
+      DirectorValues => GetElementalDirector(Element, Nodes, k )
 
       IF (.NOT. ASSOCIATED(DirectorValues)) THEN
         CALL Fatal('CheckSurfaceOrientation', 'Elemental director data is not associated')
@@ -1050,7 +1069,7 @@ CONTAINS
       Element => GetActiveElement(k)
       CALL GetElementNodes(Nodes)
 
-      DirectorValues => GetElementalDirector(Element, Nodes)
+      DirectorValues => GetElementalDirector(Element, Nodes, k)
 
       Family = GetElementFamily(Element)
 
@@ -2501,7 +2520,7 @@ CONTAINS
       lambda2 = 0.5d0 * ( trc - SQRT(discriminant) )
       lambda1 = 0.5d0 * ( trc + SQRT(discriminant) )
     END IF
-    !print *, 'Eigenvalues=', lambda1,lambda2
+    print *, 'Eigenvalues=', lambda1,lambda2
     LambdaMax = MAX(ABS(Lambda1), ABS(Lambda2))
 
     Planar = (ABS(Lambda1) < EPSILON(1.0)) .AND. (ABS(Lambda2) < EPSILON(1.0))
@@ -2858,9 +2877,11 @@ CONTAINS
           ! Make a rough check that a reparametrization of the surface based on the Taylor
           ! polynomial will be plausible:
           !-------------------------------------------------------------------------------------
-          IF ( ABS(FPar/(BPar - APar))*rK > 1.0d0 .OR. ABS(EPar/(BPar - APar))*rK > 1.0d0 ) &
-              CALL Warn('LinesOfCurvatureFrame', 'Possibly very rough geometry model used')
-
+          IF ( ABS(FPar/(BPar - APar))*rK > 1.0d0 .OR. ABS(EPar/(BPar - APar))*rK > 1.0d0 ) THEN
+            CALL Warn('LinesOfCurvatureFrame', 'Possibly very rough geometry model used')
+            PRINT *,'err:',ABS(FPar/(BPar - APar))*rK, ABS(EPar/(BPar - APar))*rK
+          END IF
+              
           err = ABS( ABS(BPar)-ABS(Lambda2) ) / LambdaMax
           err = MAX( err, ABS(ABS(APar)-ABS(lambda1))/LambdaMax )
           IF ( err > 5.0d-2) THEN
@@ -5805,12 +5826,13 @@ CONTAINS
 ! 'director' over n-node element. Optionally check whether the surface is
 ! planar.  
 !------------------------------------------------------------------------------
-  FUNCTION AverageDirector(Element, n, PlanarSurface) RESULT(d)
+  FUNCTION AverageDirector(Element, n, PlanarSurface, ActiveInd ) RESULT(d)
 !------------------------------------------------------------------------------
     IMPLICIT NONE
     TYPE(Element_t), POINTER, INTENT(IN) :: Element
     INTEGER, INTENT(IN) :: n
     LOGICAL, OPTIONAL, INTENT(OUT) :: PlanarSurface
+    INTEGER, INTENT(IN) :: ActiveInd
     REAL(KIND=dp) :: d(3)
 !------------------------------------------------------------------------------
     LOGICAL :: PlateBody, PlateBodyCheck
@@ -5826,7 +5848,7 @@ CONTAINS
       PlateBodyCheck = .FALSE.
     END IF
 
-    DirectorValues => GetElementalDirector( Element )
+    DirectorValues => GetElementalDirector( Element, ActiveInd = ActiveInd )
     
     IF (ASSOCIATED(DirectorValues)) THEN
       IF (SIZE(DirectorValues) < 3*n) CALL Fatal('AverageDirector', &
