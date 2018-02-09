@@ -1697,13 +1697,17 @@ CONTAINS
     INTEGER :: i
     REAL (KIND=dp) :: fluxp(3),fluxT(3),fluxg(3)
     !-------------------------
-    !PRINT *,"Flux",fluxpAtIP,"gradp",gradpAtIP(1:DIM),"K",KgwppAtIP(1:DIM,1:DIM)
-    DO i=1,dim
+    DO i=1,DIM
       fluxp(i) = -1.0_dp * SUM(Kgwpp(i,1:DIM)*gradp(1:DIM))
       !fluxT(i) = -1.0_dp * SUM(KgwpT(i,1:DIM)*gradT(1:DIM))
+      fluxT(1:DIM) = 0.0_dp
       fluxg(i) =   rhogw * SUM(Kgw(i,1:DIM)*Gravity(1:DIM))
     END DO
-    JgwD(1:3) = 0.0
+    !PRINT *,"Fluxg=",fluxg(1:DIM)
+    !PRINT *,"Flux=(",fluxp(1:DIM),")+(",fluxg(1:DIM),")"
+    !PRINT *,"gradp",gradp(1:DIM),"K",Kgwpp(1:DIM,1:DIM)
+    !    JgwD(1:3) = 0.0
+    !fluxg(1) = 0.0_dp
     JgwD(1:DIM) = fluxp(1:DIM) + fluxT(1:DIM) + fluxg(1:DIM)    
   END FUNCTION GetJgwD
   !---------------------------------------------------------------------------------------------
@@ -2318,6 +2322,15 @@ CONTAINS
         !PRINT *, "Darcy:",deltaInElement,deltaGAtIP,bijAtIP
         B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
         XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
+        IF (XiAtIP .NE. XiAtIP) THEN
+          PRINT *, "Darcy: XiAtIP", B1AtIP,D1AtIP,Xi0Tilde
+          PRINT *, "Darcy:  XiAtIP", deltaInElement, CurrentRockMaterial % e1(RockMaterialID), bijAtIP
+          PRINT *, "Darcy:  XiAtIP", Xi0tilde,SalinityAtIP
+          PRINT *, "Darcy: XiAtIP", B1AtIP*B1AtIP + D1AtIP !1.0/(1.0 + 0.5*B1AtIP + SQRT(B1AtIP*B1AtIP + D1AtIP))
+          !PRINT *, "Darcy: XiAtIP", 1.0/(1.0 + 0.5*B2AtIP + SQRT(B2AtIP*B2AtIP + D2AtIP))
+          CALL FATAL(SolverName,"XiAtIP is NaN")
+        END IF
+
         XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
              deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
@@ -2333,9 +2346,11 @@ CONTAINS
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
            XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
+      !PRINT *,"Darcy:","mugwAtIP",XiAtIP,T0,SalinityAtIP,TemperatureAtIP
       KgwAtIP = 0.0_dp
       KgwAtIP = GetKgw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            mugwAtIP,XiAtIP,MinKgw)
+      !PRINT *,"Darcy:","KgwAtIP",mugwAtIP,XiAtIP,MinKgw
       fwAtIP = fw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            Xi0Tilde,rhowAtIP,XiAtIP,GasConstant,TemperatureAtIP)
       KgwpTAtIP = 0.0_dp
@@ -2373,6 +2388,7 @@ CONTAINS
         IF ((fluxgAtIP(i) .NE. fluxgAtIP(i)) .OR. (fluxTAtIP(i) .NE. fluxTAtIP(i))) THEN
           PRINT *, "NaN in r.h.s. of Darcy fluxes"
           PRINT *, "flux(",i,")= Jgwg",fluxgAtIP(i),"+ JgwpT", fluxTAtIP(i)
+           PRINT *, "KgwAtIP=",KgwAtIP(i,1:DIM)
           PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM)
           PRINT *, "rhowAtIP=",rhowAtIP," rhocAtIP=",rhocAtIP
           STOP
@@ -3926,7 +3942,11 @@ SUBROUTINE PermafrostSoluteTransport( Model,Solver,dt,TransientSimulation )
     ! And finally, solve:
     !--------------------
     Norm = DefaultSolve()
- 
+
+    DO I=1,Solver % Mesh % NumberOfNodes
+      Salinity(SalinityPerm(I)) = MAX(0.0,Salinity(SalinityPerm(I)))
+    END DO
+    
     IF( Solver % Variable % NonlinConverged > 0 ) EXIT
     
   END DO
@@ -4419,14 +4439,14 @@ CONTAINS
                - Weight * rhocAtIP * Basis(q) * SUM(JgwDAtIP(1:DIM) * dBasisdx(p,1:DIM))/ XiAtIP
 
           ! porosity rhoc  (u,(Kc.fc).grad(v))
-          !DO i=1,DIM
-          !  extforceFlux =  SUM(KcAtIP(i,1:DIM)*fcAtIP(1:DIM))
-          !END DO          
-          !STIFF (p,q) = STIFF(p,q) &
-          !     - Weight * PorosityAtIP * rhocAtIP * Basis(q) * SUM(extforceFlux(1:DIM) * dBasisdx(p,1:DIM))
+          DO i=1,DIM
+            extforceFlux =  SUM(KcAtIP(i,1:DIM)*fcAtIP(1:DIM))
+          END DO          
+          STIFF (p,q) = STIFF(p,q) &
+               - Weight * PorosityAtIP * rhocAtIP * Basis(q) * SUM(extforceFlux(1:DIM) * dBasisdx(p,1:DIM))
           ! time derivative (CcYcYc*du/dt,v):
           ! ------------------------------
-          !MASS(p,q) = MASS(p,q) + Weight * CcYcYcAtIP  * Basis(q) * Basis(p)
+          MASS(p,q) = MASS(p,q) + Weight * CcYcYcAtIP  * Basis(q) * Basis(p)
           !PRINT *, MASS(p,q)
         END DO
       END DO
