@@ -1,4 +1,3 @@
-/* femknot.h */
 /* This module includes utilities that operate on single knots. It builds
    structures where the knots can be saved, it finds boundaries, 
    copies knots from structures to others and destroys structures that
@@ -49,11 +48,6 @@ int FindCorners(struct GridType *grid,struct CellType *cell,
 		struct FemType *data,int info);
 
 int ConstantToBilinear(struct FemType *data,int var1,int var2);
-int SolutionFromMeshToMesh(struct CellType *cell1, struct GridType *grid1, 
-			   struct FemType *data1,
-			   struct CellType *cell2, struct GridType *grid2, 
-			   struct FemType *data2,
-			   int mapgeo,int variable,int info);
 int ElementsToTriangles(struct FemType *data,struct BoundaryType *bound,
 			Real critangle,int info);
 int IncreaseElementOrder(struct FemType *data,int info);

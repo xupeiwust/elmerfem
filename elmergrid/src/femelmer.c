@@ -45,7 +45,7 @@
 #include "egutils.h"
 #include "egdef.h"
 #include "egtypes.h"
-#include "femknot.h"
+#include "egmesh.h"
 #include "femelmer.h"
 #include "../config.h"
 

@@ -36,7 +36,7 @@
 #include "egutils.h"
 #include "egdef.h"
 #include "egtypes.h"
-#include "femknot.h"
+#include "egmesh.h"
 #include "egconvert.h"
 
 #define GETLINE getlineptr=fgets(line,MAXLINESIZE,in) 

@@ -298,7 +298,8 @@ struct ModelType {
 struct ElmergridType {
 
   int dim,
-    center,
+    silent, 
+    center,    
     scale,      /* scale the geometry */
     order,      /* reorder the nodes */
     merge,      /* merge mesges */

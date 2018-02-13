@@ -36,7 +36,7 @@
 #include "egutils.h"
 #include "egdef.h"
 #include "egtypes.h"
-#include "femknot.h"
+#include "egmesh.h"
 #include "egexport.h"
 
 
