@@ -37,10 +37,9 @@
 #include <math.h>
 #include <limits.h>
 
-#include "common.h"
-#include "nrutil.h"
-#include "femdef.h"
-#include "femtypes.h"
+#include "egutils.h"
+#include "egdef.h"
+#include "egtypes.h"
 #include "femmesh.h"
 #include "femknot.h"
 

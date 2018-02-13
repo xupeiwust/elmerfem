@@ -1,4 +1,3 @@
-/* femfilein.h */
 /* Routines for importing data from other
    FEM packages and file formats, such as Abaqus, Fidap, Comsol, Gmsh, UNV etc. */
 
