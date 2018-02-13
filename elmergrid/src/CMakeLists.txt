@@ -16,10 +16,10 @@ ENDIF()
 SET(METIS_INSTALL FALSE CACHE BOOL "")
 ADD_SUBDIRECTORY(metis-5.1.0)
 
-SET(elmergrid_SRCS egdef.h femelmer.h egconvert.h
+SET(elmergrid_SRCS egdef.h egelmer.h egconvert.h
   egexport.h egmesh.h egnative.h egutils.h 
-  egtypes.h egutils.c femelmer.c egconvert.c egexport.c
-  egmesh.c egnative.c fempre.c)
+  egtypes.h egutils.c egelmer.c egconvert.c egexport.c
+  egmesh.c egnative.c egexec.c)
 
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_SOURCE_DIR}/metis)
 INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})

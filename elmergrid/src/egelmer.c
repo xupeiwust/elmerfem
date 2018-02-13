@@ -23,7 +23,7 @@
    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
 */
 
-/* -------------------------------:  femelmer.c  :----------------------------
+/* -------------------------------:  egelmer.c  :----------------------------
    This module includes interfaces for the other Elmer programs.
 */
 
@@ -46,7 +46,7 @@
 #include "egdef.h"
 #include "egtypes.h"
 #include "egmesh.h"
-#include "femelmer.h"
+#include "egelmer.h"
 #include "../config.h"
 
 #if PARTMETIS

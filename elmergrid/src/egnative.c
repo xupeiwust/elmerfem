@@ -46,7 +46,7 @@
 #include "egtypes.h"
 #include "egnative.h"
 #include "egmesh.h"
-#include "femelmer.h"
+#include "egelmer.h"
 
 
 #define DEBUG 0

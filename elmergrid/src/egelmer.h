@@ -1,4 +1,3 @@
-/* femelmer.h */
 /* Routines for input, output and manipulation of Funcs and ElmerPost
    formats (programs created by Juha Ruokolainen at CSC). */ 
 #define PARTMETIS 1
