@@ -1,4 +1,3 @@
-/* femfileout.h */
 /* Routines for exporting data to other
    FEM packages, such as Abaqus and Fidap. */
 
