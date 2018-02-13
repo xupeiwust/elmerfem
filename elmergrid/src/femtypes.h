@@ -20,6 +20,7 @@
 #define MAXBCS 1000         /* maximum number of BCs in naming */
 #define MAXBODIES 1000      /* maximum number of bodies in naming */
 #define MAXPARTITIONS 512   /* maximum number of partitions */
+#define MAXFORMATS 15
 
 #define CONPLAIN 0
 #define CONDISCONT 1
