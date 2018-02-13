@@ -96,7 +96,6 @@ static void Instructions()
   printf("14) .msh      : Gmsh mesh format\n");
   printf("15) .ep.i     : Partitioned ElmerPost format\n");
 #if 0
-  printf("16)  .d       : Easymesh input format\n");
   printf("17) .msh      : Nastran format\n");
   printf("18) .msh      : CGsim format\n");
   printf("19) .geo      : Geo format\n");
@@ -113,7 +112,6 @@ static void Instructions()
 #if 0
   printf("5)  .inp      : Abaqus input format\n");
   printf("7)  .fidap    : Fidap format\n");
-  if(0) printf("8)  .n .e .s  : Easymesh output format\n");
   printf("18) .ep       : Fastcap input format.\n");
 #endif
 
@@ -270,12 +268,6 @@ int main(int argc, char *argv[])
       Goodbye();
     }
   }
-#if 0
-  if(eg.inmethod != 8 && eg.outmethod == 5) {
-    printf("To write Easymesh format you need to read easymesh format!\n");
-    errorstat++;
-  }
-#endif
 
   if(eg.timeron) timer_activate(eg.infofile);
 
@@ -294,168 +286,108 @@ int main(int argc, char *argv[])
  read_another_file:    
 
   timer_show();
+  errorstat = 0;
+
+
+  switch (inmethod) {
+
+  case 2: 
+  case 4:
+  case 5:
+  case 7:
+  case 8:
+  case 9:
+  case 10:
+  case 11:
+  case 12:
+  case 13:
+  case 14:
+  case 17:
+  case 18:
+  case 19:
+  case 20:
+  case 21:    
+    printf("Allocating boundary entities\n");
+    boundaries[nofile] = (struct BoundaryType*)
+      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
+    for(i=0;i<MAXBOUNDARIES;i++) {
+      boundaries[nofile][i].created = FALSE; 
+      boundaries[nofile][i].nosides = 0;
+    }
+  }
+    
+  
   
   switch (inmethod) {
 
   case 1:        
-    if(LoadElmergrid(&grids,&nogrids,eg.filesin[nofile],eg.relh,info) == 1) {   
+    errorstat = LoadElmergrid(&grids,&nogrids,eg.filesin[nofile],eg.relh,info);
+    if( errorstat == 1) {
       if(dim == 3) ExampleGrid3D(&grids,&nogrids,info);
       if(dim == 2) ExampleGrid2D(&grids,&nogrids,info);
       if(dim == 1) ExampleGrid1D(&grids,&nogrids,info);
       SaveElmergrid(grids,nogrids,eg.filesin[nofile],info); 
       printf("Because file %s didn't exist, it was created for you.\n",eg.filesin[nofile]);
-      Goodbye();
+    } else {
+      LoadCommands(eg.filesin[nofile],&eg,grids,2,info); 
     }
-    LoadCommands(eg.filesin[nofile],&eg,grids,2,info); 
     break;
 
   case 2: 
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if(LoadElmerInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],
-		      !eg.usenames,info))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadElmerInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],
+			       !eg.usenames,info);
     break;
 
   case 3: 
-    if(LoadSolutionElmer(&(data[nofile]),TRUE,eg.filesin[nofile],info)) 
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadSolutionElmer(&(data[nofile]),TRUE,eg.filesin[nofile],info);
     break;
 
   case 4:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    if(LoadAnsysInput(&(data[0]),boundaries[0],eg.filesin[nofile],info)) 
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadAnsysInput(&(data[0]),boundaries[0],eg.filesin[nofile],info);
     break;
 
   case 5: 
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if(LoadAbaqusInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE)) 
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadAbaqusInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 6:
-    if(LoadAbaqusOutput(&(data[nofile]),eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadAbaqusOutput(&(data[nofile]),eg.filesin[nofile],TRUE);
     break;
 
   case 7:
-    if(LoadFidapInput(&(data[nofile]),eg.filesin[nofile],TRUE))
-      Goodbye();
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
+    errorstat = LoadFidapInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
+    if(!errorstat) {
+      if(!eg.usenames) data[nofile].boundarynamesexist = data[nofile].bodynamesexist = FALSE;
     }
-    if(!eg.usenames) data[nofile].boundarynamesexist = data[nofile].bodynamesexist = FALSE;
-    ElementsToBoundaryConditions(&(data[nofile]),boundaries[nofile],FALSE,TRUE);
-    RenumberBoundaryTypes(&data[nofile],boundaries[nofile],TRUE,0,info);
-  
-    nomeshes++;
     break;
 
   case 8:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadUniversalMesh(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadUniversalMesh(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
-
- case 9:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-   
-    if(LoadComsolMesh(&(data[nofile]),eg.filesin[nofile],info)) 
-      Goodbye();
-    ElementsToBoundaryConditions(&(data[nofile]),boundaries[nofile],FALSE,TRUE);
-    nomeshes++;
+    
+  case 9:
+    errorstat = LoadComsolMesh(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],info);
     break;
 
   case 10:
-    if(LoadFieldviewInput(&(data[nofile]),eg.filesin[nofile],TRUE))
-      Goodbye();
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	    
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    ElementsToBoundaryConditions(&(data[nofile]),boundaries[nofile],FALSE,TRUE);
-    nomeshes++;
+    errorstat = LoadFieldviewInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 11:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadTriangleInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadTriangleInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 12:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadMeditInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadMeditInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 13:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadGidInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadGidInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 14:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
     data[nofile].dim = (eg.dim >= 1 && eg.dim <= 3) ? eg.dim : 3; /* default dim 3 with gmsh*/
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadGmshInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadGmshInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 15: 
@@ -465,90 +397,25 @@ int main(int argc, char *argv[])
     if(info) printf("Finishing with the fusion of partitioned Elmer solutions\n");
     Goodbye();
     break;
-
-#if 0
-  case 16: 
-    InitializeKnots(&(data[nofile]));
-    if( Easymesh(argc,argv,&data[nofile].noknots,
-		 &data[nofile].noelements,&sides)) 
-      Goodbye();	
     
-    data[nofile].dim = 2;
-    data[nofile].coordsystem = COORD_CART2;
-    data[nofile].maxnodes = 3;
-    
-    AllocateKnots(&(data[nofile]));
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if(EasymeshCopy(&(data[nofile]),boundaries[nofile]))
-      Goodbye();    
-    nomeshes++;
-    break;
-#endif
-
   case 17:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadNastranInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadNastranInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 18:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-   
-    if(LoadCGsimMesh(&(data[nofile]),eg.filesin[nofile],info))
-       Goodbye();
-    nomeshes++;
+    errorstat = LoadCGsimMesh(&(data[nofile]),eg.filesin[nofile],info);
     break;
 
   case 19:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadGeoInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadGeoInput(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 20:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadFluxMesh(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadFluxMesh(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   case 21:
-    boundaries[nofile] = (struct BoundaryType*)
-      malloc((size_t) (MAXBOUNDARIES)*sizeof(struct BoundaryType)); 	
-    for(i=0;i<MAXBOUNDARIES;i++) {
-      boundaries[nofile][i].created = FALSE; 
-      boundaries[nofile][i].nosides = 0;
-    }
-    if (LoadFluxMesh3D(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE))
-      Goodbye();
-    nomeshes++;
+    errorstat = LoadFluxMesh3D(&(data[nofile]),boundaries[nofile],eg.filesin[nofile],TRUE);
     break;
 
   default:
@@ -556,7 +423,15 @@ int main(int argc, char *argv[])
     Goodbye();
   }  
 
+  if( errorstat ) {
+    printf("We encountered a problem reading in mesh information.\n");
+    Goodbye();
+  }
+
+  if( inmethod != 1 ) nomeshes++;  
   nofile++;
+  
+
   if(nofile < eg.nofilesin) {
     printf("\nElmergrid loading data from another file:\n");
     goto read_another_file;
@@ -1071,12 +946,6 @@ int main(int argc, char *argv[])
     for(k=0;k<nomeshes;k++)
       SaveFidapOutput(&data[k],eg.filesout[k],info,1,data[k].dofs[1]);
     break;
-
-#if 0
-  case 8:
-    EasymeshSave();
-    break;
-#endif
 
     
     /* Some obsolite special formats related to mapping, view factors etc. */

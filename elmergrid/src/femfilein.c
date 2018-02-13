@@ -32,8 +32,6 @@
 #include <ctype.h>
 #include <string.h>
 #include <limits.h>
-/*#include <strings.h>*/
-/*#include <unistd.h>*/
 
 #include "nrutil.h"
 #include "common.h"
@@ -1286,7 +1284,7 @@ static void ReorderFidapNodes(struct FemType *data,int element,int nodes,int typ
 
 
 
-int LoadFidapInput(struct FemType *data,char *prefix,int info)
+int LoadFidapInput(struct FemType *data,struct BoundaryType *bound,char *prefix,int info)
 /* Load the grid from a format that can be read by FIDAP 
    program designed for fluid mechanics. 
 
@@ -1536,7 +1534,12 @@ end:
   if(maxentity > 0) data->bodynamesexist = TRUE;
 
   fclose(in);
+
   
+  ElementsToBoundaryConditions(data,bound,FALSE,TRUE);
+  RenumberBoundaryTypes(data,bound,TRUE,0,info);  
+
+
   if(info) printf("Finished reading the Fidap neutral file\n");
 
   return(0);
@@ -2055,7 +2058,7 @@ static void ReorderFieldviewNodes(struct FemType *data,int *oldtopology,
 
 
 
-int LoadFieldviewInput(struct FemType *data,char *prefix,int info)
+int LoadFieldviewInput(struct FemType *data,struct BoundaryType *bound,char *prefix,int info)
 /* Load the grid from a format that can be read by FieldView
    program by PointWise. This is a suitable format to read files created
    by GridGen. */
@@ -2262,6 +2265,8 @@ end:
 
   if(maxindx != noknots) 
     printf("The maximum index %d differs from the number of nodes %d !\n",maxindx,noknots);
+
+  ElementsToBoundaryConditions(data,bound,FALSE,TRUE);
   
   return(0);
 }
@@ -2948,7 +2953,7 @@ static void ReorderComsolNodes(int elementtype,int *topo)
 
 
 
-int LoadComsolMesh(struct FemType *data,char *prefix,int info)
+int LoadComsolMesh(struct FemType *data,struct BoundaryType *bound,char *prefix,int info)
 /* Load the grid in Comsol Multiphysics mesh format */
 {
   int noknots,noelements,maxnodes,material;
@@ -3150,6 +3155,8 @@ end:
   }
   fclose(in);
 
+  ElementsToBoundaryConditions(data,bound,FALSE,TRUE);
+ 
   if(info) printf("The Comsol mesh was loaded from file %s.\n\n",filename);
   return(0);
 }
@@ -5190,7 +5197,7 @@ int LoadFluxMesh3D(struct FemType *data,struct BoundaryType *bound,
   noelements = 0;
   mode = 0;
   maxnodes = 20;      // 15?
-	maxlinenodes = 12; //nodes can be located at several lines
+  maxlinenodes = 12; //nodes can be located at several lines
 
   for(;;) { 
 

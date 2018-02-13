@@ -3662,7 +3662,7 @@ int PartitionSimpleNodes(struct FemType *data,int dimpart[],int dimper[],
 }
 
 
-int LinearNodes(int elemtype)
+static int LinearNodes(int elemtype)
 {
   int elemfamily,nonodes;
   int fam2nodemap[] = {0, 1, 2, 3, 4, 4, 5, 6, 8 }; 
