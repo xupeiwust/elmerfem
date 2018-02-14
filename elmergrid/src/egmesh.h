@@ -27,16 +27,16 @@ void DestroyKnots(struct FemType *data);
 void SideAreas(struct FemType *data,struct BoundaryType *bound);
 int CreateBoundary(struct CellType *cell,struct FemType *data,
 		   struct BoundaryType *bound,int material1,int material2,
-		   int solidmat,int boundarytype);
+		   int solidmat,int boundarytype,int info);
 int AllocateBoundary(struct BoundaryType *bound,int size);
 int CreateBoundaryChain(struct FemType *data,struct BoundaryType *bound,int info);
 int DestroyBoundary(struct BoundaryType *bound);
 int CreateBoundaries(struct CellType *cell,
 		     struct FemType *data,
-		     struct BoundaryType *boundaries);
+		     struct BoundaryType *boundaries,int info);
 int CreatePoints(struct CellType *cell,struct FemType *data,
 		 struct BoundaryType *bound,
-		 int param1,int param2,int pointmode,int pointtype);
+		 int param1,int param2,int pointmode,int pointtype,int info);
 int SetDiscontinuousBoundary(struct FemType *data,struct BoundaryType *bound,
 			     int boundtype,int endnodes,int info);
 int SetDiscontinuousPoints(struct FemType *data,struct PointType *point,
@@ -106,3 +106,5 @@ int DestroyDualGraph(struct FemType *data,int info);
 int CreateInverseTopology(struct FemType *data,int info);
 int DestroyInverseTopology(struct FemType *data,int info);
 int MeshTypeStatistics(struct FemType *data,int info);
+int SideAndBulkMappings(struct FemType *data,struct BoundaryType *bound,struct ElmergridType *eg,int info);
+int SideAndBulkBoundaries(struct FemType *data,struct BoundaryType *bound,struct ElmergridType *eg,int info);

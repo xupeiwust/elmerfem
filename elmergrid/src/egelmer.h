@@ -1,6 +1,6 @@
 /* Routines for input, output and manipulation of Funcs and ElmerPost
    formats (programs created by Juha Ruokolainen at CSC). */ 
-#define PARTMETIS 1
+/* #define PARTMETIS 1 */
 
 int LoadSolutionElmer(struct FemType *data,int results,char *prefix,int info);
 int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,

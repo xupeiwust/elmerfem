@@ -46,10 +46,13 @@
 #include "egtypes.h"
 #include "egnative.h"
 #include "egmesh.h"
-#include "egelmer.h"
+/* #include "egelmer.h" */
 
 
 #define DEBUG 0
+
+
+#define DISABLE_MATC 1
 
 
 void InitGrid(struct GridType *grid)
@@ -407,6 +410,26 @@ void ExampleGrid3D(struct GridType **grids,int *nogrids,int info)
 
   if(info) printf("A simple 3D example mesh was created\n");
 }
+
+
+void CreateExampleGrid(int dim,struct GridType **grids,int *nogrids,int info) 
+{
+  switch (dim) {
+    
+  case 1: 
+    ExampleGrid1D(grids,nogrids,info);
+    break;
+
+  case 2: 
+    ExampleGrid2D(grids,nogrids,info);
+    break;
+
+  case 3: 
+    ExampleGrid3D(grids,nogrids,info);
+    break;
+  }
+}
+
 
 
 void SetElementDivision(struct GridType *grid,Real relh,int info)
@@ -2667,7 +2690,7 @@ int InlineParameters(struct ElmergridType *eg,int argc,char *argv[])
     if(strcmp(argv[arg],"-metis") == 0 ||
        strcmp(argv[arg],"-metisrec") == 0 ||
        strcmp(argv[arg],"-metiskway") == 0 ) {
-#if PARTMETIS
+#ifdef PARTMETIS
       if(arg+1 >= argc) {
 	printf("The number of partitions is required as a parameter\n");
 	return(15);
@@ -2985,13 +3008,13 @@ int LoadCommands(char *prefix,struct ElmergridType *eg,
   char command[MAXLINESIZE],params[MAXLINESIZE],*cp;
 
   FILE *in=NULL;
-  int i,j;
+  int i,j,errorstat;
 
   iodebug = FALSE;
 
   if( mode == 0) {  
     if (in = fopen("ELMERGRID_STARTINFO","r")) {
-      fscanf(in,"%s",filename);
+      errorstat = fscanf(in,"%s",filename);
       fclose(in);
       printf("Using the file %s defined in ELMERGRID_STARTINFO\n",filename);
       if ((in = fopen(filename,"r")) == NULL) {
@@ -3170,21 +3193,21 @@ int LoadCommands(char *prefix,struct ElmergridType *eg,
       if(strstr(params,"TRUE")) eg->increase = TRUE;      
     }
     else if(strstr(command,"METIS OPTION")) {
-#if PARTMETIS
+#ifdef PARTMETIS
       sscanf(params,"%d",&eg->partopt);
 #else
       printf("This version of ElmerGrid was compiled without Metis library!\n");
 #endif
     }
     else if(strstr(command,"METIS")) {
-#if PARTMETIS
+#ifdef PARTMETIS
       sscanf(params,"%d",&eg->metis);
 #else
       printf("This version of ElmerGrid was compiled without Metis library!\n");
 #endif
     }
     else if(strstr(command,"METISKWAY")) {
-#if PARTMETIS
+#ifdef PARTMETIS
       sscanf(params,"%d",&eg->metis);
       eg->partopt = 3;
 #else
@@ -3192,7 +3215,7 @@ int LoadCommands(char *prefix,struct ElmergridType *eg,
 #endif
     }
     else if(strstr(command,"METISREC")) {
-#if PARTMETIS
+#ifdef PARTMETIS
       sscanf(params,"%d",&eg->metis);
       eg->partopt = 2;
 #else
@@ -3455,6 +3478,383 @@ end:
 
   return(0);
 }
+
+
+
+int LoadCommandsGUI(char *prefix,struct ElmergridType *eg,
+		    struct GridType *grid, int mode,const char *IOmethods[],
+		    int info) 
+{
+  char filename[MAXFILESIZE],command[MAXLINESIZE],params[MAXLINESIZE],*cp;
+
+  FILE *in = NULL;
+  int i,j;
+
+  if( mode == 0) {  
+    if (in = fopen("ELMERGRID_STARTINFO","r")) {
+      fscanf(in,"%s",filename);
+      fclose(in);
+      printf("Using the file %s defined in ELMERGRID_STARTINFO\n",filename);
+      if ((in = fopen(filename,"r")) == NULL) {
+	printf("LoadCommands: opening of the file '%s' wasn't succesfull!\n",filename);
+	return(1);
+      }    
+      else printf("Loading ElmerGrid commands from file '%s'.\n",filename);    
+    }    
+    else 
+      return(2);
+  }
+  if(mode == 1) { 
+    AddExtension(prefix,filename,"eg");
+    if ((in = fopen(filename,"r")) == NULL) {
+      printf("LoadCommands: opening of the file '%s' wasn't succesfull!\n",filename);
+      return(3);
+    }    
+    if(info) printf("Loading ElmerGrid commands from file '%s'.\n",filename);    
+  }
+  else if(mode == 2) {
+    AddExtension(prefix,filename,"grd");
+    if ((in = fopen(filename,"r")) == NULL) {
+      printf("LoadCommands: opening of the file '%s' wasn't succesfull!\n",filename);
+      return(4);
+    }    
+    if(info) printf("Loading ElmerGrid commands from file '%s'.\n",filename);
+  }
+
+
+
+  for(;;) {
+
+    if(GetCommand(command,params,in)) {
+      if(0) printf("Reached the end of command file\n");
+      goto end;
+    }    
+
+    /* If the mode is the command file mode read also the file information from the command file. */
+
+    if(mode <= 1) {
+      if(strstr(command,"INPUT FILE")) {
+	sscanf(params,"%s", &(eg->filesin[0]));
+      }
+
+      else if(strstr(command,"OUTPUT FILE")) {
+	sscanf(params,"%s",&(eg->filesout[0]));
+      }
+
+      else if(strstr(command,"INPUT MODE")) {
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	
+	for(i=0;i<=MAXFORMATS;i++) {
+	  if(strstr(params,IOmethods[i])) {
+	    eg->inmethod = i;
+	    break;
+	  }
+	}
+	if(i>MAXFORMATS) sscanf(params,"%d",&eg->inmethod);
+      }
+
+      else if(strstr(command,"OUTPUT MODE")) {
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	
+	/* Type of output file (fewer options) */
+	for(i=1;i<=MAXFORMATS;i++) {
+	  if(strstr(params,IOmethods[i])) {
+	    eg->outmethod = i;
+	    break;
+	  }
+	}
+	if(i>MAXFORMATS) sscanf(params,"%d",&eg->outmethod);	
+      }
+    }    
+    /* End of command file specific part */
+
+
+    if(strstr(command,"DECIMALS")) {
+      sscanf(params,"%d",&eg->decimals);
+    }
+    else if(strstr(command,"TRIANGLES CRITICAL ANGLE")) {
+      sscanf(params,"%le",&eg->triangleangle);
+    }
+    else if(strstr(command,"TRIANGLES")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->triangles = TRUE;      
+    }
+    else if(strstr(command,"MERGE NODES")) {
+      eg->merge = TRUE;
+      sscanf(params,"%le",&eg->cmerge);
+    }
+    else if(strstr(command,"UNITE")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->unitemeshes = TRUE;      
+    }
+    else if(strstr(command,"ORDER NODES")) {
+      eg->order = TRUE;
+      if(eg->dim == 1) 
+	sscanf(params,"%le",&eg->corder[0]);
+      else if(eg->dim == 2) 
+	sscanf(params,"%le%le",&eg->corder[0],&eg->corder[1]);
+      else if(eg->dim == 3) 
+	sscanf(params,"%le%le%le",&eg->corder[0],&eg->corder[1],&eg->corder[2]);
+    }
+    else if(strstr(command,"SCALE")) {
+      eg->scale = TRUE;
+      if(eg->dim == 1) 
+	sscanf(params,"%le",&eg->cscale[0]);
+      else if(eg->dim == 2) 
+	sscanf(params,"%le%le",&eg->cscale[0],&eg->cscale[1]);
+      else if(eg->dim == 3) 
+	sscanf(params,"%le%le%le",&eg->cscale[0],&eg->cscale[1],&eg->cscale[2]);
+    }
+    else if(strstr(command,"CENTRALIZE")) {
+      eg->center = TRUE;
+    }
+    else if(strstr(command,"TRANSLATE")) {
+      eg->translate = TRUE;
+      if(eg->dim == 1) 
+	sscanf(params,"%le",&eg->ctranslate[0]);
+      else if(eg->dim == 2) 
+	sscanf(params,"%le%le",&eg->ctranslate[0],&eg->ctranslate[1]);
+      else if(eg->dim == 3) 
+	sscanf(params,"%le%le%le",&eg->ctranslate[0],&eg->ctranslate[1],&eg->ctranslate[2]);
+    }
+    else if(strstr(command,"ROTATE MESH")) {
+      eg->rotate = TRUE;
+      sscanf(params,"%le%le%le",&eg->crotate[0],&eg->crotate[1],&eg->crotate[2]);
+    }
+    else if(strstr(command,"CLONE")) {
+      if(strstr(command,"CLONE SIZE")) {
+	if(eg->dim == 1) 
+	  sscanf(params,"%le",&eg->clonesize[0]);
+	else if(eg->dim == 2) 
+	  sscanf(params,"%le%le",&eg->clonesize[0],&eg->clonesize[1]);
+	else if(eg->dim == 3) 
+	  sscanf(params,"%le%le%le",&eg->clonesize[0],&eg->clonesize[1],&eg->clonesize[2]);	
+      }
+      else {
+	if(eg->dim == 1) 
+	  sscanf(params,"%d",&eg->clone[0]);
+	else if(eg->dim == 2) 
+	  sscanf(params,"%d%d",&eg->clone[0],&eg->clone[1]);
+	else if(eg->dim == 3) 
+	  sscanf(params,"%d%d%d",&eg->clone[0],&eg->clone[1],&eg->clone[2]);
+      }
+    }
+
+    else if(strstr(command,"POLAR RADIUS")) {
+      eg->polar = TRUE;
+      sscanf(params,"%le",&eg->polarradius);
+    }
+    else if(strstr(command,"CYLINDER")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->cylinder = TRUE;      
+    }
+    else if(strstr(command,"REDUCE DEGREE")) {
+      eg->reduce = TRUE;
+      sscanf(params,"%d%d",&eg->reducemat1,&eg->reducemat2);
+    }
+    else if(strstr(command,"INCREASE DEGREE")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->increase = TRUE;      
+    }
+    else if(strstr(command,"METIS OPTION")) {
+#if HAVE_METIS
+      sscanf(params,"%d",&eg->partopt);
+#else
+      printf("This version of ElmerGrid was compiled without Metis library!\n");
+#endif
+    }
+    else if(strstr(command,"METIS")) {
+#if HAVE_METIS
+      sscanf(params,"%d",&eg->metis);
+#else
+      printf("This version of ElmerGrid was compiled without Metis library!\n");
+#endif
+    }
+    else if(strstr(command,"PARTITION ORDER")) {
+      eg->partorder = 1;
+      if(eg->dim == 2) sscanf(params,"%le%le",&eg->partcorder[0],&eg->partcorder[1]);
+      if(eg->dim == 3) sscanf(params,"%le%le%le",&eg->partcorder[0],
+			      &eg->partcorder[1],&eg->partcorder[2]);      
+    }
+    else if(strstr(command,"PARTITION")) {
+      if(eg->dim == 2) sscanf(params,"%d%d",&eg->partdim[0],&eg->partdim[1]);
+      if(eg->dim == 3) sscanf(params,"%d%d%d",&eg->partdim[0],&eg->partdim[1],&eg->partdim[2]);
+      eg->partitions = 1;
+      for(i=0;i<eg->dim;i++) {
+	if(eg->partdim[i] < 1) eg->partdim[i] = 1;
+	eg->partitions *= eg->partdim[i];
+      }
+    }
+    else if(strstr(command,"PERIODIC")) {
+      if(eg->dim == 2) sscanf(params,"%d%d",&eg->periodicdim[0],&eg->periodicdim[1]);
+      if(eg->dim == 3) sscanf(params,"%d%d%d",&eg->periodicdim[0],
+			      &eg->periodicdim[1],&eg->periodicdim[2]);
+    }
+    else if(strstr(command,"HALO")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->partitionhalo = TRUE;      
+    }
+    else if(strstr(command,"INDIRECT")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->partitionindirect = TRUE;      
+    }
+    else if(strstr(command,"BOUNDARY TYPE MAPPINGS")) {
+      for(i=0;i<MAXMATERIALS;i++) {
+	if(i>0) Getline(params,in);
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->sidemap[3*i],&eg->sidemap[3*i+1],&eg->sidemap[3*i+2]);
+      }
+      printf("Found %d boundary type mappings\n",i);
+      eg->sidemappings = i;
+    }
+    else if(strstr(command,"BULK TYPE MAPPINGS")) {
+      for(i=0;i<MAXMATERIALS;i++) {
+	if(i>0) Getline(params,in);
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->bulkmap[3*i],&eg->bulkmap[3*i+1],&eg->bulkmap[3*i+2]);
+      }
+      printf("Found %d bulk type mappings\n",i);
+      eg->bulkmappings = i;
+    }
+    else if(strstr(command,"BOUNDARY BOUNDARY")) {
+      for(i=0;i<MAXBOUNDARIES;i++) {
+	if(i>0) Getline(params,in);
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->boundbound[3*i+2],&eg->boundbound[3*i],&eg->boundbound[3*i+1]);
+      }
+      printf("Found %d boundary boundary definitions\n",i);
+      eg->boundbounds = i;
+    }
+    else if(strstr(command,"MATERIAL BOUNDARY")) {
+      for(i=0;i<MAXBOUNDARIES;i++) {
+	if(i>0) Getline(params,in);
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->bulkbound[3*i+2],&eg->bulkbound[3*i],&eg->bulkbound[3*i+1]);
+      }
+      printf("Found %d material boundary definitions\n",i);
+      eg->bulkbounds = i;
+    }
+
+    else if(strstr(command,"RENUMBER BOUNDARY")) {
+      for(i=0;i<MAXBOUNDARIES;i++) {
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->sidemap[3*i],&eg->sidemap[3*i+1],&eg->sidemap[3*i+2]);
+      }
+      printf("Found %d boundary mappings\n",i);
+      eg->sidemappings = i;
+    }
+    else if(strstr(command,"RENUMBER MATERIAL")) {
+      for(i=0;i<MAXBOUNDARIES;i++) {
+	for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	if(strstr(params,"END")) break;
+	cp = params;      
+	sscanf(params,"%d%d%d",&eg->bulkmap[3*i],&eg->bulkmap[3*i+1],&eg->bulkmap[3*i+2]);
+      }
+      printf("Found %d material mappings\n",i);
+      eg->bulkmappings = i;
+    }
+
+    else if(strstr(command,"BOUNDARY LAYER")) {
+      if(strstr(command,"BOUNDARY LAYER MOVE")) {
+	sscanf(params,"%d",&eg->layermove);
+      }
+      else if(strstr(command,"BOUNDARY LAYER EPSILON")) {
+	sscanf(params,"%le",&eg->layereps);
+      }
+      else {
+	for(i=0;i<MAXBOUNDARIES;i++) {
+	  if(i>0) Getline(params,in);
+	  for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+	  cp = params;      
+
+	  if(strstr(params,"END") || strstr(params,"End") ) break;
+	  eg->layerbounds[i] = next_int(&cp);
+	  eg->layernumber[i] = next_int(&cp);
+	  eg->layerthickness[i] = next_real(&cp);
+	  eg->layerratios[i] = next_real(&cp);
+	  eg->layerparents[i] = next_int(&cp);	  
+	}
+	printf("Found %d boundary layers\n",i);
+	eg->layers = i;
+      }
+    }
+    else if(strstr(command,"REMOVE LOWER DIMENSIONAL BOUNDARIES")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->removelowdim = TRUE; 
+    }
+    else if(strstr(command,"REMOVE UNUSED NODES")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->removeunused = TRUE; 
+    }
+    else if(strstr(command,"REORDER MATERIAL")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->bulkorder = TRUE; 
+    }
+    else if(strstr(command,"REORDER BOUNDARY")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->boundorder = TRUE; 
+    }
+    else if(strstr(command,"DIMENSION")) {
+      sscanf(params,"%d",&eg->dim);
+    }
+    else if(strstr(command,"ISOPARAMETRIC")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->isoparam = TRUE;
+    }
+    else if(strstr(command,"NO BOUNDARY")) {
+      for(j=0;j<MAXLINESIZE;j++) params[j] = toupper(params[j]);
+      if(strstr(params,"TRUE")) eg->saveboundaries = FALSE;
+    }
+    else if(strstr(command,"EXTRUDED")) {
+      grid->dimension = 3;
+
+      if(strstr(command,"EXTRUDED DIVISIONS")) {
+	sscanf(params,"%d",&grid->zcells);		
+      }
+      else if(strstr(command,"EXTRUDED LIMITS")) {
+	cp = params;
+	for(i=0;i<=grid->zcells;i++) grid->z[i] = next_real(&cp);
+      }
+      else if(strstr(command,"EXTRUDED ELEMENTS")) {
+	cp = params;
+	for(i=1;i<=grid->zcells;i++) grid->zelems[i] = next_int(&cp);
+	grid->autoratio = FALSE;    
+      }
+      else if(strstr(command,"EXTRUDED RATIOS")) {
+	cp = params;
+	for(i=1;i<=grid->zcells;i++) grid->zexpand[i] = next_real(&cp);
+      }
+      else if(strstr(command,"EXTRUDED DENSITIES")) {
+	cp = params;
+	for(i=1;i<=grid->zcells;i++) grid->zdens[i] = next_real(&cp);
+      }
+      else if(strstr(command,"EXTRUDED STRUCTURE")) {
+	for(i=1;i<= grid->zcells;i++) {
+	  if(i>1) Getline(params,in);
+	  sscanf(params,"%d %d %d\n",
+		 &grid->zfirstmaterial[i],&grid->zlastmaterial[i],&grid->zmaterial[i]); 
+	}
+      }
+
+    }
+  }
+  
+end:
+  if(0) printf("Read commands from a file\n");
+  
+  return(0);
+}
+
 
 
 
@@ -5014,6 +5414,54 @@ int ShowCorners(struct FemType *data,int variable,Real offset)
 	      data->x[ind],data->y[ind]);
   }
   return(0);
+}
+
+
+int CreateElmerGridMesh(struct GridType *grid,
+			struct FemType *data,struct BoundaryType *boundaries,
+			Real relh,int info) {
+  int j;  
+  struct CellType *cell;
+  
+  for(j=0;j<MAXBOUNDARIES;j++) {
+    boundaries[j].created = FALSE;
+    boundaries[j].nosides = FALSE;
+  }
+
+  SetElementDivision(grid,relh,info);
+  
+  cell = (struct CellType*)
+    malloc((size_t) (grid->nocells+1)*sizeof(struct CellType)); 
+  SetCellData(grid,cell,info);
+
+  if(grid->dimension == 1) 
+    SetCellKnots1D(grid,cell,info);
+  else
+    SetCellKnots(grid,cell,info);
+
+  CreateKnots(grid,cell,data,0,0);
+
+  if(grid->noboundaries > 0) {
+    for(j=0;j<grid->noboundaries;j++) {
+      if(grid->boundsolid[j] < 4) {
+	CreateBoundary(cell,data,&(boundaries[j]),grid->boundext[j],grid->boundint[j],
+		       1,grid->boundtype[j],info);  
+      } 
+      else { 
+	CreatePoints(cell,data,&(boundaries[j]),grid->boundext[j],grid->boundint[j],
+		     grid->boundsolid[j],grid->boundtype[j],info); 	    
+      }
+    }
+  }
+#if 0
+  else {
+    CreateAllBoundaries(cell,data,boundaries,info);
+  }
+#endif
+
+  free(cell);
+
+  return 0;
 }
 
 

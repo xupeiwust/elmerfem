@@ -49,11 +49,16 @@
 #include "egelmer.h"
 #include "../config.h"
 
-#if PARTMETIS
+#ifdef PARTMETIS
 #include "metis-5.1.0/include/metis.h"
 #endif
 
-#define getline fgets(line,MAXLINESIZE,in) 
+/* #define getline fgets(line,MAXLINESIZE,in) */
+
+#define GETLINE getlineptr=fgets(line,MAXLINESIZE,in) 
+
+static int linenumber;
+static char *getlineptr;
 
 
 int LoadSolutionElmer(struct FemType *data,int results,char *prefix,int info)
@@ -81,7 +86,7 @@ int LoadSolutionElmer(struct FemType *data,int results,char *prefix,int info)
 
   InitializeKnots(data);
 
-  getline;
+  GETLINE;
   sscanf(line,"%d %d %d %d",&noknots,&noelements,&novctrs,&timesteps);
 
   data->dim = 3;
@@ -110,7 +115,7 @@ int LoadSolutionElmer(struct FemType *data,int results,char *prefix,int info)
 
   if(info) printf("Reading %d coordinates.\n",noknots);
   for(i=1; i <= noknots; i++) {
-    getline;
+    GETLINE;
     sscanf(line,"%le %le %le",
 	   &(data->x[i]),&(data->y[i]),&(data->z[i]));
   }
@@ -559,15 +564,15 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
   else 
     printf("Loading header from %s\n",filename);
 
-  getline;
+  GETLINE;
   sscanf(line,"%d %d %d",&noknots,&noelements,&nosides);
-  getline;
+  GETLINE;
   sscanf(line,"%d",&tottypes);
 
   maxelemtype = 0;
   maxnodes = 0;
   for(i=1;i<=tottypes;i++) {   
-    getline;
+    GETLINE;
     sscanf(line,"%d",&dummyint);
     maxelemtype = MAX( dummyint, maxelemtype );
     j = maxelemtype % 100;
@@ -600,7 +605,7 @@ int LoadElmerInput(struct FemType *data,struct BoundaryType *bound,
 
   activeperm = FALSE;
   for(i=1; i <= noknots; i++) {
-    getline;
+    GETLINE;
     sscanf(line,"%d %d %le %le %le",
 	   &j, &dummyint, &(data->x[i]),&(data->y[i]),&(data->z[i]));
     if(j != i && !activeperm) {
@@ -3011,7 +3016,7 @@ int PartitionConnectedElements1D(struct FemType *data,struct BoundaryType *bound
 }
 
 
-#if PARTMETIS
+#ifdef PARTMETIS
 int PartitionConnectedElementsMetis(struct FemType *data,struct BoundaryType *bound,
 				    int nparts,int metisopt,int info) {
   int i,j,k,l,n,m,dim;
@@ -3889,7 +3894,7 @@ int PartitionMetisMesh(struct FemType *data,struct ElmergridType *eg,
 
 
 
-#if PARTMETIS
+#ifdef PARTMETIS
 int PartitionMetisGraph(struct FemType *data,struct BoundaryType *bound,
 			struct ElmergridType *eg,int partitions,int metisopt,
 			int dual,int info)
@@ -6201,7 +6206,7 @@ int SaveElmerInputPartitioned(struct FemType *data,struct BoundaryType *bound,
 }
 
 
-#if PARTMETIS 
+#ifdef PARTMETIS 
 int ReorderElementsMetis(struct FemType *data,int info)
 /* Calls the fill reduction ordering algorithm of Metis library. */
 {

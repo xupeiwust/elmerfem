@@ -6,6 +6,7 @@
 #define MAXDOFS 20          /* maximum number of variables, e.g. T,P */ 
 #define MAXCELLS 100        /* maximum number of subcells in given direction */
 #define MAXBOUNDARIES 1000  /* maximum number of boundaries for BCs */
+#define MAXMATERIALS  50    /* maximum index of materials */
 #define MAXCASES    12      /* maximum number of coexisting cases */ 
 #define MAXFILESIZE 600     /* maximum filenamesize for i/o files */
 #define MAXLINESIZE 600     /* maximum length of line to be read */

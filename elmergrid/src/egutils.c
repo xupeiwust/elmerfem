@@ -76,7 +76,7 @@ int MemoryUsage()
    
 
 
-void nrerror(char error_text[])
+void nrerror(char *error_text)
 /* standerd error handler */
 {
   fprintf(stderr,"run-time error...\n");
@@ -446,7 +446,7 @@ void timer_show()
 
 
 
-void bigerror(char error_text[])
+void bigerror(char *error_text)
 {
   fprintf(stderr,"The program encountered a major error...\n");
   fprintf(stderr,"%s\n",error_text);
@@ -455,7 +455,7 @@ void bigerror(char error_text[])
 }
 
 
-void smallerror(char error_text[])
+void smallerror(char *error_text)
 {
   fprintf(stderr,"The program encountered a minor error...\n");
   fprintf(stderr,"%s\n",error_text);
@@ -666,7 +666,7 @@ void AdjustVector(Real max,Real min,Real *vector,int first,int last)
 int ReadRealVector(Real *vector,int first,int last,char *filename)
 /* Reads a Real vector from an ascii-file with a given name. */
 {
-  int i;
+  int i,errorstat;
   FILE *in;
   Real num;
 
@@ -675,7 +675,7 @@ int ReadRealVector(Real *vector,int first,int last,char *filename)
     return(1);
   }
   for(i=first;i<=last;i++) {
-    fscanf(in,"%le\n",&num);
+    errorstat = fscanf(in,"%le\n",&num);
     vector[i]=num;
     }
   fclose(in);
@@ -703,7 +703,7 @@ void SaveRealVector(Real *vector,int first,int last,char *filename)
 
 int ReadIntegerVector(int *vector,int first,int last,char *filename)
 {
-  int i;
+  int i,errorstat;
   FILE *in;
   int num;
 
@@ -712,7 +712,7 @@ int ReadIntegerVector(int *vector,int first,int last,char *filename)
     return(1);
   }
   for(i=first;i<=last;i++) {
-    fscanf(in,"%d\n",&num);
+    errorstat = fscanf(in,"%d\n",&num);
     vector[i]=num;
     }
   fclose(in);
@@ -740,7 +740,7 @@ void SaveIntegerVector(int *vector,int first,int last,char *filename)
 int ReadRealMatrix(Real **matrix,int row_first,int row_last,
 		int col_first,int col_last,char *filename)
 {
-  int i,j;
+  int i,j,errorstat;
   FILE *in;
   Real num;
 
@@ -751,7 +751,7 @@ int ReadRealMatrix(Real **matrix,int row_first,int row_last,
 
   for(j=row_first;j<=row_last;j++) {
     for(i=col_first;i<=col_last;i++) {
-      fscanf(in,"%le\n",&num);
+      errorstat = fscanf(in,"%le\n",&num);
       matrix[j][i]=num;
     }
   }
@@ -784,7 +784,7 @@ void SaveRealMatrix(Real **matrix,int row_first,int row_last,
 int ReadIntegerMatrix(int **matrix,int row_first,int row_last,
 		int col_first,int col_last,char *filename)
 {
-  int i,j;
+  int i,j,errorstat;
   FILE *in;
   int num;
 
@@ -795,7 +795,7 @@ int ReadIntegerMatrix(int **matrix,int row_first,int row_last,
 
   for(j=row_first;j<=row_last;j++) {
     for(i=col_first;i<=col_last;i++) {
-      fscanf(in,"%d\n",&num);
+      errorstat = fscanf(in,"%d\n",&num);
       matrix[j][i]=num;
     }
   }
@@ -864,6 +864,51 @@ void SaveNonZeros(Real **matrix,int row_first,int row_last,
         fprintf(out,"%d\t %d\t %-12.6e\n",j,i,matrix[j][i]);
   
   fclose(out);
+}
+
+
+int StringToStrings(const char *buf,char args[10][10],int maxcnt,char separator)
+/*  Finds real numbers separated by a certain separator from a string.
+    'buf'       - input string ending to a EOF
+    'dest'      - a vector of real numbers
+    'maxcnt'    - maximum number of real numbers to be read
+    'separator'	- the separator of real numbers
+    The number of numbers found is returned in the function value.
+    */
+{
+  int i,cnt,totlen,finish;
+  char *ptr1 = (char *)buf, *ptr2;
+  
+
+  totlen = strlen(buf);
+  finish = 0;
+  cnt = 0;
+
+  if (!buf[0]) return 0;
+
+  do {
+    ptr2 = strchr(ptr1,separator);
+    if(ptr2) {
+      for(i=0;i<10;i++) {
+	args[cnt][i] = ptr1[i];
+	if(ptr1 + i >= ptr2) break;
+      }
+      args[cnt][i] = '\0';
+      ptr1 = ptr2+1;
+    }
+    else {
+      for(i=0;i<10;i++) {
+	if(ptr1 + i >= buf+totlen) break;
+	args[cnt][i] = ptr1[i];
+      }
+      args[cnt][i] = '\0';
+      finish = 1;
+    }
+    
+    cnt++;
+  } while (cnt < maxcnt && !finish);
+  
+  return cnt;
 }
 
 

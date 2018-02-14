@@ -13,7 +13,7 @@
 
 
 int MemoryUsage();
-void nrerror(char error_text[]);
+void nrerror(char *error_text);
 
 float *vector(int,int);
 int  *ivector(int,int);
@@ -57,8 +57,8 @@ void timer_init();
 void timer_activate(const char *prefix);
 void timer_show();
 
-void bigerror(char error_text[]);
-void smallerror(char error_text[]);
+void bigerror(char *error_text);
+void smallerror(char *error_text);
 int  FileExists(char *filename);
 Real Minimum(Real *vector,int first,int last);
 int  Minimi(Real *vector,int first,int last);
@@ -88,6 +88,7 @@ void SaveNonZeros(Real **matrix,int row_first,int row_last,
 		  int col_first,int col_last,char *filename);
 void AddExtension(const char *fname1,char *fname2,const char *newext);
 int StringToReal(const char *buf,Real *dest,int maxcnt,char separator);
+int StringToStrings(const char *buf,char args[10][10],int maxcnt,char separator);
 int StringToInteger(const char *buf,int *dest,int maxcnt,char separator);
 int StringToIntegerNoZero(const char *buf,int *dest,int maxcnt,char separator);
 int EchoFile(char *filename);

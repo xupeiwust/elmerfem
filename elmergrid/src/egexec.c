@@ -170,7 +170,7 @@ static void Instructions()
   printf("-partorder real[3]   : in the 'partition' method set the direction of the ordering\n");
   printf("-partcell int[3]     : the mesh will be partitioned in cells of fixed sizes\n");
   printf("-partcyl int[3]      : the mesh will be partitioned in cylindrical main directions\n");
-#if PARTMETIS
+#ifdef PARTMETIS
   printf("-metis int           : mesh will be partitioned with Metis using mesh routines\n");
   printf("-metiskway int       : mesh will be partitioned with Metis using graph Kway routine\n");
   printf("-metisrec int        : mesh will be partitioned with Metis using graph Recursive routine\n");
@@ -188,7 +188,7 @@ static void Instructions()
   printf("-parthypre           : number the nodes continuously partitionwise\n");
   printf("-partzbc             : partition connected BCs separately to partitions in Z-direction\n");
   printf("-partrbc             : partition connected BCs separately to partitions in R-direction\n");
-#if PARTMETIS
+#ifdef PARTMETIS
   printf("-metisbc             : partition connected BCs separately to partitions by Metis\n");
 #endif
   printf("-partlayers int      : extend boundary partitioning by element layers\n");
@@ -466,12 +466,12 @@ int main(int argc, char *argv[])
 	  if(grids[k].boundsolid[j] < 4) {
 	    CreateBoundary(cell[k],&(data[k]),&(boundaries[k][j]),
 			   grids[k].boundext[j],grids[k].boundint[j],
-			   1,grids[k].boundtype[j]);  
+			   1,grids[k].boundtype[j],info);  
 	  } 
 	  else { 
 	    CreatePoints(cell[k],&(data[k]),&(boundaries[k][j]),
 			 grids[k].boundext[j],grids[k].boundint[j],
-			 grids[k].boundsolid[j],grids[k].boundtype[j]); 	    
+			 grids[k].boundsolid[j],grids[k].boundtype[j],info); 	    
 	  }
 	}
       }
@@ -657,7 +657,7 @@ int main(int argc, char *argv[])
     if(eg.merge) 
       MergeElements(&data[k],boundaries[k],eg.order,eg.corder,eg.cmerge,FALSE,TRUE);
     else if(eg.order == 3) 
-#if PARTMETIS 
+#ifdef PARTMETIS 
       ReorderElementsMetis(&data[k],TRUE);
 #else
       printf("Cannot order nodes by Metis as it is not even compiled!\n");
@@ -826,7 +826,7 @@ int main(int argc, char *argv[])
 	else
 	  PartitionSimpleNodes(&data[k],eg.partdim,eg.periodicdim,eg.partorder,eg.partcorder,info);	
       }
-#if PARTMETIS
+#ifdef PARTMETIS
       if(eg.metis) {
 	if( partopt < 0 || partopt > 4 ) {
 	  printf("Metis optional parameter should be in range [0,4], not %d\n",partopt);

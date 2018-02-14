@@ -1623,7 +1623,7 @@ void SideAreas(struct FemType *data,struct BoundaryType *bound)
 
 int CreateBoundary(struct CellType *cell,struct FemType *data,
 		   struct BoundaryType *bound,int material1,int material2,
-		   int solidmat,int boundarytype)
+		   int solidmat,int boundarytype,int info)
 /* This subroutine makes a boundary which includes all sides that separate 
    two materials that fullfill the conditions in the function call. If both 
    materials are positive only the sides for which both of the materials 
@@ -1794,7 +1794,7 @@ startpoint:
   
   /* Calculate the areas of the side elements. */
   SideAreas(data,bound);  
-  printf("%d element sides between materials %d and %d were located to type %d.\n",
+  if(info) printf("%d element sides between materials %d and %d were located to type %d.\n",
 	 nosides,material1,material2,boundarytype); 
 
   return(0);
@@ -1983,7 +1983,7 @@ int DestroyBoundary(struct BoundaryType *bound)
 
 
 int CreateBoundaries(struct CellType *cell,struct FemType *data,
-		     struct BoundaryType *boundaries)
+		     struct BoundaryType *boundaries,int info)
 {
   int i,j;
  
@@ -1999,7 +1999,7 @@ int CreateBoundaries(struct CellType *cell,struct FemType *data,
       } 
       CreateBoundary(cell,data,&boundaries[j],
 		     data->boundext[i],data->boundint[i],
-		     data->boundsolid[i],data->boundtype[i]);
+		     data->boundsolid[i],data->boundtype[i],info);
     }
   return(0);
 }
@@ -2008,7 +2008,7 @@ int CreateBoundaries(struct CellType *cell,struct FemType *data,
 
 int CreatePoints(struct CellType *cell,struct FemType *data,
 		 struct BoundaryType *bound,
-		 int param1,int param2,int pointmode,int pointtype)
+		 int param1,int param2,int pointmode,int pointtype,int info)
 {
   int size,i,no,corner,times,elem,node;
 
@@ -2081,7 +2081,7 @@ omstart:
 
       bound->parent[i] = elem;
       node = data->topology[elem][corner];
-      printf("Found node %d at (%.3g, %.3g)\n",node,data->x[node],data->y[node]);
+      if(info) printf("Found node %d at (%.3g, %.3g)\n",node,data->x[node],data->y[node]);
     }
   }  
 
@@ -2092,7 +2092,7 @@ omstart:
     goto omstart;
   }
 
-  printf("Created %d new points of type %d in the corner of materials %d and %d.\n",
+  if(info) printf("Created %d new points of type %d in the corner of materials %d and %d.\n",
 	 size,pointtype,param1,param2);
   
   return(FALSE);
@@ -2100,7 +2100,7 @@ omstart:
 
 
 
-static int CreateNewNodes(struct FemType *data,int *order,int material,int new)
+static int CreateNewNodes(struct FemType *data,int *order,int material,int nonew)
 {
   int i,j,k,l,lmax,ind;
   int newsize,noknots,nonodes;
@@ -2110,10 +2110,10 @@ static int CreateNewNodes(struct FemType *data,int *order,int material,int new)
 
   noknots = data->noknots;
 
-  printf("Creating %d new nodes for discontinuous boundary.\n",new);
+  printf("Creating %d new nodes for discontinuous boundary.\n",nonew);
 
   /* Allocate for the new nodes */
-  newsize = noknots+new;
+  newsize = noknots+nonew;
   newx = Rvector(1,newsize);
   newy = Rvector(1,newsize);
   newz = Rvector(1,newsize);
@@ -2207,7 +2207,7 @@ int SetDiscontinuousBoundary(struct FemType *data,struct BoundaryType *bound,
    */
 {
   int i,j,bc,ind,sideind[MAXNODESD1];
-  int side,parent,new,doublesides,maxtype,newbc;
+  int side,parent,nonew,doublesides,maxtype,newbc;
   int newsuccess,noelements,nonodes,sideelemtype,sidenodes,disconttype;
   int *order=NULL;
   int mat1,mat2,par1,par2,mat1old,mat2old,material;
@@ -2315,7 +2315,7 @@ int SetDiscontinuousBoundary(struct FemType *data,struct BoundaryType *bound,
 
   
   /* Find the number of new nodes */
-  new = 0;
+  nonew = 0;
 
   for(bc=0;bc<MAXBOUNDARIES;bc++) {
 
@@ -2343,30 +2343,30 @@ int SetDiscontinuousBoundary(struct FemType *data,struct BoundaryType *bound,
 	
 	if(endnodes == 2) {
 	  if(order[ind] > 0) {
-	    new++;
-	    order[ind] = -new;
+	    nonew++;
+	    order[ind] = -nonew;
 	  }
 	}
 	else if(endnodes == 0) {
 	  if(order[ind] > 0)
 	    order[ind] = 0;
 	  else if(order[ind] == 0) {
-	    new++;
-	    order[ind] = -new;	
+	    nonew++;
+	    order[ind] = -nonew;	
 	  }
 	}
 	else if(endnodes == 1) {
 	  if(order[ind] > 0) {
 	    if(hits[ind] < 4) {
-	      new++;
-	      order[ind] = -new;	    
+	      nonew++;
+	      order[ind] = -nonew;	    
 	    }
 	    else
 	      order[ind] = 0;
 	  }
 	  else if(order[ind] == 0) {
-	    new++;
-	    order[ind] = -new;	
+	    nonew++;
+	    order[ind] = -nonew;	
 	  }
 	}
 	
@@ -2380,9 +2380,9 @@ int SetDiscontinuousBoundary(struct FemType *data,struct BoundaryType *bound,
     }
   }
 
-  if(new == 0) return(3);
+  if(nonew == 0) return(3);
     
-  newsuccess = CreateNewNodes(data,order,material,new);
+  newsuccess = CreateNewNodes(data,order,material,nonew);
   return(newsuccess);
 }
 
@@ -2611,7 +2611,7 @@ int SetDiscontinuousPoints(struct FemType *data,struct PointType *point,
    */
 {
   int i,ind,corner,*order=NULL;
-  int parent,new;
+  int parent,nonew;
   int newsuccess;
 
   if(point->nopoints == FALSE) {
@@ -2625,21 +2625,21 @@ int SetDiscontinuousPoints(struct FemType *data,struct PointType *point,
 
   
   /* Find the number of new nodes */
-  new = 0;
+  nonew = 0;
   for(i=0;i<point->nopoints;i++) {
     parent = point->parent[i];
     corner = point->corner[i];
     ind = data->topology[parent][corner];
     if(order[ind] >= 0) {
-      new++;
-      order[ind] = -new;
+      nonew++;
+      order[ind] = -nonew;
     }
   }
 
-  if(new == 0)
+  if(nonew == 0)
     return(0);
 
-  newsuccess = CreateNewNodes(data,order,material,new);
+  newsuccess = CreateNewNodes(data,order,material,nonew);
   
   return(newsuccess);
 }
@@ -2713,8 +2713,6 @@ omstart:
   if(info) printf("Found %d material corners.\n",nocorners);
   return(0);
 }
-
-
 
 
 int ElementsToTriangles(struct FemType *data,struct BoundaryType *bound,
@@ -9916,5 +9914,78 @@ int MeshTypeStatistics(struct FemType *data,int info)
   }
 
   free_Ivector(elemtypes,minelemtype,maxelemtype);
+  return(0);
+}
+
+
+int SideAndBulkMappings(struct FemType *data,struct BoundaryType *bound,struct ElmergridType *eg,int info)
+{
+  int i,j,l,currenttype;
+  
+
+  if(eg->sidemappings) {
+    for(l=0;l<eg->sidemappings;l++) 
+      if(info) printf("Setting boundary types between %d and %d to %d\n",
+		      eg->sidemap[3*l],eg->sidemap[3*l+1],eg->sidemap[3*l+2]);
+
+    for(j=0;j < MAXBOUNDARIES;j++) {
+      if(!bound[j].created) continue;
+	
+	for(i=1; i <= bound[j].nosides; i++) {
+	  if(currenttype = bound[j].types[i]) {
+	    for(l=0;l<eg->sidemappings;l++) {
+	      if(currenttype >= eg->sidemap[3*l] && currenttype <= eg->sidemap[3*l+1]) {
+		bound[j].types[i] = eg->sidemap[3*l+2];
+		currenttype = -1;
+	      }
+	    }
+	  }
+	}
+    }
+    if(info) printf("Renumbering boundary types finished\n");
+  }
+  
+  if(eg->bulkmappings) {
+    for(l=0;l<eg->bulkmappings;l++) 
+      if(info) printf("Setting material types between %d and %d to %d\n",
+		      eg->bulkmap[3*l],eg->bulkmap[3*l+1],eg->bulkmap[3*l+2]);
+    for(j=1;j<=data->noelements;j++) {
+      currenttype = data->material[j];
+      for(l=0;l<eg->bulkmappings;l++) {
+	if(currenttype >= eg->bulkmap[3*l] && currenttype <= eg->bulkmap[3*l+1]) {
+	  data->material[j] = eg->bulkmap[3*l+2];
+	  currenttype = -1;
+	}
+      }
+    }
+    if(info) printf("Renumbering material indexes finished\n");
+  }
+  return(0);
+}
+
+
+
+int SideAndBulkBoundaries(struct FemType *data,struct BoundaryType *bound,struct ElmergridType *eg,int info)
+{
+  int l;
+  int *boundnodes,noboundnodes;
+  boundnodes = Ivector(1,data->noknots);
+      
+  if(eg->bulkbounds) {
+    for(l=0;l<eg->bulkbounds;l++) {
+      FindBulkBoundary(data,eg->bulkbound[3*l],eg->bulkbound[3*l+1],
+		       boundnodes,&noboundnodes,info);
+      FindNewBoundaries(data,bound,boundnodes,eg->bulkbound[3*l+2],1,info);
+    }
+  }
+  if(eg->boundbounds) {
+    for(l=0;l<eg->boundbounds;l++) {	
+      FindBoundaryBoundary(data,bound,eg->boundbound[3*l],eg->boundbound[3*l+1],
+			   boundnodes,&noboundnodes,info);
+      FindNewBoundaries(data,bound,boundnodes,eg->boundbound[3*l+2],2,info);
+    }
+  }
+  free_Ivector(boundnodes,1,data->noknots);
+
   return(0);
 }

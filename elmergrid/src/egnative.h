@@ -7,6 +7,8 @@ void InitGrid(struct GridType *grid);
 void ExampleGrid1D(struct GridType **grids,int *nogrids,int info);
 void ExampleGrid2D(struct GridType **grids,int *nogrids,int info);
 void ExampleGrid3D(struct GridType **grids,int *nogrids,int info);
+void CreateExampleGrid(int dim,struct GridType **grids,int *nogrids,int info); 
+
 void SetElementDivision(struct GridType *grid,Real relh,int info);
 void SetCellData(struct GridType *grid,struct CellType *cell,int info);
 void CreateCells(struct GridType *grid,struct CellType **cell,int info);
@@ -33,6 +35,9 @@ void InitParameters(struct ElmergridType *eg);
 int InlineParameters(struct ElmergridType *eg,int argc,char *argv[]);
 int LoadCommands(char *prefix,struct ElmergridType *eg,
 		 struct GridType *grid, int mode,int info);
+int LoadCommandsGUI(char *prefix,struct ElmergridType *eg,
+		    struct GridType *grid, int mode,const char *IOmethods[],
+		    int info);
 
 int SaveSolutionDens(struct FemType *data,char *prefix,int info);
 int SaveCellInfo(struct GridType *grid,struct CellType *cell,
@@ -50,3 +55,7 @@ int SaveSubcellForm(struct FemType *data,struct CellType *cell,
 int SaveElmergrid(struct GridType *grid,int nogrids,char *prefix,int info);
 int LoadElmergrid(struct GridType **grid,int *nogrids,char *prefix,Real relh,int info); 
 int ShowCorners(struct FemType *knot,int variable,Real offset);
+
+int CreateElmerGridMesh(struct GridType *grid,
+			struct FemType *data,struct BoundaryType *boundaries,
+			Real relh,int info);
