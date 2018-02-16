@@ -2344,6 +2344,8 @@ CONTAINS
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
       
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
+      !IF(SalinityAtIP > 0.02) &
+      !     PRINT *,"Darcy: rhogw",rhogwAtIP,rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
            XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
       !PRINT *,"Darcy:","mugwAtIP",XiAtIP,T0,SalinityAtIP,TemperatureAtIP
@@ -2395,7 +2397,7 @@ CONTAINS
         END IF
       END DO
       DO p=1,nd     
-        !FORCE(p) = FORCE(p) - Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
+        !FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
         FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
       END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
@@ -4114,11 +4116,12 @@ CONTAINS
     ELSE
       NodalPressure(1:N) = Pressure(PressurePerm(Element % NodeIndexes(1:N)))
     END IF
-    IF (NoSalinity) THEN
-      NodalSalinity(1:N) = 0.0_dp
-    ELSE
-      NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
-    END IF
+    !IF (NoSalinity) THEN
+    !  NodalSalinity(1:N) = 0.0_dp
+    !ELSE
+    NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
+    !PRINT *,"ReadVarsSolute:", Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
+    !END IF
     IF (GivenGWflux) THEN
       NodalGWflux(1,1:N) = &
            GWflux1(GWfluxPerm1(Element % NodeIndexes(1:N)))
@@ -4292,6 +4295,7 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))      
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
+     
       vstarAtIP = 0.0_dp ! CHANGE to SUM(  Basis(1:N) * NodalRockVelocity(1:N) )
       
       ! Gradients of Variables at IP - moved from flux computation to here
@@ -4299,6 +4303,8 @@ CONTAINS
         gradTAtIP(i) =  SUM(NodalTemperature(1:N)*dBasisdx(1:N,i))
         gradPAtIP(i) =  SUM(NodalPressure(1:N) * dBasisdx(1:N,i))
       END DO
+
+      
       
       !Materialproperties needed at IP
 
@@ -4386,13 +4392,16 @@ CONTAINS
         KgwAtIP = 0.0_dp
         KgwAtIP = GetKgw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              mugwAtIP,XiAtIP,MinKgw)
+        !PRINT *, "Solute: Kgw", KgwAtIP(1,1)
         fwAtIP = fw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
              Xi0tilde,rhowAtIP,XiAtIP,GasConstant,TemperatureAtIP)
         KgwpTAtIP = GetKgwpT(fwAtIP,XiTAtIP,KgwAtIP)
         KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
         !PRINT *,"Solute: KgwppAtIP",KgwppAtIP
         rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
-        
+        !IF (SalinityAtIP > 0.00001_dp) THEN
+        !  PRINT *,"Solute: rhogw", rhogwAtIP, rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP          
+        !END IF
         ! gradT and gradP have been moved upwards, as needed elsewhere
         
         JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM)
@@ -4423,27 +4432,32 @@ CONTAINS
           
           DO i=1,DIM
             DO j=1,DIM
-              !IF (i==j) & !REMOVE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!                   
+             !IF (i==j) & !REMOVE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!                   
               Stiff(p,q) = Stiff(p,q) + &
                    Weight * PorosityAtIP * rhocAtIP * KcYcYcAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)
             END DO
           END DO
+          !PRINT *, "Solute:  KcYcYcAtIP", KcYcYcAtIP(1,1)
           ! advection term (CcYcYc * (v* .grad(u)),v) ! V* not implemented yet and set to zero
           ! -----------------------------------
           !STIFF (p,q) = STIFF(p,q) &
           !     + Weight * CcYcYcAtIP * SUM(vstarAtIP(1:DIM)*dBasisdx(q,1:dim)) * Basis(p)
 
           ! left overs from partial integration of fluxes
-          ! (rhoc/Xi) (u, Jgw.grad(v)) 
+          ! (rhoc/Xi) (u, Jgw.grad(v))
+          !JgwDAtIP(1) = 0.0_dp
+          !JgwDAtIP(2) = -1.0d-07
           STIFF (p,q) = STIFF(p,q) &
                - Weight * rhocAtIP * Basis(q) * SUM(JgwDAtIP(1:DIM) * dBasisdx(p,1:DIM))/ XiAtIP
 
+
+ !         PRINT *, "LocalMatrixSolute: ", JgwDAtIP(1:DIM), XiAtIP, rhocAtIP
           ! porosity rhoc  (u,(Kc.fc).grad(v))
-          DO i=1,DIM
-            extforceFlux =  SUM(KcAtIP(i,1:DIM)*fcAtIP(1:DIM))
-          END DO          
-          STIFF (p,q) = STIFF(p,q) &
-               - Weight * PorosityAtIP * rhocAtIP * Basis(q) * SUM(extforceFlux(1:DIM) * dBasisdx(p,1:DIM))
+          !DO i=1,DIM
+          !  extforceFlux =  SUM(KcAtIP(i,1:DIM)*fcAtIP(1:DIM))
+          !END DO          
+          !STIFF (p,q) = STIFF(p,q) &
+          !     - Weight * PorosityAtIP * rhocAtIP * Basis(q) * SUM(extforceFlux(1:DIM) * dBasisdx(p,1:DIM))
           ! time derivative (CcYcYc*du/dt,v):
           ! ------------------------------
           MASS(p,q) = MASS(p,q) + Weight * CcYcYcAtIP  * Basis(q) * Basis(p)
@@ -4643,7 +4657,7 @@ CONTAINS
           DO p=1,nd
             DO q=1,nd
               STIFF(p,q) = STIFF(p,q) &
-                 - Weight * rhocAtIP * Basis(q) * Basis(p) * JgwDNAtIP/XiAtIP
+                 + Weight * rhocAtIP * Basis(q) * Basis(p) * JgwDNAtIP/XiAtIP
             END DO
           END DO
         END IF
