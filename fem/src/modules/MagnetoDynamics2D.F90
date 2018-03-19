@@ -112,7 +112,8 @@ SUBROUTINE MagnetoDynamics2D( Model,Solver,dt,TransientSimulation )
   CALL Info( 'MagnetoDynamics2D', 'Solving equation for magnetic vector potential', Level=4 )
   CALL Info( 'MagnetoDynamics2D','------------------------------------------------', Level=4 )
 
-
+  CALL DefaultStart()
+  
   ! Allocate some permanent storage, this is done first time only:
   ! --------------------------------------------------------------
   NULLIFY(BC)
@@ -166,8 +167,8 @@ SUBROUTINE MagnetoDynamics2D( Model,Solver,dt,TransientSimulation )
 
     CALL DefaultFinishAssembly()
 
-    CALL DefaultDirichletBCs()
     CALL SetMagneticFluxDensityBC()
+    CALL DefaultDirichletBCs()
     Norm = DefaultSolve()
  
     IF( Solver % Variable % NonlinConverged > 0 ) EXIT
@@ -188,6 +189,8 @@ SUBROUTINE MagnetoDynamics2D( Model,Solver,dt,TransientSimulation )
     END DO
   END IF
 
+  CALL DefaultFinish()
+  
 CONTAINS
 
 !------------------------------------------------------------------------------
@@ -204,7 +207,12 @@ CONTAINS
 
    CALL Info('MagnetoDynamics2D','Calculating lumped parameters',Level=8)
    
-   U=0._dp; a=0._dp; torq=0._dp; TorqArea = 0._dp; IMoment=0._dp;IA=0
+   U=0._dp
+   a=0._dp
+   torq=0._dp
+   TorqArea=0._dp
+   IMoment=0._dp
+   IA=0
    DO i=1,GetNOFActive()
      Element => GetActiveElement(i)
      nd = GetElementNOFDOFs(Element)
@@ -240,7 +248,11 @@ CONTAINS
    TorqArea = ParallelReduction(TorqArea)
    rinner = ListGetCRealAnyBody( Model,'r inner',Found )
    router = ListGetCRealAnyBody( Model,'r outer',Found )
-   Ctorq = PI*(router**2-rinner**2) / TorqArea
+   IF (TorqArea /= 0) THEN
+      Ctorq = PI*(router**2-rinner**2) / TorqArea
+   ELSE
+      Ctorq = 0.0_dp
+   END IF
    WRITE(Message,'(A,ES15.4)') 'Air gap correction:', cTorq
    CALL Info('MagnetoDynamics2D',Message,Level=8)
    Torq = Ctorq * Torq
@@ -420,13 +432,13 @@ CONTAINS
 
     LOGICAL :: Cubic, HBcurve, Found, Stat
 
-    REAL(KIND=dp), POINTER :: Bval(:), Hval(:), Cval(:), &
-      CubicCoeff(:) => NULL(), HB(:,:) => NULL()
+    REAL(KIND=dp), POINTER :: Bval(:), Hval(:), Cval(:)
+    REAL(KIND=dp), POINTER :: CubicCoeff(:) => NULL(), HB(:,:) => NULL()
     TYPE(ValueListEntry_t), POINTER :: Lst
     TYPE(ValueList_t), POINTER :: Material, BodyForce
 
     TYPE(Nodes_t), SAVE :: Nodes
-!$omp threadprivate(Nodes)
+!$omp threadprivate(Nodes, CubicCoeff, HB)
     CHARACTER(LEN=MAX_NAME_LEN) :: CoilType
     LOGICAL :: CoilBody    
     TYPE(ValueList_t), POINTER :: CompParams
@@ -435,7 +447,6 @@ CONTAINS
     REAL(KIND=dp) :: nu_tensor(2,2)
     REAL(KIND=dp) :: B_ip(2), Alocal
 !------------------------------------------------------------------------------
-
     CALL GetElementNodes( Nodes,Element )
     STIFF = 0._dp
     JAC  = 0._dp
@@ -643,6 +654,8 @@ CONTAINS
     IF(.NOT.ASSOCIATED(Parent)) THEN
       Parent=>Element % BoundaryInfo % Right
     END IF
+    IF(.NOT.ASSOCIATED(Parent)) RETURN
+
     Material => GetMaterial(Parent)
     CALL GetReluctivity(Material,R,n,Parent)
 
@@ -776,9 +789,12 @@ CONTAINS
             x = Mesh % Nodes % x(k)
             y = Mesh % Nodes % y(k)
             k = Perm(k)
-            b(k) = y * Bx(j) - x * By(j)
-            CALL ZeroRow(A, k)
-            CALL AddToMatrixElement(A, k, k, 1._dp)
+            !b(k) = y * Bx(j) - x * By(j)
+
+            CALL UpdateDirichletDof( A, k, y * Bx(j) - x * By(j) )
+
+            !CALL ZeroRow(A, k)
+            !CALL AddToMatrixElement(A, k, k, 1._dp)
           END DO 
         END IF  
       END IF  
@@ -945,6 +961,8 @@ SUBROUTINE MagnetoDynamics2DHarmonic( Model,Solver,dt,TransientSimulation )
       'Nonlinear system max iterations',Found)
   IF(.NOT.Found) NonlinIter = 1
 
+  CALL DefaultStart()
+  
   DO iter=1,NonlinIter
 
     IF(Iter>1) NewtonRaphson=.TRUE.
@@ -982,8 +1000,8 @@ SUBROUTINE MagnetoDynamics2DHarmonic( Model,Solver,dt,TransientSimulation )
 
     CALL DefaultFinishAssembly()
 
-    CALL DefaultDirichletBCs()
     CALL SetMagneticFluxDensityBC()
+    CALL DefaultDirichletBCs()
     Norm = DefaultSolve()
  
     IF( Solver % Variable % NonlinConverged == 1 ) EXIT
@@ -1002,7 +1020,9 @@ SUBROUTINE MagnetoDynamics2DHarmonic( Model,Solver,dt,TransientSimulation )
        CoordVar % Values(j+3) = Mesh % Nodes % z(i)
      END DO
    END IF
-
+   
+   CALL DefaultFinish()
+   
 CONTAINS
 
 !------------------------------------------------------------------------------
@@ -1057,7 +1077,11 @@ CONTAINS
    TorqArea = ParallelReduction(TorqArea)
    rinner = ListGetCRealAnyBody( Model,'r inner',Found )
    router = ListGetCRealAnyBody( Model,'r outer',Found )
-   Ctorq = PI*(router**2-rinner**2) / TorqArea
+   IF (TorqArea /= 0) THEN
+      Ctorq = PI*(router**2-rinner**2) / TorqArea
+   ELSE
+      Ctorq = 0.0_dp
+   END IF
    WRITE(Message,'(A,ES15.4)') 'Air gap correction:', cTorq
    CALL Info('MagnetoDynamics2D',Message,Level=8)
    Torq = Ctorq * Torq
@@ -1523,6 +1547,8 @@ CONTAINS
     IF(.NOT.ASSOCIATED(Parent)) THEN
       Parent=>Element % BoundaryInfo % Right
     END IF
+    IF(.NOT.ASSOCIATED(Parent)) RETURN
+
     Material => GetMaterial(Parent)
     CALL GetReluctivity(Material,R,n,Parent)
 
@@ -1666,11 +1692,15 @@ CONTAINS
             x = Mesh % Nodes % x(k)
             y = Mesh % Nodes % y(k)
             k = Perm(k)
-            b(2*k-1) = y * Bx(j) - x * By(j)
-            b(2*k) = y * Bxim(j) - x * Byim(j)
-            CALL ZeroRow(A, 2*k-1)
-            CALL ZeroRow(A, 2*k)
-            CALL AddToCmplxMatrixElement(A, 2*k-1, 2*k-1, 1._dp, 0._dp)
+            !b(2*k-1) = y * Bx(j) - x * By(j)
+            !b(2*k) = y * Bxim(j) - x * Byim(j)
+
+            CALL UpdateDirichletDof( A, 2*k-1, y * Bx(j) - x * By(j) )
+            CALL UpdateDirichletDof( A, 2*k, y * Bxim(j) - x * Byim(j) )
+
+            !CALL ZeroRow(A, 2*k-1)
+            !CALL ZeroRow(A, 2*k)
+            !CALL AddToCmplxMatrixElement(A, 2*k-1, 2*k-1, 1._dp, 0._dp)
           END DO 
         END IF  
       END IF  
@@ -2238,6 +2268,7 @@ CONTAINS
       
       IF (BodyVolumesCompute) THEN
         BodyId = GetBody()
+        BodyVolumes(BodyId) = 0._dp
       END IF
 
       IF (ComplexPowerCompute) THEN
@@ -2424,6 +2455,19 @@ CONTAINS
           BodyCurrent(1,BodyId) = BodyCurrent(1,BodyId) + Weight * BatIp(7)
           IF (Fluxdofs==4) THEN
             BodyCurrent(2,BodyId) = BodyCurrent(2,BodyId) + Weight * BatIp(8)
+          END IF
+        END IF
+
+        IF (BodyVolumesCompute) BodyVolumes(BodyId) = BodyVolumes(BodyId) + Weight * ModelDepth
+       
+        IF (AverageBCompute) THEN
+          IF (BodyAverageBCompute(BodyId)) THEN
+             BodyAvBre(1,BodyId) = BodyAvBre(1,BodyId) + Weight * BAtIp(1)
+             BodyAvBre(2,BodyId) = BodyAvBre(2,BodyId) + Weight * BAtIp(2)
+             IF (Fluxdofs==4) THEN
+               BodyAvBim(1,BodyId) = BodyAvBim(1,BodyId) + Weight * BAtIp(3)
+               BodyAvBim(2,BodyId) = BodyAvBim(2,BodyId) + Weight * BAtIp(4)
+             END IF
           END IF
         END IF
 

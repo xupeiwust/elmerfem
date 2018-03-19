@@ -70,7 +70,7 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
        DisplacementMode, MaskExists, GotVeloVar, GotUpdateVar, Tangled,&
        DeTangle, ComputeTangledMask = .FALSE., Reinitialize, &
        MidLayerExists, WriteMappedMeshToDisk = .FALSE., GotBaseVar, &
-       BaseDisplaceFirst
+       BaseDisplaceFirst, RecompStab
   REAL(KIND=dp) :: UnitVector(3),x0loc,x0bot,x0top,x0mid,xloc,wtop,BotVal,TopVal,&
        TopVal0, BotVal0, MidVal, ElemVector(3),DotPro,Eps,Length, MinHeight
   REAL(KIND=dp) :: at0,at1,at2,Heps
@@ -104,6 +104,9 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
   
   Reinitialize = ListGetLogical(SolverParams, "Always Detect Structure", Found)
   IF(.NOT. Found) Reinitialize = .FALSE.
+
+  RecompStab = ListGetLogical(SolverParams, "Recompute Stabilization", Found)
+  IF(.NOT. Found) RecompStab = .FALSE.
 
   IF( (.NOT. Initialized) .OR. Reinitialize ) THEN
     IF(ASSOCIATED(BotPointer)) DEALLOCATE(BotPointer)
@@ -402,6 +405,9 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
     IF( TopMode == 1 ) THEN
       TopVal = TopVal0
     ELSE IF(TopMode == 2) THEN
+      IF( TopPerm( itop ) == 0 ) THEN
+        CALL Fatal('StructuredMeshMapper','Top surface variable perm is zero!')
+      END IF
       TopVal = TopField(TopPerm(itop))
     ELSE IF(TopMode == 3) THEN
       TopVal = Field(itop)
@@ -416,6 +422,9 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
     IF( BotMode == 1 ) THEN
       BotVal = BotVal0 
     ELSE IF(BotMode == 2) THEN
+      IF( BotPerm( ibot ) == 0 ) THEN
+        CALL Fatal('StructuredMeshMapper','Bottom surface variable perm is zero!')
+      END IF
       BotVal = BotField(BotPerm(ibot))
     ELSE IF(BotMode == 3) THEN    
       BotVal = Field(ibot)
@@ -545,6 +554,7 @@ SUBROUTINE StructuredMeshMapper( Model,Solver,dt,Transient )
 
   Visited = .TRUE.
 
+  IF(RecompStab) CALL MeshStabParams(Mesh)
 
 CONTAINS
 

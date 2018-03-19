@@ -309,7 +309,7 @@ CONTAINS
     END IF
       
     Var => VariableGet( Model % Variables, VarName )
-    IF(.NOT. ASSOCIATED( Var ) ) THEN
+    IF( .NOT. ASSOCIATED( Var ) ) THEN
       Var => VariableGet( Model % Variables, TRIM(VarName)//' 1' )
       IF( ASSOCIATED( Var ) ) THEN
         DO j=2,99
@@ -327,6 +327,8 @@ CONTAINS
 
     IF( PRESENT( NoComponents ) ) NoComponents = k
 
+    CALL Info('VariableGetN','Variable: '//TRIM(VarName)//': '//TRIM(I2S(k)),Level=31)
+ 
   END FUNCTION VariableGetN
 
 
@@ -628,11 +630,16 @@ CONTAINS
       Var => VariableGetN( ivar, comps ) 
       IF( comps >= 2 ) THEN
         Var2 => VariableGetN( ivar, component = 2 ) 
+      ELSE
+        Var2 => NULL()
       END IF
       IF( comps >= 3 ) THEN
         Var3 => VariableGetN( ivar, component = 3 ) 
+      ELSE
+        Var3 => NULL()
       END IF
-        
+
+      
       IF( PRESENT( LocalCoord ) ) THEN
         
         CALL GetElementNodes(Nodes, Element) 
@@ -734,11 +741,11 @@ CONTAINS
               END DO
 
               IF( comps >= 2 ) THEN
-                Values(No+ii) = Values(No+ii) + PtoBasis(k) * &
+                Values(No+2) = Values(No+2) + PtoBasis(k) * &
                     Var2 % Values(l)
               END IF
               IF( comps >= 3 ) THEN
-                Values(No+ii) = Values(No+ii) + PtoBasis(k) * &
+                Values(No+3) = Values(No+3) + PtoBasis(k) * &
                     Var3 % Values(l)
               END IF
                 
@@ -946,6 +953,8 @@ CONTAINS
 
     IF ( .NOT. FileNameQualified(SideFile) ) THEN
       OutputDirectory = GetString( Params,'Output Directory',GotIt) 
+      IF(.NOT. GotIt ) OutputDirectory = GetString( Model % Simulation,&
+          'Output Directory',GotIt)
       IF( GotIt .AND. LEN_TRIM(OutputDirectory) > 0 ) THEN
         SideFile = TRIM(OutputDirectory)// '/' //TRIM(SideFile)
         IF( Solver % TimesVisited == 0 ) THEN
@@ -1788,6 +1797,11 @@ CONTAINS
       DateStr = GetCompilationDate( GotIt )
       IF( GotIt ) THEN
         WRITE( 10,'(A)') 'Elmer compilation date: '//TRIM(DateStr)
+      END IF
+
+      DateStr = GetSifName( GotIt )
+      IF( GotIt ) THEN
+        WRITE( 10,'(A)') 'Solver input file: '//TRIM(DateStr)
       END IF
       
       DateStr = FormatDate()

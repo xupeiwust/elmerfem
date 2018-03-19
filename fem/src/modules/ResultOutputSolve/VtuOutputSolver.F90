@@ -63,13 +63,14 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   INTEGER :: NumberOfGeomNodes, NumberOfDofNodes, NumberOfElements, ParallelNodes, ParallelElements, Sweep
   TYPE(Element_t), POINTER :: CurrentElement, LeftElem, RightElem
   TYPE(ValueList_t),POINTER :: Params
-  INTEGER :: MaxModes, MaxModes2, BCOffset, ElemFirst, ElemLast, LeftIndex, RightIndex, discontMesh
+  INTEGER :: MaxModes, MaxModes2, BCOffset, ElemFirst, ElemLast, LeftIndex, RightIndex, &
+      discontMesh, OutputMeshes
   INTEGER, POINTER :: ActiveModes(:), ActiveModes2(:), Indexes(:)
   LOGICAL :: GotActiveModes, GotActiveModes2, EigenAnalysis, ConstraintAnalysis, &
       WriteIds, SaveBoundariesOnly, SaveBulkOnly, SaveLinear, &
       GotMaskName, NoPermutation, SaveElemental, SaveNodal, GotMaskCond
   LOGICAL, ALLOCATABLE :: ActiveElem(:)
-  INTEGER, ALLOCATABLE :: BodyVisited(:)
+  INTEGER, ALLOCATABLE :: BodyVisited(:),GeometryBodyMap(:),GeometryBCMap(:)
   REAL(KIND=dp), ALLOCATABLE :: MaskCond(:)
 
 ! Parameters for buffered binary output
@@ -121,6 +122,8 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   END IF
   IntSize = KIND(i)
 
+  OutputMeshes = ListGetInteger(Params,'Number of Output Meshes',GotIt)
+
   Partitions = ParEnv % PEs
   Part = ParEnv % MyPE
   Parallel = (Partitions > 1) .OR. GetLogical(Params,'Enforce Parallel format',GotIt)
@@ -131,16 +134,47 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
 
   FilePrefix = GetString( Params,'Output File Name',GotIt )
   IF ( .NOT.GotIt ) FilePrefix = "Output"
-  IF ( Mesh % DiscontMesh ) FilePrefix = TRIM(FilePrefix)//'_discont'    
-
+  IF ( Mesh % DiscontMesh ) THEN
+    FilePrefix = 'discont_'//TRIM(FilePrefix)    
+  ELSE IF( OutputMeshes > 1 ) THEN
+    i = INDEX( Mesh % Name,'/',.TRUE.)
+    IF( i > 0 ) THEN      
+      FilePrefix = TRIM(Mesh % Name(i+1:))//'_'//TRIM(FilePrefix)
+    ELSE
+      FilePrefix = TRIM(Mesh % Name)//'_'//TRIM(FilePrefix)      
+    END IF
+  END IF
+    
+  
   IF ( nTime == 1 ) THEN
     CALL Info('VtuOutputSolver','Saving results in VTK XML format with prefix: '//TRIM(FilePrefix))
     WRITE( Message,'(A,I0)') 'Saving number of partitions: ',Partitions
     CALL Info('VtuOutputSolver', Message )
   END IF
 
+
+  BaseFile = FilePrefix
+  IF ( .NOT. FileNameQualified(FilePrefix) ) THEN
+    Dir = GetString( Params,'Output Directory',GotIt) 
+    IF(.NOT. GotIt) Dir = GetString( Model % Simulation,&
+        'Output Directory',GotIt)     
+    IF( GotIt ) THEN
+      IF( LEN_TRIM(Dir) > 0 ) THEN
+        BaseFile = TRIM(Dir)// '/' //TRIM(FilePrefix)
+        CALL MakeDirectory( TRIM(Dir) // CHAR(0) )
+      END IF
+    ELSE 
+      BaseFile = TRIM(OutputPath) // '/' // TRIM(Mesh % Name) // '/' //TRIM(FilePrefix)
+    END IF
+  END IF
+  CALL Info('VtuOutputSolver','Full filename base is: '//TRIM(Basefile), Level=10 )
+
+  
+
+  
   FixedMesh = ListGetLogical(Params,'Fixed Mesh',GotIt)
 
+  
   !------------------------------------------------------------------------------
   ! Initialize stuff for masked saving
   !------------------------------------------------------------------------------
@@ -483,19 +517,6 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     IF( .NOT. GotIt ) BufferSize = MAX( NumberOfDofNodes, NumberOfElements )
   END IF
 
-  BaseFile = FilePrefix
-  IF ( .NOT. FileNameQualified(FilePrefix) ) THEN
-    Dir = GetString( Params,'Output Directory',GotIt) 
-    IF( GotIt ) THEN
-      IF( LEN_TRIM(Dir) > 0 ) THEN
-        BaseFile = TRIM(Dir)// '/' //TRIM(FilePrefix)
-        CALL MakeDirectory( TRIM(Dir) // CHAR(0) )
-      END IF
-    ELSE 
-      BaseFile = TRIM(OutputPath) // '/' // TRIM(Mesh % Name) // '/' //TRIM(FilePrefix)
-    END IF
-  END IF
-  CALL Info('VtuOutputSolver','Full filename base is: '//TRIM(Basefile), Level=10 )
 
 
   ActiveModes => ListGetIntegerArray( Params,'Active EigenModes',GotActiveModes ) 
@@ -510,6 +531,10 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
             GetInteger( Model % Solvers(i) % Values,'Eigen System Values', GotIt ) )
         MaxModes = MAX( MaxModes, &
             GetInteger( Model % Solvers(i) % Values,'Harmonic System Values', GotIt ) )       
+        IF( ListGetLogical( Model % Solvers(i) % Values,'Save Scanning Modes',GotIt ) ) THEN
+          MaxModes = MAX( MaxModes, &
+              GetInteger( Model % Solvers(i) % Values,'Scanning Loops', GotIt ) )
+        END IF
       END DO
     END IF     
   END IF
@@ -543,16 +568,56 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
   BcOffset = 0
   WriteIds = GetLogical( Params,'Save Geometry Ids',GotIt)  
   IF( WriteIds ) THEN
-    IF( ElemFirst <= Mesh % NumberOfBulkElements ) THEN
-      BCOffset = 100
-      DO WHILE( BCOffset <= Model % NumberOfBodies ) 
-        BCOffset = 10 * BCOffset
+    ! Create the mapping for body ids, default is unity mapping
+    ALLOCATE( GeometryBodyMap( CurrentModel % NumberOfBodies ) )
+    j = ListGetInteger( Params,'Default Body Id',GotIt )
+    IF( GotIt ) THEN
+      GeometryBodyMap = j
+    ELSE
+      DO i=1,CurrentModel % NumberOfBodies
+        GeometryBodyMap(i) = i
       END DO
-      CALL Info('VtuOutputSolver','Setting offset for boundary entities: '&
-          //TRIM(I2S(BCOffset)),Level=6)
     END IF
+
+    ! User given mapping
+    DO i=1,CurrentModel % NumberOfBodies
+      j = ListGetInteger( CurrentModel % Bodies(i) % Values,'Geometry Id',GotIt)
+      IF( GotIt ) GeometryBodyMap(i) = j
+    END DO
+    !PRINT *,'GeometryBodyMap:',GeometryBodyMap
+
+    ! Create mapping for bc ids, default is unity mapping with offset
+    ALLOCATE( GeometryBCMap( CurrentModel % NumberOfBCs ) )
+    j = ListGetInteger( Params,'Default BC Id',GotIt )
+    IF( GotIt ) THEN
+      GeometryBCMap = j
+    ELSE
+      ! Determine a default offset
+      BCOffset = ListGetInteger( Params,'BC Id Offset',GotIt )
+      IF( .NOT. GotIt ) THEN
+        IF( ElemFirst <= Mesh % NumberOfBulkElements ) THEN
+          BCOffset = 100
+          DO WHILE( BCOffset <= Model % NumberOfBodies ) 
+            BCOffset = 10 * BCOffset
+          END DO
+          CALL Info('VtuOutputSolver','Setting offset for boundary entities: '&
+              //TRIM(I2S(BCOffset)),Level=6)
+        END IF
+      END IF
+      DO i=1,CurrentModel % NumberOfBCs
+        GeometryBCMap(i) = i + BCOffSet
+      END DO
+    END IF
+
+    ! User given bc mapping
+    DO i=1,CurrentModel % NumberOfBCs
+      j = ListGetInteger( CurrentModel % BCs(i) % Values,'Geometry Id',GotIt)
+      IF( GotIt ) GeometryBCMap(i) = j
+    END DO
+    !PRINT *,'GeometryBcMap:',GeometryBcMap
+
   END IF
-    
+  
 
  100   CONTINUE
 
@@ -627,6 +692,11 @@ SUBROUTINE VtuOutputSolver( Model,Solver,dt,TransientSimulation )
     DEALLOCATE( ActiveElem ) 
   END IF
 
+  IF( WriteIds ) THEN  
+    DEALLOCATE( GeometryBodyMap, GeometryBcMap )
+  END IF
+ 
+  
   CALL Info('VtuOutputSolver','All done for now',Level=10)     
 
 
@@ -807,11 +877,11 @@ CONTAINS
   FUNCTION CheckAnyElementalField() RESULT ( HaveAnyElemental ) 
 
     LOGICAL :: HaveAnyElemental
-    INTEGER :: Rank, Vari
+    INTEGER :: Rank, Vari, VarType
     CHARACTER(LEN=1024) :: Txt, FieldName
     TYPE(Variable_t), POINTER :: Solution
     LOGICAL :: Found
-
+    
     HaveAnyElemental = .FALSE.
 
     DO Rank = 0,1
@@ -827,8 +897,12 @@ CONTAINS
           Solution => VariableGet( Model % Mesh % Variables, TRIM(FieldName)//' 1')
         END IF
         IF( .NOT. ASSOCIATED( Solution ) ) CYCLE
+
+        VarType = Solution % Type
         
-        IF ( Solution % TYPE == Variable_on_nodes_on_elements ) THEN
+        IF ( VarType == Variable_on_nodes_on_elements .OR. &
+            VarType == Variable_on_elements .OR. &
+            VarType == Variable_on_gauss_points ) THEN
           HaveAnyElemental = .TRUE.
           EXIT
         END IF
@@ -850,6 +924,7 @@ CONTAINS
 
     NoAve = 0
     Var => Mesh % Variables
+    
     DO WHILE( ASSOCIATED( Var ) ) 
       
       ! Skip if variable is not active for saving       
@@ -892,7 +967,7 @@ CONTAINS
     INTEGER, PARAMETER :: VtuUnit = 58
     TYPE(Variable_t), POINTER :: Var,Var1
     CHARACTER(LEN=512) :: str
-    INTEGER :: i,ii,j,jj,k,dofs,Rank,cumn,n,dim,vari,sdofs,dispdofs, disp2dofs, Offset, &
+    INTEGER :: i,ii,j,jj,k,dofs,Rank,cumn,n,m,dim,vari,sdofs,dispdofs, disp2dofs, Offset, &
         NoFields, NoFields2, IndField, iField, NoModes, NoModes2, NoFieldsWritten
     CHARACTER(LEN=1024) :: Txt, ScalarFieldName, VectorFieldName, TensorFieldName, &
         FieldName, FieldName2, OutStr
@@ -906,7 +981,7 @@ CONTAINS
     REAL(KIND=dp) :: x,y,z, val,ElemVectVal(3)
     INTEGER, ALLOCATABLE, TARGET :: ElemInd(:)
     INTEGER, POINTER :: NodeIndexes(:)
-    INTEGER :: TmpIndexes(27)
+    INTEGER :: TmpIndexes(27), VarType
 
     COMPLEX(KIND=dp), POINTER :: EigenVectors(:,:)
     REAL(KIND=dp), POINTER :: ConstraintModes(:,:)
@@ -1039,9 +1114,15 @@ CONTAINS
           END IF
 
           CALL Info('VtuOutputSolver','Saving variable: '//TRIM(FieldName),Level=10)
+          
+          VarType = Solution % Type
 
-          IF ( Solution % TYPE == Variable_on_nodes_on_elements ) THEN
+          IF ( VarType == Variable_on_nodes_on_elements ) THEN
             IF( .NOT. ( ( DG .OR. DN ) .AND. SaveElemental ) ) CYCLE
+          ELSE IF( VarType == Variable_on_elements ) THEN
+            CYCLE
+          ELSE IF( VarType == Variable_on_gauss_points ) THEN
+            CYCLE
           END IF
 
           ! Default is to save the field only once
@@ -1115,7 +1196,8 @@ CONTAINS
           Perm => Solution % Perm
           dofs = Solution % DOFs
           Values => Solution % Values
-
+          VarType = Solution % Type
+          
           !---------------------------------------------------------------------
           ! Some vectors are defined by a set of components (either 2 or 3)
           !---------------------------------------------------------------------
@@ -1173,7 +1255,7 @@ CONTAINS
           !---------------------------------------------------------------------
           DO iField = 1, NoFields + NoFields2          
 
-            IF( ( DG .OR. DN ) .AND. Solution % TYPE == Variable_on_nodes_on_elements ) THEN
+            IF( ( DG .OR. DN ) .AND. VarType == Variable_on_nodes_on_elements ) THEN
               CALL Info('WriteVTUFile','Setting field type to discontinuous',Level=12)
               InvFieldPerm => InvDgPerm
             ELSE
@@ -1363,12 +1445,16 @@ CONTAINS
             END IF
           END IF
 
-          IF (Solution % TYPE /= Variable_on_nodes_on_elements ) CYCLE
+          VarType = Solution % Type
+          Found = ( VarType == Variable_on_nodes_on_elements .OR. &
+              VarType == Variable_on_gauss_points .OR. &
+              VarType == Variable_on_elements )
+          IF (.NOT. Found ) CYCLE
 
           Perm => Solution % Perm
           Dofs = Solution % DOFs
           Values => Solution % Values
-
+          
           !---------------------------------------------------------------------
           ! Some vectors are defined by a set of components (either 2 or 3)
           !---------------------------------------------------------------------
@@ -1427,52 +1513,105 @@ CONTAINS
 
               ElemVectVal = 0._dp
               ElemInd = 0
+              
+              IF( VarType == Variable_on_nodes_on_elements ) THEN
 
-              IF( SaveLinear ) THEN
-                n = GetElementCorners( CurrentElement )
-              ELSE
-                n = GetElementNOFNodes( CurrentElement )
-              END IF
+                IF( SaveLinear ) THEN
+                  n = GetElementCorners( CurrentElement )
+                ELSE
+                  n = GetElementNOFNodes( CurrentElement )
+                END IF
 
-              IF ( ASSOCIATED(CurrentElement % BoundaryInfo) .AND. .NOT. &
-                  ASSOCIATED(CurrentElement % DGIndexes) ) THEN
+                IF ( ASSOCIATED(CurrentElement % BoundaryInfo) .AND. .NOT. &
+                    ASSOCIATED(CurrentElement % DGIndexes) ) THEN
 
-                Parent => CurrentElement % BoundaryInfo % Left
-                IF (.NOT.ASSOCIATED(Parent) ) &
-                    Parent => CurrentElement % BoundaryInfo % Right
+                  Parent => CurrentElement % BoundaryInfo % Left
+                  IF (.NOT.ASSOCIATED(Parent) ) &
+                      Parent => CurrentElement % BoundaryInfo % Right
 
-                IF ( ASSOCIATED(Parent) ) THEN
-                  IF (ASSOCIATED(Parent % DGIndexes) ) THEN
-                    DO j=1,n
-                      DO k=1,Parent % TYPE % NumberOfNodes
-                        IF(Currentelement % NodeIndexes(j) == Parent % NodeIndexes(k)) &
-                            ElemInd(j) = Perm( Parent % DGIndexes(k) )
+                  IF ( ASSOCIATED(Parent) ) THEN
+                    IF (ASSOCIATED(Parent % DGIndexes) ) THEN
+                      DO j=1,n
+                        DO k=1,Parent % TYPE % NumberOfNodes
+                          IF(Currentelement % NodeIndexes(j) == Parent % NodeIndexes(k)) &
+                              ElemInd(j) = Perm( Parent % DGIndexes(k) )
+                        END DO
                       END DO
+                    END IF
+                  END IF
+                ELSE
+                  ElemInd(1:n) = Perm( CurrentElement % DGIndexes(1:n) )
+                END IF
+
+                IF ( ALL(ElemInd(1:n) > 0)) THEN
+                  IF( sdofs == 1 ) THEN
+                    ElemVectVal(1) = SUM(Values(ElemInd(1:n))) / n
+                  ELSE
+                    DO k=1,sdofs
+                      IF( k > dofs ) THEN
+                        ElemVectVal(k) = 0.0_dp
+                      ELSE IF(ComponentVector) THEN
+                        IF (k==1) ElemVectVal(k) = SUM(Values(ElemInd(1:n)))/n
+                        IF (k==2) ElemVectVal(k) = SUM(Values2(ElemInd(1:n)))/n
+                        IF (k==3) ElemVectVal(k) = SUM(Values3(ElemInd(1:n)))/n
+                      ELSE
+                        ElemVectVal(k) = SUM(Values(dofs*(ElemInd(1:n)-1)+k))/n
+                      END IF
+                    END DO
+                  END IF
+                END IF 
+                
+              ELSE IF( VarType == Variable_on_gauss_points ) THEN
+
+                m = CurrentElement % ElementIndex
+                n = Perm(m+1)-Perm(m)
+                IF( n > 0 ) THEN
+                  DO j=1,n
+                    ElemInd(j) = Perm(m)+j
+                  END DO
+                  
+                  IF( sdofs == 1 ) THEN
+                    ElemVectVal(1) = SUM(Values(ElemInd(1:n))) / n
+                  ELSE
+                    DO k=1,sdofs
+                      IF( k > dofs ) THEN
+                        ElemVectVal(k) = 0.0_dp
+                      ELSE IF(ComponentVector) THEN
+                        IF (k==1) ElemVectVal(k) = SUM(Values(ElemInd(1:n)))/n
+                        IF (k==2) ElemVectVal(k) = SUM(Values2(ElemInd(1:n)))/n
+                        IF (k==3) ElemVectVal(k) = SUM(Values3(ElemInd(1:n)))/n
+                      ELSE
+                        ElemVectVal(k) = SUM(Values(dofs*(ElemInd(1:n)-1)+k))/n
+                      END IF
                     END DO
                   END IF
                 END IF
-              ELSE
-                ElemInd(1:n) = Perm( CurrentElement % DGIndexes(1:n) )
-              END IF
+                
 
-              IF ( ALL(ElemInd(1:n) > 0)) THEN
+              ELSE IF( VarType == Variable_on_elements ) THEN
+                
+                m = CurrentElement % ElementIndex
+                
+                IF( ASSOCIATED( Perm ) ) m = Perm( m ) 
+                
                 IF( sdofs == 1 ) THEN
-                  ElemVectVal(1) = SUM(Values(ElemInd(1:n))) / n
+                  ElemVectVal(1) = Values(m) 
                 ELSE
                   DO k=1,sdofs
                     IF( k > dofs ) THEN
                       ElemVectVal(k) = 0.0_dp
                     ELSE IF(ComponentVector) THEN
-                      IF (k==1) ElemVectVal(k) = SUM(Values(ElemInd(1:n)))/n
-                      IF (k==2) ElemVectVal(k) = SUM(Values2(ElemInd(1:n)))/n
-                      IF (k==3) ElemVectVal(k) = SUM(Values3(ElemInd(1:n)))/n
+                      IF (k==1) ElemVectVal(k) = Values(m)
+                      IF (k==2) ElemVectVal(k) = Values2(m)
+                      IF (k==3) ElemVectVal(k) = Values3(m)
                     ELSE
-                      ElemVectVal(k) = SUM(Values(dofs*(ElemInd(1:n)-1)+k))/n
+                      ElemVectVal(k) = Values(dofs*(m-1)+k)
                     END IF
                   END DO
                 END IF
+                
               END IF
-
+                
               DO k=1,sdofs
                 CALL AscBinRealWrite( ElemVectVal(k) )
               END DO
@@ -1525,9 +1664,11 @@ CONTAINS
           CurrentElement => Model % Elements(i)
 
           IF( i <= Mesh % NumberOfBulkElements ) THEN
-            j = CurrentElement % BodyId
+            j = CurrentElement % BodyId 
+            j = GeometryBodyMap( j )
           ELSE
-            j = GetBCId( CurrentElement ) + BCOffset
+            j = GetBCId( CurrentElement ) 
+            IF ( j>=1 .AND. j<= SIZE(GeometryBCMap)) j = GeometryBCMap( j )
           END IF
 
           CALL AscBinIntegerWrite( j )
@@ -1900,7 +2041,7 @@ CONTAINS
     LOGICAL, POINTER :: ActivePartition(:)
     TYPE(Variable_t), POINTER :: Solution
     INTEGER, POINTER :: Perm(:)
-    INTEGER :: Active, NoActive, ierr, NoFields, NoModes, IndField, iField
+    INTEGER :: Active, NoActive, ierr, NoFields, NoModes, IndField, iField, VarType
     REAL(KIND=dp), POINTER :: Values(:)
     COMPLEX(KIND=dp), POINTER :: EigenVectors(:,:)
     TYPE(Element_t), POINTER :: CurrentElement
@@ -2001,8 +2142,9 @@ CONTAINS
             CYCLE
           END IF
         END IF
-
-        IF( Solution % TYPE == Variable_on_nodes_on_elements ) THEN
+        
+        VarType = Solution % Type
+        IF( VarType == Variable_on_nodes_on_elements ) THEN
           IF( .NOT. ( ( DG .OR. DN ) .AND. SaveElemental ) ) CYCLE
         END IF
 
@@ -2112,7 +2254,8 @@ CONTAINS
             END IF
           END IF
           
-          IF( Solution % TYPE /= Variable_on_nodes_on_elements ) CYCLE
+          VarType = Solution % Type
+          IF( VarType /= Variable_on_nodes_on_elements ) CYCLE
 
           IF( ASSOCIATED(Solution % EigenVectors)) THEN
             NoModes = SIZE( Solution % EigenValues )

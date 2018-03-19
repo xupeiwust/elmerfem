@@ -1,3 +1,43 @@
+!/*****************************************************************************/
+! *
+! *  Elmer, A Finite Element Software for Multiphysical Problems
+! *
+! *  Copyright 1st April 1995 - , CSC - IT Center for Science Ltd., Finland
+! * 
+! *  This program is free software; you can redistribute it and/or
+! *  modify it under the terms of the GNU General Public License
+! *  as published by the Free Software Foundation; either version 2
+! *  of the License, or (at your option) any later version.
+! * 
+! *  This program is distributed in the hope that it will be useful,
+! *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+! *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+! *  GNU General Public License for more details.
+! *
+! *  You should have received a copy of the GNU General Public License
+! *  along with this program (in file fem/GPL-2); if not, write to the 
+! *  Free Software Foundation, Inc., 51 Franklin Street, Fifth Floor, 
+! *  Boston, MA 02110-1301, USA.
+! *
+! *****************************************************************************/
+!
+!/******************************************************************************
+! *
+! *  Module for computing the wire direction for coils
+! *
+! *  Author: Eelis Takala
+! *  Email:   eelis.takala@trafotek.fi
+! *  Web:     http://www.trafotek.fi
+! *  Address: Trafotek
+! *           Kaarinantie 700
+! *           20540 Turku
+! *
+! *  Original Date: December 2015
+! *
+! *****************************************************************************/
+ 
+!> \ingroup Solvers
+!> \{
 !------------------------------------------------------------------------------
 SUBROUTINE Wsolve_Init0(Model,Solver,dt,Transient)
 !------------------------------------------------------------------------------
@@ -49,6 +89,7 @@ SUBROUTINE Wsolve_Init0(Model,Solver,dt,Transient)
   Solvers(n+1) % Values => ListAllocate()
   SolverParams => Solvers(n+1) % Values
   CALL ListAddLogical( SolverParams, 'Discontinuous Galerkin', .TRUE. )
+  Solvers(n+1) % DG = .TRUE.
   Solvers(n+1) % PROCEDURE = 0
   Solvers(n+1) % ActiveElements => NULL()
   CALL ListAddString( SolverParams, 'Exec Solver', 'never' )
@@ -138,7 +179,7 @@ SUBROUTINE Wsolve( Model,Solver,dt,TransientSimulation )
   TYPE(Element_t),POINTER :: Element
 
   REAL(KIND=dp) :: Norm
-  INTEGER :: n, nb, nd, t, istat, active, i, j
+  INTEGER :: n, nb, nd, t, istat, active, i, j, MaxN
   TYPE(Mesh_t), POINTER :: Mesh
   TYPE(ValueList_t), POINTER :: BodyForce, BC, BodyParams, Material
   TYPE(ValueList_t), POINTER :: CompParams
@@ -164,7 +205,7 @@ SUBROUTINE Wsolve( Model,Solver,dt,TransientSimulation )
         CALL Fatal( 'Wsolve', 'Memory allocation error.' )
      END IF
 
-
+     MaxN = N
      AllocationsDone = .TRUE.
   END IF
 
@@ -178,6 +219,14 @@ SUBROUTINE Wsolve( Model,Solver,dt,TransientSimulation )
       nd = GetElementNOFDOFs()
       nb = GetElementNOFBDOFs()
 
+      IF (SIZE(Tcoef,3) /= n) THEN
+        DEALLOCATE(Tcoef,RotM)
+        ALLOCATE(Tcoef(3,3,N), RotM(3,3,N), STAT=istat)
+        IF ( istat /= 0 ) THEN
+          CALL Fatal( 'Wsolve', 'Memory allocation error.' )
+        END IF
+      END IF
+      
       LOAD = 0.0d0
       BodyForce => GetBodyForce()
       IF ( ASSOCIATED(BodyForce) ) &
@@ -488,7 +537,7 @@ CONTAINS
     REAL(KIND=dp) :: Volumes(nofbodies)
     REAL(KIND=dp) :: Wnorms(nofbodies)
     REAL(KIND=dp) :: WnormCoeffs(nofbodies)
-    INTEGER :: Active, t, n
+    INTEGER :: Active, t, n, i
     TYPE(Element_t),POINTER :: Element
     LOGICAL :: CoilBody, Found, stat
     CHARACTER(LEN=MAX_NAME_LEN):: CoilType
@@ -517,10 +566,16 @@ CONTAINS
       END IF 
     END DO
    
-    WnormCoeffs(Element % BodyId) = ParallelReduction(WnormCoeffs(Element % BodyId)) 
-    Volumes(Element % BodyId) = ParallelReduction(Volumes(Element % BodyId)) 
-    Wnorms(Element % BodyId) = WnormCoeffs(Element % BodyId) &
-                               /   Volumes(Element % BodyId)
+    DO i=1, nofbodies
+       WnormCoeffs(i) = ParallelReduction(WnormCoeffs(i)) 
+       Volumes(i) = ParallelReduction(Volumes(i))
+       IF (Volumes(i) /= 0.0_dp) THEN 
+         Wnorms(i) = WnormCoeffs(i) &
+               /   Volumes(i)
+       ELSE
+         Wnorms(i) = 0.0_dp
+       END IF
+    END DO
 
     CALL Info('GetWnormsForBodies', &
          'W norm computed in components.', level=9)

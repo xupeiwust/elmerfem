@@ -399,6 +399,9 @@ SUBROUTINE StatElecSolver( Model,Solver,dt,TransientSimulation )
   CALL Info( 'StatElecSolve', 'STATELEC SOLVER:  ', Level=4 )
   CALL Info( 'StatElecSolve', '-------------------------------------',Level=4 )
 
+  CALL DefaultStart()
+
+  
   DO iter = 1, NonlinearIter
      at  = CPUTime()
      at0 = RealTime()
@@ -590,6 +593,9 @@ SUBROUTINE StatElecSolver( Model,Solver,dt,TransientSimulation )
    IF ( CalculateEnergy ) THEN
      CALL InvalidateVariable( Model % Meshes, Solver % Mesh, 'Electric Energy Density')
    END IF
+
+   CALL DefaultFinish()
+
    
 !------------------------------------------------------------------------------
  
@@ -836,8 +842,6 @@ SUBROUTINE StatElecSolver( Model,Solver,dt,TransientSimulation )
            MinPotential = MIN(MinPotential, MINVAL(Load(1:n)))
            MaxPotential = MAX(MaxPotential, MAXVAL(Load(1:n)))             
          END IF
-
-         IF( .NOT. PossibleFluxElement(CurrentElement) ) CYCLE
 
          ElementNodes % x(1:n) = Mesh % Nodes % x(NodeIndexes)
          ElementNodes % y(1:n) = Mesh % Nodes % y(NodeIndexes)
@@ -1382,7 +1386,7 @@ SUBROUTINE StatElecSolver( Model,Solver,dt,TransientSimulation )
            Force(p) = Force(p) + S*L*Basis(p)
 
            IF ( PiezoMaterial ) THEN
-             PiezoForce(p) = PiezoForce(p) + S * SUM( dBasisdx(p,1:3) * PiezoLoad(1:3) )
+             PiezoForce(p) = PiezoForce(p) + S * SUM( dBasisdx(p,1:Dim) * PiezoLoad(1:Dim) )
            END IF
 
         END DO

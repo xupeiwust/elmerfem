@@ -52,6 +52,7 @@ SUBROUTINE ThicknessSolver( Model,Solver,dt,TransientSimulation )
        SubstantialSurface = .TRUE.,&
        UseBodyForce = .TRUE., ApplyDirichlet=.FALSE.,  ALEFormulation=.FALSE. , &
        ConvectionVar,Compute_dhdt,UnFoundFatal=.TRUE.
+  LOGICAL :: Passive
   LOGICAL, ALLOCATABLE ::  LimitedSolution(:,:), ActiveNode(:,:)
 
   INTEGER :: & 
@@ -251,7 +252,8 @@ SUBROUTINE ThicknessSolver( Model,Solver,dt,TransientSimulation )
      AllocationsDone = .TRUE.
      ActiveNode = .FALSE.
      ResidualVector = 0.0_dp
-   END IF
+  END IF
+  LimitedSolution=.FALSE.
 
 
   !------------------------------------------------------------------------------
@@ -314,11 +316,12 @@ SUBROUTINE ThicknessSolver( Model,Solver,dt,TransientSimulation )
      !------------------------------------------------------------------------------
      DO t=1,Solver % NumberOfActiveElements
         CurrentElement => GetActiveElement(t)
+        Passive=CheckPassiveElement(CurrentElement)
         n = GetElementNOFNodes()
         !PRINT *, "N=", N
         NodeIndexes => CurrentElement % NodeIndexes
 
-        ! set coords of highest occuring dimension to zero (to get correct path element)
+        ! set coords of highest occurring dimension to zero (to get correct path element)
         !-------------------------------------------------------------------------------
         ElementNodes % x(1:n) = Solver % Mesh % Nodes % x(NodeIndexes)
         IF (NSDOFs == 1) THEN
@@ -347,12 +350,12 @@ SUBROUTINE ThicknessSolver( Model,Solver,dt,TransientSimulation )
         !-----------------------------
         LowerLimit(CurrentElement % Nodeindexes(1:N)) = &
              ListGetReal(Material,'Min ' // TRIM(VariableName),n,CurrentElement % NodeIndexes, Found) 
-        LimitedSolution(CurrentElement % Nodeindexes(1:N), 1) = Found
+        IF (.NOT.Passive) LimitedSolution(CurrentElement % Nodeindexes(1:N), 1) = Found
         ! get upper limit for solution 
         !-----------------------------
         UpperLimit(CurrentElement % Nodeindexes(1:N)) = &
              ListGetReal(Material,'Max ' // TRIM(VariableName),n,CurrentElement % NodeIndexes, Found)              
-        LimitedSolution(CurrentElement % Nodeindexes(1:N), 2) = Found
+        IF (.NOT.Passive) LimitedSolution(CurrentElement % Nodeindexes(1:N), 2) = Found
 
         ! get flow soulution and velocity field from it
         !----------------------------------------------

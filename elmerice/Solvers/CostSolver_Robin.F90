@@ -251,7 +251,7 @@ SUBROUTINE CostSolver_Robin( Model,Solver,dt,TransientSimulation )
             End do
 
             Viscosityn = EffectiveViscosity( Viscosity, 1.0_dp, NodalVelon(1,1:np), Nodalvelon(2,1:np), Nodalvelon(3,1:np), &
-                         Parent, ParentNodes, np, np, u, v, w )
+                         Parent, ParentNodes, np, np, u, v, w, LocalIP=t )
             LGradn = MATMUL( NodalVelon(:,1:np), PdBasisdx(1:np,:) )
             SRn = 0.5 * ( LGradn + TRANSPOSE(LGradn) )
             Pressuren = SUM( Nodalvn(DIM+1,1:np)*PBasis(1:np) )
@@ -262,7 +262,7 @@ SUBROUTINE CostSolver_Robin( Model,Solver,dt,TransientSimulation )
 
 
             Viscosityd = EffectiveViscosity( Viscosity, 1.0_dp, Nodalvelod(1,1:np), Nodalvelod(2,1:np), Nodalvelod(3,1:np), &
-                         Parent, ParentNodes, np, np, u, v, w )
+                         Parent, ParentNodes, np, np, u, v, w, LocalIP=i )
             LGradd = MATMUL( NodalVelod(:,1:np), PdBasisdx(1:np,:) )
             SRd = 0.5 * ( LGradd + TRANSPOSE(LGradd) )
             Pressured = SUM( Nodalvd(DIM+1,1:np)*PBasis(1:np) )
@@ -303,11 +303,11 @@ SUBROUTINE CostSolver_Robin( Model,Solver,dt,TransientSimulation )
 
    IF (Parallel) THEN
            CALL MPI_ALLREDUCE(Cost,Cost_S,1,&
-                  MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,ierr)  
+                  MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
            CALL MPI_ALLREDUCE(Cost_surf,Cost_surf_S,1,&
-                  MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,ierr)  
+                  MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
            CALL MPI_ALLREDUCE(Cost_bed,Cost_bed_S,1,&
-                  MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,ierr)  
+                  MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
           CostVar => VariableGet( Solver % Mesh % Variables, CostSolName )
           IF (ASSOCIATED(CostVar)) THEN
                  CostVar % Values(1)=Cost_S

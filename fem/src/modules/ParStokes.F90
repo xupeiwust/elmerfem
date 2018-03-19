@@ -372,6 +372,7 @@ SUBROUTINE StokesSolver( Model,Solver,dt,TransientSimulation )
         SkipPowerlaw = .FALSE.
      END IF
 
+     CALL StartAdvanceOutput( 'StokesSolver', 'Assembly:' )
      DO t=1,Active
         CALL AdvanceOutput(t, Active)        
 
@@ -1280,7 +1281,7 @@ CONTAINS
           IF( ListCheckPresent( Material, 'Viscosity Model' ) ) THEN
              mu = EffectiveViscosity( ViscAtIP, RhoAtIp, Vx, Vy, Vz, &
                   Element, Nodes, n, n, IP % U(t), IP % V(t), &
-                  IP % W(t), muder0 )
+                  IP % W(t), muder0, LocalIP=t )
              ViscNewtonLin = Newton .AND. muder0/= 0.0d0
              IF ( ViscNewtonLin )  Strain = (Grad+TRANSPOSE(Grad))/2
           ELSE

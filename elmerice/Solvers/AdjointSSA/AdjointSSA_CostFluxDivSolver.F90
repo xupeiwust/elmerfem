@@ -35,16 +35,16 @@ SUBROUTINE AdjointSSA_CostFluxDivSolver( Model,Solver,dt,TransientSimulation )
 ! *****************************************************************************
 !------------------------------------------------------------------------------
 !  
-!  Compute a cost function that mesure the ice flux dicergence anomaly
+!  Compute a cost function that measure the ice flux divergence anomaly
 !                 and the required forcing for the SSA adjoint problem
 !     J=int_{Pb dimension} 0.5 * (dhdt{obs} + u.grad(H) + H* div(u) - MB )**2
 !
 !     OUTPUT are : J ; DJDu (==Velocityb variable used as forcing of the SSA adjoint problem)
-!                      DJDZb (optionnal); DJDZs(optionnal)
+!                      DJDZb (optional); DJDZs(optional)
 !
-!     TODO : add a varaiance term to regularise the cost
+!     TODO : add a variance term to regularise the cost
 !
-!    !!!!! BE carefull it will reset Cost , Velocityb, and DJZb; DJDZs to 0 by default !!!!
+!    !!!!! BE careful it will reset Cost , Velocityb, and DJZb; DJDZs to 0 by default !!!!
 !      !!! If other cost and gradient are computed before , 
 !       use "<Reset Cost Value> = False" to add cost and gradient to previously computed values !!!
 !
@@ -273,7 +273,7 @@ SUBROUTINE AdjointSSA_CostFluxDivSolver( Model,Solver,dt,TransientSimulation )
 
        NodeIndexes => Element % NodeIndexes
 
- ! set coords of highest occuring dimension to zero (to get correct path element)
+ ! set coords of highest occurring dimension to zero (to get correct path element)
         !-------------------------------------------------------------------------------
         ElementNodes % x(1:n) = Solver % Mesh % Nodes % x(NodeIndexes)
         IF (DIM == 1) THEN !1D SSA
@@ -407,7 +407,7 @@ SUBROUTINE AdjointSSA_CostFluxDivSolver( Model,Solver,dt,TransientSimulation )
 
     IF (Parallel) THEN
            CALL MPI_ALLREDUCE(Cost,Cost_S,1,&
-                  MPI_DOUBLE_PRECISION,MPI_SUM,MPI_COMM_WORLD,ierr)  
+                  MPI_DOUBLE_PRECISION,MPI_SUM,ELMER_COMM_WORLD,ierr)
 
           IF (Solver % Matrix % ParMatrix % ParEnv % MyPE == 0) then
                  OPEN (12, FILE=CostFile,POSITION='APPEND')

@@ -42,7 +42,7 @@
 !> Subroutine for solving the energy a.k.a. heat equation in various coordinate systems.
 !> \ingroup Solvers
 !------------------------------------------------------------------------------
-   SUBROUTINE HeatSolver( Model,Solver,Timestep,TransientSimulation )
+   RECURSIVE SUBROUTINE HeatSolver( Model,Solver,Timestep,TransientSimulation )
 !------------------------------------------------------------------------------
      USE DiffuseConvective
      USE DiffuseConvectiveGeneral
@@ -587,6 +587,9 @@
 
      Norm = Solver % Variable % Norm
 
+     CALL DefaultStart()
+     
+     
      DO iter=1,NonlinearIter
        at  = CPUTime()
        at0 = RealTime()
@@ -1029,9 +1032,6 @@
 
         n = GetElementNOFNodes()
 
-        ! Check that the dimension of element is suitable for fluxes
-        IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-
         BC => GetBC()
         IF ( .NOT. ASSOCIATED(BC) ) CYCLE
 
@@ -1281,6 +1281,8 @@
    END DO ! time interval
    Solver % dt = Timestep
 
+   CALL DefaultFinish()
+   
 !------------------------------------------------------------------------------
    CALL  ListAddConstReal( Solver % Values,  &
         'Nonlinear System Relaxation Factor', SaveRelax )

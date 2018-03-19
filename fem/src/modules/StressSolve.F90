@@ -261,7 +261,9 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      CALL Info( 'StressSolve', '--------------------------------------------------',Level=4 )
      CALL Info( 'StressSolve', 'Solving displacements from linear elasticity model',Level=4 )     
      CALL Info( 'StressSolve', '--------------------------------------------------',Level=4 )
- 
+
+     CALL DefaultStart()
+     
      DIM = CoordinateSystemDimension()
 !------------------------------------------------------------------------------
 !    Get variables needed for solution
@@ -502,7 +504,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        MaxIter = 2
      END IF
 
-     HarmonicAnalysis = getLogical( SolverParams, 'Harmonic Analysis', Found )
+     HarmonicAnalysis = getLogical( SolverParams, 'Harmonic Analysis', Found ) .OR. &
+         getLogical( SolverParams,'Harmonic Mode',Found ) 
 !------------------------------------------------------------------------------
      Refactorize = GetLogical( SolverParams, 'Linear System Refactorize', Found )
      IF ( .NOT. Found ) Refactorize = .TRUE.
@@ -607,11 +610,13 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
            ConstantBulkSystem .OR. ConstantSystem) ) CALL AddGlobalTime()
        CALL DefaultFinishAssembly()
 
-       CALL DefaultDirichletBCS()
-
        IF( ModelLumping .AND. FixDisplacement) THEN
          CALL LumpedDisplacements( Model, iter, LumpedArea, LumpedCenter)
        END IF
+
+       CALL DefaultDirichletBCS()
+
+
        CALL Info( 'StressSolve', 'Set boundaries done', Level=5 )
 
        !------------------------------------------------------------------------------
@@ -621,10 +626,11 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
        IF( Converged ) EXIT
 
-       ! Solve the system and check for convergence:
+       ! Solve the system and check for convergence:       
        !--------------------------------------------
        UNorm = DefaultSolve()
 
+       
        IF ( Transient .AND. .NOT. Refactorize .AND. dt /= Prevdt ) THEN
          Prevdt = dt
          CALL ListRemove( SolverParams, 'Linear System Free Factorization' )
@@ -920,7 +926,9 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
          END IF
        END DO
      END IF
-
+     
+     CALL DefaultFinish()
+     
      CALL Info('StressSolver','All done',Level=4)
      CALL Info('StressSolver','------------------------------------------',Level=4)
 
@@ -931,19 +939,28 @@ CONTAINS
 !------------------------------------------------------------------------------
   SUBROUTINE BulkAssembly()
 !------------------------------------------------------------------------------
-    INTEGER :: RelIntegOrder 
+    INTEGER :: RelIntegOrder, NoActive 
 
+    LOGICAL :: AnyDamping
+
+    AnyDamping = ListCheckPresentAnyMaterial( Model,"Damping" ) .OR. &
+        ListCheckPrefixAnyMaterial( Model,"Rayleigh" )
+    Damping = 0.0_dp
+    RayleighDamping = .FALSE.
+
+    
 
      CALL StartAdvanceOutput( 'StressSolve', 'Assembly:')
      body_id = -1
 
      RelIntegOrder = ListGetInteger( SolverParams,'Relative Integration Order',Found)
 
+     NoActive = GetNOFActive()
 
-     DO t=1,Solver % NumberOFActiveElements
+     DO t=1,NoActive
 
 !------------------------------------------------------------------------------
-       CALL AdvanceOutput(t,GetNOFActive())
+       CALL AdvanceOutput(t,NoActive)
 !------------------------------------------------------------------------------
 
        Element => GetActiveElement(t)
@@ -963,16 +980,18 @@ CONTAINS
             CALL Fatal( 'StressSolve', 'No value for density found.' )
        END IF
 
-       Damping(1:n) = GetReal( Material, 'Damping', Found )
-       RayleighDamping = GetLogical( Material, 'Rayleigh damping', Found )
-       IF( RayleighDamping ) THEN
-         RayleighAlpha(1:N) = GetReal( Material, 'Rayleigh alpha', Found )
-         RayleighBeta(1:N) = GetReal( Material, 'Rayleigh beta', Found )
-       ELSE
-         RayleighAlpha = 0.0d0
-         RayleighBeta = 0.0d0        
+       IF( AnyDamping ) THEN
+         Damping(1:n) = GetReal( Material, 'Damping', Found )
+         RayleighDamping = GetLogical( Material, 'Rayleigh damping', Found )
+         IF( RayleighDamping ) THEN
+           RayleighAlpha(1:N) = GetReal( Material, 'Rayleigh alpha', Found )
+           RayleighBeta(1:N) = GetReal( Material, 'Rayleigh beta', Found )
+         ELSE
+           RayleighAlpha = 0.0d0
+           RayleighBeta = 0.0d0        
+         END IF
        END IF
-
+         
        CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
            'Heat Expansion Coefficient', Material, n, NodeIndexes, GotHeatExp )
 
@@ -1176,7 +1195,7 @@ CONTAINS
            Solver % Matrix % RHS => SaveRHS
          END IF
 
-         IF ( EigenOrHarmonicAnalysis() .OR. &
+         IF ( EigenOrHarmonicAnalysis() .OR. HarmonicAnalysis .OR. &
            ConstantBulkMatrix .OR. ConstantBulkSystem .OR. ConstantSystem ) THEN
            CALL DefaultUpdateMass( MASS )
            CALL DefaultUpdateDamp( DAMP )
@@ -1199,8 +1218,6 @@ CONTAINS
        Element => GetBoundaryElement(t)
        IF ( .NOT. ActiveBoundaryElement() ) CYCLE
        
-       IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-
        n = GetElementNOFNodes()
        ntot = GetElementNOFDOFs()
 
@@ -1223,6 +1240,7 @@ CONTAINS
           Beta(1:n) =  GetReal( BC, 'Normal Force',Found )
 
           LOAD_im=0._dp
+          Beta_im=0._dp
           IF ( HarmonicAnalysis ) THEN
             LOAD_im(1,1:n) = GetReal( BC, 'Force 1 im',Found )
             LOAD_im(2,1:n) = GetReal( BC, 'Force 2 im',Found )
@@ -1382,8 +1400,6 @@ CONTAINS
        Element => GetBoundaryElement(t)
        IF ( .NOT. ActiveBoundaryElement() ) CYCLE
        
-       IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-
        n = GetElementNOFNodes()
        BC => GetBC()
        
@@ -1547,7 +1563,7 @@ CONTAINS
        CALL ListAddLogical( SolverParams, 'Eigen Analysis', .FALSE. )
 
      IF( HarmonicAnalysis ) &
-       CALL ListAddLogical( SolverParams, 'Harmonic Analysis', .FALSE. )
+       CALL ListAddLogical( SolverParams, 'Harmonic Analysis', .FALSE. ) 
 
      StSolver % NOFEigenValues=0
 
@@ -1567,9 +1583,9 @@ CONTAINS
 
      NodalStress  = 0.0d0
      ForceG       = 0.0d0
+     SForceG      = 0.0d0
      IF(CalculateStrains) THEN
        NodalStrain  = 0.0d0
-       SForceG      = 0.0d0
      END IF
      CALL DefaultInitialize()
 
@@ -1951,8 +1967,6 @@ CONTAINS
          Element => GetBoundaryElement(t)
          IF ( .NOT. ActiveBoundaryElement() ) CYCLE
 
-         IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-
          BC => GetBC()
          IF ( .NOT.ASSOCIATED( BC ) ) CYCLE
 !------------------------------------------------------------------------------
@@ -2214,8 +2228,6 @@ CONTAINS
          Element => GetBoundaryElement(t)
          IF ( .NOT. ActiveBoundaryElement() ) CYCLE
 
-         IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-         
          BC => GetBC()
          IF ( .NOT.ASSOCIATED( BC ) ) CYCLE
          IF(.NOT. GetLogical( BC, 'Model Lumping Boundary',Found )) CYCLE
@@ -2253,8 +2265,6 @@ CONTAINS
          Element => GetBoundaryElement(t)
          IF ( .NOT. ActiveBoundaryElement() ) CYCLE
 
-         IF( .NOT. PossibleFluxElement(Element) ) CYCLE
-         
          BC => GetBC()
          IF ( .NOT.ASSOCIATED( BC ) ) CYCLE
          IF(.NOT. GetLogical( BC, 'Model Lumping Boundary',Found )) CYCLE

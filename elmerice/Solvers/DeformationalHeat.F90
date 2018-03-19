@@ -207,6 +207,7 @@ CONTAINS
         ELSE
           rho = 1.0_dp ! neutral, in case of standard volumetric source
         END IF
+
         LGrad = MATMUL( Velo(:,1:n), dBasisdx(1:n,:) )
         VeloIP=0.
         VeloIP(1) = SUM( Velo(1,1:n)*Basis(1:n) )

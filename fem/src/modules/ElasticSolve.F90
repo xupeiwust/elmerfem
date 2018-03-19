@@ -570,6 +570,9 @@ SUBROUTINE ElasticSolver( Model, Solver, dt, TransientSimulation )
   LinearModel = ListGetLogical( SolverParams, &
        'Elasticity Solver Linear', GotIt )
 
+  
+  CALL DefaultStart()
+  
   DO iter=1,NonlinearIter
 
      at  = CPUTime()
@@ -1054,6 +1057,8 @@ SUBROUTINE ElasticSolver( Model, Solver, dt, TransientSimulation )
 
   DEALLOCATE( PrevSOL )
 
+  CALL DefaultFinish()
+  
   CALL Info('ElasticSolver','All done',Level=4)
   CALL Info('ElasticSolver','------------------------------------------',Level=4)
 
@@ -2016,7 +2021,7 @@ CONTAINS
           Viscosity  = SUM( NodalViscosity(1:fn) * FBasis )
 
           Viscosity = EffectiveViscosity( Viscosity,Density,Velocity(1,:),Velocity(2,:), &
-               Velocity(3,:),FlowElement,FlowNodes,fn,fn,ParentU,ParentV,ParentW)
+               Velocity(3,:),FlowElement,FlowNodes,fn,fn,ParentU,ParentV,ParentW,LocalIP=t)
           Viscosity  = SUM( NodalViscosity(1:fn) * FBasis )
 
           FlowStress = Viscosity * ( Grad + TRANSPOSE(Grad) )
@@ -2696,7 +2701,7 @@ CONTAINS
 
     CHARACTER(LEN=MAX_NAME_LEN) :: eqname
 
-    SAVE StSolver, Permutation, FirstTime, ForceG, SForceG, Nodes, StressTemp, Eqname, StrainDim
+    SAVE StSolver, Permutation, FirstTime, ForceG, SForceG, Nodes, StressTemp, Eqname, StrainDim, UseMask
     !---------------------------------------------------------------------------------------------
     ! These variables are needed for Principal stress calculation;
     ! they are quite small and allocated even if principal stress calculation

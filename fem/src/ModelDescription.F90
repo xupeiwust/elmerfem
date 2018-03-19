@@ -70,7 +70,7 @@ MODULE ModelDescription
     INTEGER, PARAMETER :: PosUnit = 32, OutputUnit = 31, RestartUnit = 30,&
                           PostFileUnit = 29, InFileUnit = 28
 
-    INTEGER, PARAMETER, PRIVATE :: MAX_OUTPUT_VARS = 100
+    INTEGER, PARAMETER, PRIVATE :: MAX_OUTPUT_VARS = 1000
 
 CONTAINS
 
@@ -855,6 +855,7 @@ CONTAINS
               NULLIFY( Model % Solvers(i) % Variable )
               NULLIFY( Model % Solvers(i) % ActiveElements )
               Model % Solvers(i) % NumberOfActiveElements = 0
+              Model % Solvers(i) % SolverId = i
             END DO
           ELSE
             Model % NumberOfSolvers = MAX( Arrayn, Model % NumberOfSolvers )
@@ -1354,18 +1355,18 @@ CONTAINS
             ! This is intended to be activated when new keywords are checked 
             ! Generally it can be set false
             !---------------------------------------------------------------
-            IF(.FALSE.) THEN
-              OPEN( 10,File='../SOLVER.KEYWORDS.byname',&
-                  STATUS='UNKNOWN',POSITION='APPEND' )
-              WRITE( 10,'(A,T40,A)') TRIM(Name),TRIM(str)
-              CLOSE(10)
+#ifdef DEVEL_KEYWORDMISSES
+            OPEN( 10,File='../SOLVER.KEYWORDS.byname',&
+                STATUS='UNKNOWN',POSITION='APPEND' )
+            WRITE( 10,'(A,T40,A)') TRIM(Name),TRIM(str)
+            CLOSE(10)
 
-              i = INDEX( str,':' )
-              OPEN( 10,File='../SOLVER.KEYWORDS.bysection',&
-                  STATUS='UNKNOWN',POSITION='APPEND' )
-              WRITE( 10,'(A,T22,A)') str(1:i)//TRIM(TYPE)//':',"'"//TRIM(Name)//"'"
-              CLOSE(10 )
-            END IF
+            i = INDEX( str,':' )
+            OPEN( 10,File='../SOLVER.KEYWORDS.bysection',&
+                STATUS='UNKNOWN',POSITION='APPEND' )
+            WRITE( 10,'(A,T22,A)') str(1:i)//TRIM(TYPE)//':',"'"//TRIM(Name)//"'"
+            CLOSE(10 )
+#endif
           END IF
        ELSE IF ( ASSOCIATED( Val ) ) THEN
          ! Difference between types 'string' and 'file' is just that 
@@ -2100,6 +2101,12 @@ CONTAINS
     REWIND( InFileUnit )
     CALL LoadInputFile( Model,InFileUnit,ModelName,MeshDir,MeshName, .TRUE., .FALSE. )
     IF ( .NOT. OpenFile ) CLOSE( InFileUnit )
+
+
+    IF( .NOT. ListCheckPresent( Model % Simulation,'Solver Input File') ) THEN
+      CALL ListAddString( Model % Simulation,'Solver Input File',ModelName ) 
+    END IF
+      
     
     CALL InitializeOutputLevel()
 
@@ -2138,8 +2145,7 @@ CONTAINS
       ElementDef = ListGetString( Solver % Values, 'Element', stat )
    
       IF ( .NOT. stat ) THEN
-        IF ( ListGetLogical( Solver % Values, &
-             'Discontinuous Galerkin', stat ) ) THEN
+        IF ( ListGetLogical( Solver % Values, 'Discontinuous Galerkin', stat ) ) THEN
            Solver % Def_Dofs(:,:,4) = 0
            IF ( .NOT. GotMesh ) Def_Dofs(:,4) = MAX(Def_Dofs(:,4),0 )
            i=i+1
@@ -2399,10 +2405,10 @@ CONTAINS
 
         IF ( Single ) THEN
           Model % Solvers(s) % Mesh => &
-              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,1,0,def_dofs )
+              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,1,0,def_dofs, s )
         ELSE
           Model % Solvers(s) % Mesh => &
-              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,numprocs,mype,Def_Dofs )
+              LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,numprocs,mype,Def_Dofs, s )
         END IF
         Model % Solvers(s) % Mesh % OutputActive = .TRUE.
 
@@ -2620,21 +2626,23 @@ CONTAINS
       IF ( .NOT. GotIt ) OutputCaller = .TRUE.
       
       ! By default only on partition is used to show the results
-      ! For debugging it may be usefull to show several.
+      ! For debugging it may be useful to show several.
       MaxOutputPE = ListGetInteger( CurrentModel % Simulation, &
           'Max Output Partition', GotIt )    
-      
-      MinOutputPE = ListGetInteger( CurrentModel % Simulation, &
-          'Min Output Partition', GotIt )    
-      
-      IF( ParEnv % MyPe >= MinOutputPE .AND. &
-          ParEnv % MyPe <= MaxOutputPE ) THEN 
-        OutputPE = ParEnv % MyPE
-      ELSE
-        OutputPE = -1
-      END IF
-  
-
+      IF( GotIt ) THEN
+        MaxOutputPE = MIN(ParEnv % PEs, MaxOutputPE)        
+        MinOutputPE = ListGetInteger( CurrentModel % Simulation, &
+            'Min Output Partition', GotIt )    
+        MinOutputPE = MAX(0, MinOutputPE)
+        
+        IF( ParEnv % MyPe >= MinOutputPE .AND. &
+            ParEnv % MyPe <= MaxOutputPE ) THEN 
+          OutputPE = ParEnv % MyPE
+        ELSE
+          OutputPE = -1
+        END IF
+      END IF 
+                    
     END SUBROUTINE InitializeOutputLevel
 !------------------------------------------------------------------------------
   END FUNCTION LoadModel
@@ -3932,7 +3940,7 @@ CONTAINS
 
       IF ( nPerm < 0 ) THEN
          IF ( Binary ) CALL BinReadInt8( RestartUnit, Pos )
-         ! At the moment, we allways read all variables, and can therefore
+         ! At the moment, we always read all variables, and can therefore
          ! safely assume that the "previous" Perm table has been read and is
          ! held in memory at this point. In the future, however, we might be
          ! asked to read only some variables, in which case the previous Perm
@@ -5110,14 +5118,19 @@ END SUBROUTINE GetNodalElementSize
 !------------------------------------------------------------------------------
     TYPE(Solver_t) :: Solver
 !------------------------------------------------------------------------------
-    CALL FreeValueList(Solver % Values)
+
+    CALL Info('FreeSolver','Free solver matrix',Level=20)
     CALL FreeMatrix(Solver % Matrix)
+
+    CALL Info('FreeSolver','Free solver miscallenous',Level=20)
+    CALL FreeValueList(Solver % Values)
     IF (ALLOCATED(Solver % Def_Dofs)) DEALLOCATE(Solver % Def_Dofs)
     IF (ASSOCIATED(Solver % ActiveElements)) DEALLOCATE(Solver % ActiveElements)
     IF( ASSOCIATED( Solver % ColourIndexList ) ) THEN
       CALL Graph_Deallocate(Solver % ColourIndexList)
       DEALLOCATE( Solver % ColourIndexList )
     END IF
+        
 !------------------------------------------------------------------------------
   END SUBROUTINE FreeSolver
 !------------------------------------------------------------------------------
@@ -5157,12 +5170,17 @@ END SUBROUTINE GetNodalElementSize
    INTEGER :: i
    IF (.NOT.ASSOCIATED(Model)) RETURN
 
+   CALL Info('FreeModel','Freeing meshes',Level=15)
    CALL FreeMesh(Model % Meshes)
 
+   CALL Info('FreeModel','Freeing constants list',Level=15)
    CALL FreeValueList(Model % Constants)
+
+   CALL Info('FreeModel','Freeing simulation list',Level=15)
    CALL FreeValueList(Model % Simulation)
 
    IF (ASSOCIATED(Model % BCs)) THEN
+     CALL Info('FreeModel','Freeing boundary lists',Level=15)
      DO i=1,Model % NumberOfBCs
 #if 0
        A => Model % BCs(i) % PMatrix
@@ -5180,12 +5198,15 @@ END SUBROUTINE GetNodalElementSize
      DEALLOCATE(Model % BCs)
    END IF
 
+   CALL Info('FreeModel','Freeing solvers',Level=15)  
    DO i=1,Model % NumberOfSolvers
+     CALL Info('FreeModel','Solver: '//TRIM(I2S(i)),Level=20)
      CALL FreeSolver(Model % Solvers(i))
    END DO
    DEALLOCATE(Model % Solvers)
 
    IF (ASSOCIATED(Model % ICs)) THEN
+     CALL Info('FreeModel','Freeing initial conditions lists',Level=15)   
      DO i=1,Model % NumberOfICs
        CALL FreeValueList( Model % ICs(i) % Values)
      END DO
@@ -5193,6 +5214,7 @@ END SUBROUTINE GetNodalElementSize
    END IF
 
    IF (ASSOCIATED(Model % Bodies)) THEN
+     CALL Info('FreeModel','Freeing body lists',Level=15)   
      DO i=1,Model % NumberOfBodies
        CALL FreeValueList( Model % Bodies(i) % Values)
      END DO
@@ -5200,6 +5222,7 @@ END SUBROUTINE GetNodalElementSize
    END IF
 
    IF (ASSOCIATED(Model % Equations)) THEN
+     CALL Info('FreeModel','Freeing equations lists',Level=15)    
      DO i=1,Model % NumberOfEquations
        CALL FreeValueList( Model % Equations(i) % Values)
      END DO
@@ -5207,6 +5230,7 @@ END SUBROUTINE GetNodalElementSize
    END IF
 
    IF (ASSOCIATED(Model % BodyForces)) THEN
+     CALL Info('FreeModel','Freeing body forces lists',Level=15)   
      DO i=1,Model % NumberOfBodyForces
        CALL FreeValueList( Model % BodyForces(i) % Values)
      END DO
