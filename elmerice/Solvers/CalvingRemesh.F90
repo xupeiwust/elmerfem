@@ -729,10 +729,10 @@ CONTAINS
          NameSuffix, FrontLineMethod, GLVarName, VarName, MoveMeshDir,MoveMeshFullPath,&
          WorkName
     INTEGER :: i,j,k,n, counter, NoNodes, dummyint, FaceNodeCount, &
-         ExtrudedLevels, ExtrudeLevels, NodesPerLevel, start, fin, stride, next, WriteNodeCount, &
+         ExtrudedLevels,  NodesPerLevel, start, fin, stride, next, WriteNodeCount, &
          MeshBC,col, dim, MetisMethod, MetisMethodDefault, active, NextBasalPerm, &
-         FrontBCtag, GroupCount, GroupEnd, GroupStart, TangledGroups
-
+         FrontBCtag, GroupCount, GroupEnd, GroupStart, TangledGroups ! ExtrudeLevels
+    INTEGER, POINTER :: ExtrudeLevels(:)
     INTEGER :: comm, ierr, Me, PEs, TotalNodes, DegenCount
     INTEGER, PARAMETER :: GeoUnit = 10
     INTEGER, ALLOCATABLE :: MyFaceNodeNums(:), PFaceNodeCount(:), FNColumns(:), disps(:), &
@@ -2003,9 +2003,14 @@ CONTAINS
     !   Extrude new mesh
     !----------------------------------------------
 
-    ExtrudeLevels = ListGetInteger(Model % Simulation, "Remesh Extruded Mesh Levels", Found, UnfoundFatal=.TRUE.)
+    ExtrudeLevels = &
+         ListGetIntegerArray(CurrentModel % Simulation,'Remesh Extruded Mesh Levels',Found)
+    DO i=1,SIZE(ExtrudeLevels)
+      ExtrudeLevels(i) = ExtrudeLevels(i) - 2
+    END DO
+    !ListGetInteger(Model % Simulation, "Remesh Extruded Mesh Levels", Found, UnfoundFatal=.TRUE.)
     ExtrudedMesh => NULL()
-    ExtrudedMesh => MeshExtrude(FootprintMesh, ExtrudeLevels-2)
+    ExtrudedMesh => MeshExtrude(FootprintMesh, ExtrudeLevels)
 
     !----------------------------------------------------
     ! Interp front position from squished front nodes
@@ -2352,7 +2357,7 @@ CONTAINS
     n = ExtrudedMesh % NumberOfNodes
     ALLOCATE(TopVarValues(n),BottomVarValues(n),TopVarPerm(n),BottomVarPerm(n))
     TopVarPerm = 0; BottomVarPerm = 0;
-    NodesPerLevel = n / ExtrudeLevels
+    NodesPerLevel = n / ExtrudeLevels(1) ! Mind, that this fails if we have more than one level
 
     DO i=1,NodesPerLevel
        BottomVarPerm(i) = i
