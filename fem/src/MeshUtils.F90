@@ -10952,12 +10952,11 @@ END SUBROUTINE GetMaxDefs
 !> with indexes one larger than the maximum used on by the 2D mesh. 
 !------------------------------------------------------------------------------
   FUNCTION MeshExtrude(Mesh_in, in_levels, ExtrudedMeshName) RESULT(Mesh_out)
-    !------------------------------------------------------------------------------
+!------------------------------------------------------------------------------
     TYPE(Mesh_t), POINTER :: Mesh_in, Mesh_out
     INTEGER, POINTER :: in_levels(:)
     CHARACTER(LEN=MAX_NAME_LEN),INTENT(IN),OPTIONAL :: ExtrudedMeshName
 
-!<<<<<<< HEAD
     !------------------------------------------------------------------------------
     INTEGER :: i,j,k,l,n,cnt,cnt0,cnt101,ind(8),max_baseline_bid,max_bid,l_n,max_body,bcid,&
          ExtrudedCoord,dg_n,blk,buildingblocks,starti,currentlevel,alllevels,&
@@ -10966,16 +10965,6 @@ END SUBROUTINE GetMaxDefs
     INTEGER :: nnodes,gnodes,lnodes,gelements,ierr,istat
     LOGICAL :: isParallel, Found, NeedEdges, PreserveBaseline, PreserveEdges
     REAL(KIND=dp)::w,CurrCoord
-!    REAL(KIND=dp)::w,MinCoord,MaxCoord,CurrCoord
-!=======
-!------------------------------------------------------------------------------
-!    INTEGER :: i,j,k,l,n,cnt,cnt101,ind(8),max_baseline_bid,max_bid,l_n,max_body,bcid,&
-!        ExtrudedCoord,dg_n,totalnumberofelements
-!    TYPE(ParallelInfo_t), POINTER :: PI_in, PI_out
-!    INTEGER :: nnodes,gnodes,gelements,ierr
-!    LOGICAL :: isParallel, Found, NeedEdges, PreserveBaseline, PreserveEdges
-!    REAL(KIND=dp)::w,MinCoord,MaxCoord,CurrCoord
-!>>>>>>> elmerice
     REAL(KIND=dp), POINTER :: ActiveCoord(:)
     REAL(KIND=dp), ALLOCATABLE :: Wtable(:,:),Wtable_in(:),MinCoord(:),MaxCoord(:)
     !------------------------------------------------------------------------------
@@ -11048,7 +11037,7 @@ END SUBROUTINE GetMaxDefs
     END DO
 
     ExtrudedCoord = ListGetInteger( CurrentModel % Simulation,'Extruded Coordinate Index', &
-         Found, minv=1,maxv=3 )
+        Found, minv=1,maxv=3 )
     IF(.NOT. Found) ExtrudedCoord = 3 
 
     IF( ExtrudedCoord == 1 ) THEN
@@ -11063,16 +11052,11 @@ END SUBROUTINE GetMaxDefs
     PreserveBaseline = ListGetLogical( CurrentModel % Simulation,'Preserve Baseline',Found )
     IF(.NOT. Found) PreserveBaseline = .FALSE.
 
-!<<<<<<< HEAD
+    PreserveEdges = ListGetLogical( CurrentModel % Simulation,'Preserve Edges',Found )
+    IF(.NOT. Found) PreserveEdges = .FALSE.
+    
     MinCoord(1) = ListGetConstReal( CurrentModel % Simulation,'Extruded Min Coordinate',Found )
     IF(.NOT. Found) MinCoord(1) = 0.0_dp
-!=======
-!    PreserveEdges = ListGetLogical( CurrentModel % Simulation,'Preserve Edges',Found )
-!    IF(.NOT. Found) PreserveEdges = .FALSE.
-!
-!    MinCoord = ListGetConstReal( CurrentModel % Simulation,'Extruded Min Coordinate',Found )
-!    IF(.NOT. Found) MinCoord = 0.0_dp
-!>>>>>>> elmerice
 
     MaxCoord(buildingblocks) = ListGetConstReal( CurrentModel % Simulation,'Extruded Max Coordinate',Found )
     IF(.NOT. Found) MaxCoord(buildingblocks) = 1.0_dp * buildingblocks
@@ -11139,7 +11123,6 @@ END SUBROUTINE GetMaxDefs
     END DO
 
     n=SIZE(Mesh_in % Elements)
-!<<<<<<< HEAD
     IF (PreserveBaseline) THEN
       ALLOCATE(Mesh_out % Elements(n*(alllevels+3+(blk-1))&
            + Mesh_in % NumberOfBoundaryElements + cnt101), STAT=istat )
@@ -11160,15 +11143,6 @@ END SUBROUTINE GetMaxDefs
       CALL MPI_ALLREDUCE(j,max_body,1, &
            MPI_INTEGER,MPI_MAX,MPI_COMM_WORLD,ierr)
     END IF
-!=======
-
-    ! inquire total number of needed 
-!    totalnumberofelements = n*(in_levels+3) + cnt101
-!    IF (PreserveBaseline) &
-!         totalnumberofelements = totalnumberofelements + Mesh_in % NumberOfBoundaryElements
-!    ALLOCATE(Mesh_out % Elements(totalnumberofelements))
-    
-!>>>>>>> elmerice
     ! Generate volume bulk elements:
     ! ------------------------------
 
@@ -11242,16 +11216,9 @@ END SUBROUTINE GetMaxDefs
 
     max_bid=0
     max_baseline_bid=0
-!<<<<<<< HEAD
-!    !currentlevel = 0
-!    !currentlevel = in_levels(1)
-!=======
-
-    ! include edges (see below)
+    !currentlevel = 0
+    !currentlevel = in_levels(1)
     NeedEdges =  (NeedEdges .OR. PreserveEdges)
-    
-    
-!>>>>>>> elmerice
     ! -------------------------------------------------------
     IF (PreserveBaseline) THEN
       DO blk=1,1!buildingblocks   
@@ -11297,8 +11264,6 @@ END SUBROUTINE GetMaxDefs
           IF(Mesh_in % Elements(k) % TYPE % ElementCode>=200) THEN
             Mesh_out % Elements(cnt) % NDOFs = 2
             ALLOCATE(Mesh_out % Elements(cnt) % NodeIndexes(2)) 
-            !ind(1) = Mesh_in % Elements(k) % NodeIndexes(1) 
-            !ind(2) = Mesh_in % Elements(k) % NodeIndexes(2)
             ind(1) = Mesh_in % Elements(k) % NodeIndexes(1) + currentlevel*lnodes 
             ind(2) = Mesh_in % Elements(k) % NodeIndexes(2) + currentlevel*lnodes
             Mesh_out % Elements(cnt) % NodeIndexes = ind(1:2)
@@ -11309,7 +11274,6 @@ END SUBROUTINE GetMaxDefs
             ALLOCATE(Mesh_out % Elements(cnt) % NodeIndexes(l))
             Mesh_out % Elements(cnt) % NodeIndexes = &
                  Mesh_in % Elements(k) % NodeIndexes + currentlevel*lnodes
-                 !Mesh_in % Elements(k) % NodeIndexes
             Mesh_out % Elements(cnt) % TYPE => &
                  Mesh_in % Elements(k) % TYPE
           END IF
@@ -11488,10 +11452,10 @@ END SUBROUTINE GetMaxDefs
 
       ALLOCATE(Mesh_out % Elements(cnt) % NodeIndexes(l_n))
       Mesh_out % Elements(cnt) % NodeIndexes = &
-           Mesh_in % Elements(i) % NodeIndexes
+        Mesh_in % Elements(i) % NodeIndexes
       Mesh_out % Elements(cnt) % ElementIndex = cnt
       Mesh_out % Elements(cnt) % TYPE => &
-           Mesh_in % Elements(i) % TYPE
+        Mesh_in % Elements(i) % TYPE
       Mesh_out % Elements(cnt) % DGDOFs = 0
       Mesh_out % Elements(cnt) % DGIndexes => NULL()
       Mesh_out % Elements(cnt) % PDefs => NULL()
@@ -11547,8 +11511,8 @@ END SUBROUTINE GetMaxDefs
       END DO
     END DO
     Mesh_out % NumberOfBoundaryElements = cnt - Mesh_out % NumberOfBulkElements
-    PRINT *, "NumberOfBulkElements=", Mesh_out % NumberOfBulkElements,&
-         "NumberOfBoundaryElements=", Mesh_out % NumberOfBoundaryElements
+    !PRINT *, "NumberOfBulkElements=", Mesh_out % NumberOfBulkElements,&
+    !    "NumberOfBoundaryElements=", Mesh_out % NumberOfBoundaryElements
 
     Mesh_out % Name=Mesh_in % Name
     Mesh_out % DiscontMesh = Mesh_in % DiscontMesh
@@ -11561,7 +11525,7 @@ END SUBROUTINE GetMaxDefs
     CALL SetMeshMaxDOFs(Mesh_out)
 
     IF (PRESENT(ExtrudedMeshName)) THEN
-      CALL WriteMeshToDisk(Mesh_out, ExtrudedMeshName)
+       CALL WriteMeshToDisk(Mesh_out, ExtrudedMeshName)
     END IF
 
     !------------------------------------------------------------------------------
@@ -11580,81 +11544,34 @@ END SUBROUTINE GetMaxDefs
     CHARACTER(LEN=*) :: Path
     TYPE(Mesh_t), POINTER :: NewMesh
 !------------------------------------------------------------------------------
-    INTEGER :: i,j,k,ElmCode,Parent1,Parent2,&
-         elementno(9), elementcode(9), differenttypesofelements, MeshDim
-    LOGICAL :: Found
+    INTEGER :: i,j,k,MaxNodes,ElmCode,Parent1,Parent2
 !------------------------------------------------------------------------------
-    MeshDim = NewMesh % MeshDim
+
     OPEN( 1,FILE=TRIM(Path) // '/mesh.header',STATUS='UNKNOWN' )
     WRITE( 1,'(i0,x,i0,x,i0)' ) NewMesh % NumberOfNodes, &
          NewMesh % NumberOfBulkElements, NewMesh % NumberOfBoundaryElements
-!<<<<<<< HEAD
-    k = 1 + NewMesh % NumberOfBulkElements
-    ElmCode  = NewMesh % Elements(k) % TYPE % ElementCode
-    elementcode(1) = ElmCode
-    elementno(1) = 1
-    elementno(2:9) = 0
-    differenttypesofelements = 1
-    DO i=2,NewMesh % NumberOfBoundaryElements
-      k = i + NewMesh % NumberOfBulkElements
-      ElmCode  = NewMesh % Elements(k) % TYPE % ElementCode
-      Found = .FALSE.
-      DO j = 1,differenttypesofelements
-        IF (ElmCode .EQ. elementcode(j)) THEN
-          Found = .TRUE.
-          elementno(j) = elementno(j) + 1     
-        END IF
-      END DO
-      IF (.NOT.Found) THEN
-        differenttypesofelements = differenttypesofelements + 1
-        elementcode(differenttypesofelements) = ElmCode
-        elementno(differenttypesofelements) = elementno(differenttypesofelements) + 1
-      END IF
-    END DO
-    ! the bulk elements
-!=======
-!    
-!    WRITE( 1,'(i0)' ) 2
-!    MaxNodes = 0
-!    ElmCode  = 0
-!    DO i=1,NewMesh % NumberOfBoundaryElements
-!       k = i + NewMesh % NumberOfBulkElements
-!       IF ( NewMesh % Elements(k) % TYPE % NumberOfNodes > MaxNodes ) THEN
-!          ElmCode  = NewMesh % Elements(k) % TYPE % ElementCode
-!          MaxNodes = NewMesh % Elements(k) % TYPE % NumberOfNodes
-!       END IF
-!    END DO
-!    WRITE( 1,'(i0,x,i0)' ) ElmCode,NewMesh % NumberOfBoundaryElements
-
-!    MaxNodes = 0
-!    ElmCode  = 0
-!>>>>>>> elmerice
-    DO i=1,NewMesh % NumberOfBulkElements
-      ElmCode  = NewMesh % Elements(i) % TYPE % ElementCode
-      Found = .FALSE.
-      DO j = 1,differenttypesofelements
-        IF (ElmCode .EQ. elementcode(j)) THEN
-          Found = .TRUE.
-          elementno(j) = elementno(j) + 1     
-        END IF
-      END DO
-      IF (.NOT.Found) THEN
-        differenttypesofelements = differenttypesofelements + 1
-        elementcode(differenttypesofelements) = ElmCode
-        elementno(differenttypesofelements) = elementno(differenttypesofelements) + 1
-      END IF
-    END DO
-!<<<<<<< HEAD
-
-    WRITE( 1,* ) differenttypesofelements
     
-    DO i=1,differenttypesofelements
-      WRITE( 1,'(2i8)' )  elementcode(i), elementno(i)
+    WRITE( 1,'(i0)' ) 2
+    MaxNodes = 0
+    ElmCode  = 0
+    DO i=1,NewMesh % NumberOfBoundaryElements
+       k = i + NewMesh % NumberOfBulkElements
+       IF ( NewMesh % Elements(k) % TYPE % NumberOfNodes > MaxNodes ) THEN
+          ElmCode  = NewMesh % Elements(k) % TYPE % ElementCode
+          MaxNodes = NewMesh % Elements(k) % TYPE % NumberOfNodes
+       END IF
     END DO
+    WRITE( 1,'(i0,x,i0)' ) ElmCode,NewMesh % NumberOfBoundaryElements
 
-!=======
-!    WRITE( 1,'(i0,x,i0)' ) ElmCode,NewMesh % NumberOfBulkElements
-!>>>>>>> elmerice
+    MaxNodes = 0
+    ElmCode  = 0
+    DO i=1,NewMesh % NumberOfBulkElements
+       IF ( NewMesh % Elements(i) % TYPE % NumberOfNodes > MaxNodes ) THEN
+          ElmCode  = NewMesh % Elements(i) % TYPE % ElementCode
+          MaxNodes = NewMesh % Elements(i) % TYPE % NumberOfNodes
+       END IF
+    END DO
+    WRITE( 1,'(i0,x,i0)' ) ElmCode,NewMesh % NumberOfBulkElements
     CLOSE(1)
 
     OPEN( 1,FILE=TRIM(Path) // '/mesh.nodes', STATUS='UNKNOWN' )
@@ -11688,17 +11605,9 @@ END SUBROUTINE GetMaxDefs
        parent2 = 0
        IF ( ASSOCIATED( NewMesh % Elements(k) % BoundaryInfo % Right ) ) &
           parent2 = NewMesh % Elements(k) % BoundaryInfo % Right % ElementIndex
-!<<<<<<< HEAD
-       IF (NewMesh % Elements(k) % TYPE % ElementCode < MeshDim*100) THEN
-         parent1 = 0
-         parent2 = 0
-       END IF       
-       WRITE(1,'(5i7)',ADVANCE='NO') i, &
+       WRITE(1,'(5(i0,x))',ADVANCE='NO') i, &
             NewMesh % Elements(k) % BoundaryInfo % Constraint, Parent1,Parent2,&
             NewMesh % Elements(k) % TYPE % ElementCode
-!=======
-!       WRITE(1,'(5(i0,x))',ADVANCE='NO') i, &
-!>>>>>>> elmerice  (MOVED DOWN)
        DO j=1,NewMesh % Elements(k) % TYPE % NumberOfNodes
           WRITE(1,'(i0,x)', ADVANCE='NO') &
                NewMesh % Elements(k) % NodeIndexes(j)
@@ -15261,7 +15170,6 @@ CONTAINS
 
      CALL Info('ReleaseMesh','Releasing mesh variables',Level=15)
      CALL ReleaseVariableList( Mesh % Variables )
-
      Mesh % Variables => NULL()
 
 !    Deallocate mesh geometry (nodes,elements and edges):
@@ -15271,7 +15179,6 @@ CONTAINS
        IF ( ASSOCIATED( Mesh % Nodes % x ) ) DEALLOCATE( Mesh % Nodes % x )
        IF ( ASSOCIATED( Mesh % Nodes % y ) ) DEALLOCATE( Mesh % Nodes % y )
        IF ( ASSOCIATED( Mesh % Nodes % z ) ) DEALLOCATE( Mesh % Nodes % z )
-
        DEALLOCATE( Mesh % Nodes )
 
        IF ( ASSOCIATED( Mesh % ParallelInfo % GlobalDOFs ) ) &
@@ -16341,11 +16248,11 @@ CONTAINS
           END IF
           MaskPerm = Var % Perm 
           CALL Info('DetectExtrudedStructure',&
-              'Using variable as mask: '//TRIM(VarName),Level=8)          
+              'Using variable as mask: '//TRIM(VarName),Level=8)
         END IF
       END IF
     END IF
-    
+
     nnodes = Mesh % NumberOfNodes
     IF( MaskExists ) THEN
       nsize = MAXVAL( MaskPerm ) 
@@ -16630,7 +16537,7 @@ CONTAINS
     END IF
 
 
-    ! If mid layer is requesyed create that too
+    ! If mid layer is requested create that too
     IF( PRESENT( MidNodePointer ) ) THEN
       ALLOCATE( MidPointer( nnodes ) )
       MidPointer = 0 
@@ -16872,19 +16779,12 @@ CONTAINS
       FirstTime = .NOT. ASSOCIATED( Mesh % NodesMapped )
       IF( FirstTime ) THEN
         ALLOCATE( Mesh % NodesMapped )
-        !NULLIFY( NewCoords )
-        !ALLOCATE( NewCoords(3*n) )
-        !NewCoords = 0.0_dp
-        ALLOCATE( Mesh % NodesMapped % x(n) )
-        ALLOCATE( Mesh % NodesMapped % y(n) )
-        ALLOCATE( Mesh % NodesMapped % z(n) )
-        Mesh % NodesMapped % x = 0.0_dp
-        Mesh % NodesMapped % y = 0.0_dp
-        Mesh % NodesMapped % z = 0.0_dp
-
-        !Mesh % NodesMapped % x => NewCoords(1:n)
-        !Mesh % NodesMapped % y => NewCoords(n+1:2*n)
-        !Mesh % NodesMapped % z => NewCoords(2*n+1:3*n)
+        NULLIFY( NewCoords )
+        ALLOCATE( NewCoords(3*n) )
+        NewCoords = 0.0_dp
+        Mesh % NodesMapped % x => NewCoords(1:n)
+        Mesh % NodesMapped % y => NewCoords(n+1:2*n)
+        Mesh % NodesMapped % z => NewCoords(2*n+1:3*n)
         ! Mesh % NodesMapped % x => NewCoords(1::3)
         ! Mesh % NodesMapped % y => NewCoords(2::3)
         ! Mesh % NodesMapped % z => NewCoords(3::3)
@@ -16920,8 +16820,8 @@ CONTAINS
               'Transformed Coordinate 2',1,y1) 
           CALL VariableAdd( Mesh % Variables,Mesh,CurrentModel % Solver,&
               'Transformed Coordinate 3',1,z1) 
-!          CALL VariableAdd( Mesh % Variables,Mesh,CurrentModel % Solver,&
-!              'Transformed Coordinate',3,NewCoords)
+          CALL VariableAdd( Mesh % Variables,Mesh,CurrentModel % Solver,&
+              'Transformed Coordinate',3,NewCoords)
         END IF
       END IF
     END IF
@@ -18259,7 +18159,7 @@ CONTAINS
     TYPE(Mesh_t) :: Mesh
     TYPE(Graph_t) :: DualGraph
     LOGICAL, OPTIONAL :: UseBoundaryMesh
-
+    
     TYPE(Element_t), POINTER :: Element, Elements(:)
 
     ! MESH DATA
@@ -18323,7 +18223,6 @@ CONTAINS
     ALLOCATE(eptr(nelem+1), eind(nelem*Mesh % MaxElementNodes), STAT=allocstat)
     IF (allocstat /= 0) CALL Fatal('ElmerMeshToDualGraph', &
             'Unable to allocate mesh structure!')
-
     eptr(1)=1 ! Fortran numbering
     DO i=1, nelem
       Element => Elements(i)
@@ -18392,8 +18291,8 @@ CONTAINS
               'Unable to allocate local workspace!')
     ELSE
       ! With a small number of threads, use map -based merge
-      mapSizePad = IntegerNBytePad(nelem, 8)
-      ALLOCATE(wrkmap(mapSizePad), STAT=allocstat)
+      mapSizePad = IntegerNBytePad(Mesh % NumberOfBulkElements, 8)
+      ALLOCATE(wrkmap(Mesh % NumberOfBulkElements), STAT=allocstat)
       IF (allocstat /= 0) CALL Fatal('ElmerMeshToDualGraph', &
               'Unable to allocate local workspace!')
       ! Initialize local map
