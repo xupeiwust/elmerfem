@@ -1463,41 +1463,56 @@ CONTAINS
     END IF
   END FUNCTION rhoc
   !---------------------------------------------------------------------------------------------
-  REAL(KIND=dp) FUNCTION rhocT(CurrentSoluteMaterial,rhoc,T0,Temperature)
+  REAL(KIND=dp) FUNCTION rhocT(CurrentSoluteMaterial,rhoc,T0,Temperature,ConstVal)
     IMPLICIT NONE
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     REAL(KIND=dp), INTENT(IN) :: rhoc,T0,Temperature
+    LOGICAL :: ConstVal
     !-------------------------
     REAL(KIND=dp):: alphaC
     !-------------------------
-    alphaC = (CurrentSoluteMaterial % ac0) * &
-         GeneralPolynomial(Temperature,T0,T0,&
-         CurrentSoluteMaterial % aac(0:5),&
-         CurrentSoluteMaterial % aacl) 
-    rhocT = rhoc * alphaC
+    IF (ConstVal) THEN
+      rhocT = 0.0_dp
+    ELSE      
+      alphaC = (CurrentSoluteMaterial % ac0) * &
+           GeneralPolynomial(Temperature,T0,T0,&
+           CurrentSoluteMaterial % aac(0:5),&
+           CurrentSoluteMaterial % aacl) 
+      rhocT = rhoc * alphaC
+    END IF
   END FUNCTION rhocT
   !---------------------------------------------------------------------------------------------
-  REAL(KIND=dp) FUNCTION rhocP(CurrentSoluteMaterial,rhoc)
+  REAL(KIND=dp) FUNCTION rhocP(CurrentSoluteMaterial,rhoc,ConstVal)
     IMPLICIT NONE
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     REAL(KIND=dp), INTENT(IN) :: rhoc
+    LOGICAL :: ConstVal
     !---------------
-    rhocP = rhoc * (CurrentSoluteMaterial % kc0)
+    IF (ConstVal) THEN
+      rhocP = 0.0_dp
+    ELSE
+      rhocP = rhoc * (CurrentSoluteMaterial % kc0)
+    END IF
   END FUNCTION rhocP
     !---------------------------------------------------------------------------------------------
-  REAL(KIND=dp) FUNCTION rhocYc(CurrentSoluteMaterial,rhoc,Xi,Salinity)
+  REAL(KIND=dp) FUNCTION rhocYc(CurrentSoluteMaterial,rhoc,Xi,Salinity,ConstVal)
     IMPLICIT NONE
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     REAL(KIND=dp), INTENT(IN) :: rhoc, Xi, Salinity
+    LOGICAL :: ConstVal
     !---------------
     REAL(KIND=dp):: xc, zc
     !---------------
-    xc = Salinity/Xi
-    zc = (CurrentSoluteMaterial % zc0) * &
-         GeneralPolynomial(xc,0.0_dp,1.0_dp,&
-         CurrentSoluteMaterial % bzc(0:5),&
-         CurrentSoluteMaterial % bzcl)
-    rhocYc = rhoc * zc /Xi
+    IF (ConstVal) THEN
+      rhocYc = 0.0_dp
+    ELSE
+      xc = Salinity/Xi
+      zc = (CurrentSoluteMaterial % zc0) * &
+           GeneralPolynomial(xc,0.0_dp,1.0_dp,&
+           CurrentSoluteMaterial % bzc(0:5),&
+           CurrentSoluteMaterial % bzcl)
+      rhocYc = rhoc * zc /Xi
+    END IF
   END FUNCTION rhocYc
  !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhogw(rhow,rhoc,Xi,Salinity)
@@ -1508,7 +1523,17 @@ CONTAINS
     !------------
     xc = Salinity/Xi
     rhogw = rhow + xc*(rhoc - rhow)
-  END FUNCTION rhogw  
+  END FUNCTION rhogw
+  !---------------------------------------------------------------------------------------------
+  REAL (KIND=dp) FUNCTION rhogwP(rhowp,rhocp,Xi,Salinity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhowp,rhocp,Xi,Salinity
+    !------------
+    REAL(KIND=dp) :: xc   
+    !------------
+    xc = Salinity/Xi    
+    rhogwP = (1.0_dp - xc)*rhowP + xc*rhocP
+  END FUNCTION rhogwP
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION cs(CurrentRockMaterial,RockMaterialID,T0,Temperature,ConstVal)
     IMPLICIT NONE
@@ -1739,6 +1764,18 @@ CONTAINS
     CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
   END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
+  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,Xi,Xip,CurrentRockMaterial,Porosity)RESULT(Cgwpp)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,Xi,Xip,Porosity
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    REAL(KIND=dp) :: Cgwpp
+    !-------------------------
+    REAL(KIND=dp) :: kappaG, kappas
+    !-------------------------
+    Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
+         + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
+  END FUNCTION GetCgwpp
+  !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
        Xi,T0,Salinity,Temperature,ConstVal)
     IMPLICIT NONE
@@ -1933,6 +1970,7 @@ END MODULE PermafrostMaterials
 !---------------------------------------------------------------------------------------------
 !-----------------------------------------------------------------------------
 !> Solver for groundwater flow of the enhanced permafrost model
+!    (i.e. Darcy Flow representing saturated aquifer)
 !------------------------------------------------------------------------------
 SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
@@ -2181,8 +2219,8 @@ CONTAINS
     LOGICAL :: ElementWiseRockMaterial
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),meanfactor,MinKgw,gradTAtIP(3),&
-         gradPAtIP(3),fluxTAtIP(3),fluxgAtIP(3) ! needed in equation
+    REAL(KIND=dp) :: Cgwpp,CgwTAtIP,CgwppAtIP,KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),&
+         meanfactor,MinKgw,gradTAtIP(3),gradPAtIP(3),fluxTAtIP(3),fluxgAtIP(3) ! needed in equation
     REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP,bijAtIP(2,2),bijYcAtIP(2,2),&
          gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
@@ -2192,7 +2230,8 @@ CONTAINS
          as0,aas(0:5),ks0,cks(0:5)  ! stuff comming from RockMaterial
     INTEGER :: acsl,aasl,cksl       ! stuff comming from RockMaterial
     REAL(KIND=dp) :: GasConstant, N0, DeltaT, T0, p0,eps,Gravity(3)! real constants read only once
-    REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP
+    REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP,&
+         rhowPAtIP,rhoiPAtIP,rhocPAtIP,rhogwPAtIP
     REAL(KIND=dp) :: Basis(nd),dBasisdx(nd,3),DetJ,Weight,LoadAtIP,StiffPQ
     REAL(KIND=dp) :: TemperatureAtIP,PorosityAtIP,SalinityAtIP,PressureAtIP
     REAL(KIND=dp) :: MASS(nd,nd), STIFF(nd,nd), FORCE(nd), LOAD(n)
@@ -2278,14 +2317,16 @@ CONTAINS
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N) )
       
       !Materialproperties needed at IP
-      rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
-      rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal) !!! NEW
-      rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
+      rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+      rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
+      rhowPAtIP = rhowP(CurrentSolventMaterial,rhowAtIP,p0,PressureAtIP)
+      rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+      rhoiPAtIP = rhoiP(CurrentSolventMaterial,rhoiAtIP,T0,TemperatureAtIP)
       !PRINT *,"Densities",rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP
       
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
+      CASE('anderson')
         XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -2340,10 +2381,11 @@ CONTAINS
              deltaInElement,GasConstant,TemperatureAtIP)         
       END SELECT
       
-
+      ! on Xi dpendent material parameters at IP
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
-      
+      rhocPAtIP = rhocP(CurrentSoluteMaterial,rhocAtIP,ConstVal)
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
+      rhogwpAtIP = rhogwP(rhowPAtIP,rhocPAtIP,XiAtIP,SalinityAtIP)
       !IF(SalinityAtIP > 0.02) &
       !     PRINT *,"Darcy: rhogw",rhogwAtIP,rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
@@ -2359,16 +2401,41 @@ CONTAINS
       KgwpTAtIP = GetKgwpT(fwAtIP,XiTAtIP,KgwAtIP)
       KgwppAtIP = 0.0_dp
       KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
+      CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,&
+           XiAtIP,XiPAtIP,CurrentRockMaterial,PorosityAtIP)
+      ! fluxes other than pressure induced at IP
+      DO i=1,DIM
+        gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
+      END DO
+      DO i=1,DIM
+        fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
+        fluxgAtIP(i) = rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!! NEW
+        ! insert missing JcF here
+        IF ((fluxgAtIP(i) .NE. fluxgAtIP(i)) .OR. (fluxTAtIP(i) .NE. fluxTAtIP(i))) THEN
+          PRINT *, "NaN in r.h.s. of Darcy fluxes"
+          PRINT *, "flux(",i,")= Jgwg",fluxgAtIP(i),"+ JgwpT", fluxTAtIP(i)
+           PRINT *, "KgwAtIP=",KgwAtIP(i,1:DIM)
+          PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM)
+          PRINT *, "rhowAtIP=",rhowAtIP," rhocAtIP=",rhocAtIP
+          STOP
+        END IF
+      END DO
       
-      ! diffusion term (D*grad(u),grad(v)):
+      ! composition of the matrix:
       ! -----------------------------------
       DO p=1,nd
-        DO q=1,nd
-          StiffPQ = 0.0
-
+        DO q=1,nd         
+          ! time derivative (Cgwpp*dp/dt,v):
+          ! ------------------------------
+          MASS(p,q) = MASS(p,q) + Weight * CgwppAtIP * Basis(q) * Basis(p)
+          
+          ! advection term (still needs vstar, hence commented)
+          !STIFF (p,q) = STIFF(p,q) + Weight * &
+          !   CgwppAtIP * SUM(vstar(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
           ! diffusion term ( grad(u),grad(v))
           ! div(J_gwp) = d(Kgwpp_i,j dp/dx_j)/dx_i
           ! -----------------------------------
+          StiffPQ = 0.0
           DO i=1,DIM
             DO j=1,DIM
               StiffPQ = StiffPQ +  rhogwAtIP * KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)              
@@ -2381,21 +2448,6 @@ CONTAINS
       END DO
       !IF (XiAtIP > 0.0_dp) THEN
       ! body forces
-      DO i=1,DIM
-        gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
-      END DO
-      DO i=1,DIM
-        !fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
-        fluxgAtIP(i) = rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!! NEW
-        IF ((fluxgAtIP(i) .NE. fluxgAtIP(i)) .OR. (fluxTAtIP(i) .NE. fluxTAtIP(i))) THEN
-          PRINT *, "NaN in r.h.s. of Darcy fluxes"
-          PRINT *, "flux(",i,")= Jgwg",fluxgAtIP(i),"+ JgwpT", fluxTAtIP(i)
-           PRINT *, "KgwAtIP=",KgwAtIP(i,1:DIM)
-          PRINT *, "KgwpTAtIP=",KgwpTAtIP(i,1:DIM)
-          PRINT *, "rhowAtIP=",rhowAtIP," rhocAtIP=",rhocAtIP
-          STOP
-        END IF
-      END DO
       DO p=1,nd     
         !FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!! NEW
         FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))        
@@ -2817,7 +2869,7 @@ CONTAINS
         
         ! unfrozen pore-water content at IP
         SELECT CASE(PhaseChangeModel)
-        CASE('Anderson')
+        CASE('anderson')
           XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -3528,7 +3580,7 @@ CONTAINS
       
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
+      CASE('anderson')
         XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -4317,7 +4369,7 @@ CONTAINS
       
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
+      CASE('anderson')
         XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -4365,9 +4417,9 @@ CONTAINS
       END SELECT    
       ! solute and rock densities and derivatives
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
-      rhocPAtIP = rhocP(CurrentSoluteMaterial,rhocAtIP)
-      rhocYcAtIP = rhocYc(CurrentSoluteMaterial,rhocAtIP,XiAtIP,SalinityAtIP)
-      rhocTAtIP = rhocT(CurrentSoluteMaterial,rhocAtIP,T0,TemperatureAtIP)
+      rhocPAtIP = rhocP(CurrentSoluteMaterial,rhocAtIP,ConstVal)
+      rhocYcAtIP = rhocYc(CurrentSoluteMaterial,rhocAtIP,XiAtIP,SalinityAtIP,ConstVal)
+      rhocTAtIP = rhocT(CurrentSoluteMaterial,rhocAtIP,T0,TemperatureAtIP,ConstVal)
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
 
       ! capacities of solutes      
@@ -4619,7 +4671,7 @@ CONTAINS
 
         ! unfrozen pore-water content at IP
         SELECT CASE(PhaseChangeModel)
-        CASE('Anderson')
+        CASE('anderson')
           XiAtIP = &
                GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
                CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -4924,7 +4976,7 @@ CONTAINS
       
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
+      CASE('anderson')
         XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -5567,7 +5619,7 @@ CONTAINS
       
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('Anderson')
+      CASE('anderson')
         XiAtIP = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
