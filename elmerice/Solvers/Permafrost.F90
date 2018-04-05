@@ -756,18 +756,23 @@ CONTAINS
     !-------
     REAL(KIND=dp), INTENT(IN) :: Variable,ReferenceValue,Normation,coeff0,coeff(0:5)
     INTEGER, INTENT(IN) :: pdeg
-    REAL(KIND=dp) outval
+    REAL(KIND=dp) prefactor, summation
     ! ------
     REAL(KIND=dp) currpot
     INTEGER :: currdeg
     !PRINT *,"Integral"
-    outval = coeff0*(Variable - ReferenceValue)
-    currpot = 1.0_dp
+    prefactor = coeff0*(Variable - ReferenceValue)
+    summation = 0.0_dp
     DO currdeg=0,pdeg
-      outval = outval * coeff(currdeg) * currpot/(DBLE(currdeg) + 1.0_dp)
-      currpot = currpot * (Variable - ReferenceValue)/Normation
+      summation = summation +&
+           (coeff(currdeg) * ((Variable - ReferenceValue)/Normation)**(1.0_dp*currdeg))/(1.0_dp*(currdeg  + 1))
     END DO
-    GeneralIntegral = outval
+    !currpot = 1.0_dp
+    !DO currdeg=0,pdeg
+    !  outval = outval * coeff(currdeg) * currpot/(DBLE(currdeg) + 1.0_dp)
+    !  currpot = currpot * (Variable - ReferenceValue)/Normation
+    !END DO
+    GeneralIntegral = prefactor * summation
   END FUNCTION GeneralIntegral
   !---------------------------------------------------------------------------------------------
   ! functions specific to heat transfer and phase change
@@ -848,7 +853,7 @@ CONTAINS
     LOGICAL, INTENT(IN) :: ComputeIce
     !---------------------------------
     REAL(KIND=dp) :: acAlphaTilde(0:5)
-    REAL(KIND=dp) :: acAlpha(0:5)
+    REAL(KIND=dp) :: acAlpha(0:5), sumation
     INTEGER :: acAlphal,I
     !assign needed properties
     acAlphaTilde(0:5) = 0.0_dp
@@ -860,19 +865,24 @@ CONTAINS
       acAlpha(0:5) = CurrentSolventMaterial % acw(0:5)
     END IF
     ! acAlphal-entries 
-    acAlphaTilde(0)= (-(1.0_dp)**(1.0_dp*acAlphal))*acAlpha(acAlphal)
-    acAlphaTilde(acAlphal)=  acAlpha(acAlphal)
+    sumation = 0.0_dp
     ! recursion for acAlphaTilde(1..acAlphal)
-    DO I=acAlphal-1,1,-1
-      acAlphaTilde(0)= acAlphaTilde(0) + (-1.0_dp**(1.0_dp*I))*acAlpha(i)
-      acAlphaTilde(I) = -acAlphaTilde(I+1) + acAlpha(I)
+    !IF (ComputeIce) THEN
+    !  PRINT *, "GetAcAlphatilde:","Ice"
+    !ELSE
+    !  PRINT *, "GetAcAlphatilde:","Water"
+    !  PRINT *, "acAlpha(0)",acAlpha(0)
+    !END IF
+    DO I=acAlphal,1,-1
+      sumation = acAlpha(I)- sumation
+      !acAlphaTilde(0)= acAlphaTilde(0) + (-1.0_dp**(1.0_dp*I))*acAlpha(I)
+      acAlphaTilde(I) = ( (1.0_dp/(DBLE(I) + 1.0_dp)) - 1.0/DBLE(I) ) *  sumation
+      !PRINT *, "acAlphaTilde(",I,")", acAlphaTilde(I)
     END DO
     ! zero-entry only for acAlphaTilde(0)
-    acAlphaTilde(0)= acAlphaTilde(0) + acAlpha(0)
+    acAlphaTilde(0)= acAlpha(0)- sumation
+    !PRINT *, "AcAlphatilde(0)", acAlphaTilde(0)
     ! add the sum pre-factor to acAlphaTilde(1..acAlphal)
-    DO I=1,acAlphal
-      acAlphaTilde(I) = (1.0_dp/(1.0_dp + I) - (1.0_dp/I)) *  acAlphaTilde(I)
-    END DO    
   END FUNCTION GetAcAlphatilde
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION gwa(CurrentSolventMaterial,&
@@ -889,7 +899,7 @@ CONTAINS
 
     IF (FirstTime) THEN
       acwtilde = GetAcAlphatilde(CurrentSolventMaterial,.FALSE.)
-      FirstTime = .FALSE.
+      !FirstTime = .FALSE.
     END IF
     
     watercont = MAX(1.0_dp - Salinity/Xi,0.0_dp)
@@ -903,8 +913,8 @@ CONTAINS
       PRINT *, "gwa"
       STOP
     END IF
-    !PRINT *,"gwa:",gwa,aux,((Pressure - p0)*(1.0_dp + 0.5_dp*kw0*(Pressure - p0))/rhow),&
-    !     GeneralPolynomial(watercont,1.0_dp,1.0_dp,bcw,bcwl)
+    IF (FirstTime) PRINT *,"gwa:",gwa,aux
+    FirstTime = .FALSE.
   END FUNCTION gwa
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION gia(CurrentSolventMaterial,&
@@ -921,12 +931,14 @@ CONTAINS
 
     IF (FirstTime) THEN
       acitilde = GetAcAlphatilde(CurrentSolventMaterial,.TRUE.)
-      FirstTime = .FALSE.
+      !FirstTime = .FALSE.
     END IF
     aux = -(CurrentSolventMaterial % hi0)*((Temperature - T0)/T0)&
          - (CurrentSolventMaterial % ci0) *(acitilde(0) * Temperature * LOG(Temperature/T0) &
           - (Temperature - T0) * GeneralPolynomial(Temperature,T0,T0,acitilde,CurrentSolventMaterial % acil))
     gia = aux + ((Pressure - p0)*(1.0_dp + 0.5_dp*(CurrentSolventMaterial % ki0)*(Pressure - p0))/rhoi)
+    IF (FirstTime) PRINT *,"gia:",gia,aux
+    FirstTime = .FALSE.
   END FUNCTION gia
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION gwaT(CurrentSolventMaterial,&
@@ -943,7 +955,7 @@ CONTAINS
 
     IF (FirstTime) THEN
       acwtilde = GetAcAlphatilde(CurrentSolventMaterial,.FALSE.)
-      FirstTime = .FALSE.
+      !FirstTime = .FALSE.
     END IF
 
     ! get the derivative
@@ -959,10 +971,12 @@ CONTAINS
     gwaT = aux * GeneralPolynomial(watercont,1.0_dp,1.0_dp,&
          CurrentSolventMaterial % bcw(0:5),&
          CurrentSolventMaterial % bcwl)
+    IF (FirstTime) PRINT *,"gwaT:", gwaT
     IF (gwaT .NE. gwaT) THEN
       PRINT *, "gwaT"
       STOP
     END IF
+    FirstTime = .FALSE.
   END FUNCTION gwaT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION giaT(CurrentSolventMaterial,&
@@ -978,7 +992,7 @@ CONTAINS
 
     IF (FirstTime) THEN
       acitilde = GetAcAlphatilde(CurrentSolventMaterial,.TRUE.)
-      FirstTime = .FALSE.
+      !FirstTime = .FALSE.
     END IF
 
     ! get the derivative
@@ -990,11 +1004,13 @@ CONTAINS
       currpot = currpot * (Temperature - T0)/T0
     END DO    
     aux = (CurrentSolventMaterial % ci0)*(acitilde(0) * (1.0_dp + LOG(Temperature/T0)) - aux)
-    giaT = -(CurrentSolventMaterial % hi0)/T0 - aux 
+    giaT = -(CurrentSolventMaterial % hi0)/T0 - aux
+    IF (FirstTime) PRINT *,"giaT:", giaT
     IF (giaT .NE. giaT) THEN
       PRINT *, "giaT"
       STOP
     END IF
+    FirstTime = .FALSE.
   END FUNCTION giaT
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION deltaG(gwa,gia)
@@ -1331,7 +1347,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: T0,p0,Xi,Temperature,Pressure,Salinity
     LOGICAL :: ConstVal
     !----------------------
-    REAL(KIND=dp) :: aux1, aux2, aux3, watercont
+    REAL(KIND=dp) :: aux1, aux11, aux2, aux22, aux3, aux33, watercont
     !----------------------
     rhow = CurrentSolventMaterial % rhow0
     IF (.NOT.ConstVal) THEN
@@ -1339,15 +1355,27 @@ CONTAINS
            CurrentSolventMaterial % kw0,&
            CurrentSolventMaterial % ckw(0:5),&
            CurrentSolventMaterial % ckwl)
+      !aux11 = CurrentSolventMaterial % kw0 * (Pressure - p0)
+      !if (aux1 > 0.0_dp) THEN
+      !  PRINT *,"rhow:", aux1, aux11
+      !  STOP
+      !END if
       aux2 = GeneralIntegral(Temperature,T0,T0,&
            CurrentSolventMaterial % aw0,&
            CurrentSolventMaterial % aaw(0:5),&
            CurrentSolventMaterial % aawl)
+      !aux22 = (CurrentSolventMaterial % aw0) * (Temperature - T0) *
       watercont = MAX(1.0_dp - Salinity/Xi,0.0_dp)
       aux3 = GeneralIntegral(watercont,1.0_dp,1.0_dp,&
            CurrentSolventMaterial % zw0,&
            CurrentSolventMaterial % bzw(0:5),&
            CurrentSolventMaterial % bzwl)
+      aux33 = (CurrentSolventMaterial % zw0) * (watercont - 1.0_dp)*&
+           ( (CurrentSolventMaterial % bzw(0)) + 0.5_dp*(CurrentSolventMaterial % bzw(1))*(watercont - 1.0_dp) )
+      !if (aux3 .NE. 0.0_dp) THEN
+      !  PRINT *,"rhow:", aux3, aux33
+      !  STOP
+      !END if
       rhow = rhow * EXP(aux1 - aux2 + aux3)
       !PRINT *,"rhow: 1) ", rhow,  aux1, aux2, aux3
       !PRINT *,"rhow: 2) ", CurrentSolventMaterial % rhow0, watercont, Xi,Temperature,Pressure,Salinity
@@ -2413,10 +2441,12 @@ CONTAINS
       KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
       CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,&
            XiAtIP,XiPAtIP,CurrentRockMaterial,PorosityAtIP)
+      !CgwpTAtIP = GetCgwpT() ! ADD
       !IF (CgwppAtIP > 1.0d-03) PRINT *,"Darcy: Cgwpp=", CgwppAtIP, rhogwAtIP, rhoiAtIP, rhogwPAtIP,rhoiPAtIP,XiAtIP,XiPAtIP
       ! fluxes other than pressure induced at IP
       DO i=1,DIM
         gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
+        
       END DO
       DO i=1,DIM
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
@@ -4382,8 +4412,8 @@ CONTAINS
 
       ! water/ice densitities
 
-      !rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
-      rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,.TRUE.)
+      rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
+      !rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,.TRUE.)
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!! NEW
       
       !PRINT *,"Solute: rhowAtIP, rhoiAtIP, rhosAtIP", rhowAtIP, rhoiAtIP, rhosAtIP
@@ -4437,8 +4467,8 @@ CONTAINS
              Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
       END SELECT    
       ! solute and rock densities and derivatives
-      !      rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
-      rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,.TRUE.)
+            rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
+      !rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,.TRUE.)
       rhocPAtIP = rhocP(CurrentSoluteMaterial,rhocAtIP,ConstVal)
       rhocYcAtIP = rhocYc(CurrentSoluteMaterial,rhocAtIP,XiAtIP,SalinityAtIP,ConstVal)
       rhocTAtIP = rhocT(CurrentSoluteMaterial,rhocAtIP,T0,TemperatureAtIP,ConstVal)
