@@ -1802,17 +1802,36 @@ CONTAINS
     CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
   END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,Xi,Xip,CurrentRockMaterial,Porosity)RESULT(Cgwpp)
+  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,Xi,Xip,CurrentRockMaterial,RockMaterialID,Porosity)RESULT(Cgwpp)
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,Xi,Xip,Porosity
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
     REAL(KIND=dp) :: Cgwpp
     !-------------------------
     REAL(KIND=dp) :: kappaG, kappas
     !-------------------------
+    kappas = CurrentRockMaterial % ks0(RockMaterialID)
+    kappaG = 0.0_dp ! NEEDS TO BE CHANGED
     Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
          + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
   END FUNCTION GetCgwpp
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetCgwpT(rhogw,rhoi,rhogwT,rhoiT,Xi,XiT,Porosity)RESULT(CgwpT)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwT,rhoiT,Xi,XiT,Porosity
+    REAL(KIND=dp) :: CgwpT
+    !-------------------------
+    CgwpT = Porosity * ( (rhogw - rhoi) * XiT  + Xi * rhogwT + (1.0_dp - Xi)*rhoiT )
+  END FUNCTION GetCgwpT
+    !---------------------------------------------------------------------------------------------
+  FUNCTION GetCgwpYc(rhogw,rhoi,rhogwYc,Xi,XiYc,Porosity)RESULT(CgwpYc)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwYc,Xi,XiYc,Porosity
+    REAL(KIND=dp) :: CgwpYc
+    !-------------------------
+    CgwpYc = Porosity * ( (rhogw - rhoi) * XiYc  + Xi * rhogwYc )
+  END FUNCTION GetCgwpYc
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
        Xi,T0,Salinity,Temperature,ConstVal)
@@ -2440,7 +2459,7 @@ CONTAINS
       KgwppAtIP = 0.0_dp
       KgwppAtIP = GetKgwpp(fwAtIP,XiPAtIP,KgwAtIP)
       CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,&
-           XiAtIP,XiPAtIP,CurrentRockMaterial,PorosityAtIP)
+           XiAtIP,XiPAtIP,CurrentRockMaterial,RockMaterialID,PorosityAtIP)
       !CgwpTAtIP = GetCgwpT() ! ADD
       !IF (CgwppAtIP > 1.0d-03) PRINT *,"Darcy: Cgwpp=", CgwppAtIP, rhogwAtIP, rhoiAtIP, rhogwPAtIP,rhoiPAtIP,XiAtIP,XiPAtIP
       ! fluxes other than pressure induced at IP
