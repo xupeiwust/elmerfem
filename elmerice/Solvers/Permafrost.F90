@@ -1301,6 +1301,40 @@ LocalSolventMaterial % ckw(0:5) = &
     bij(2,1) = aux*(d1 + 0.5_dp*d2*aux)
     bij(2,2) = aux*((d1 + d2*aux))/(1.0_dp - Salinity)
   END FUNCTION GetBij
+    !---------------------------------------------------------------------------------------------
+  FUNCTION GetBi(CurrentSoluteMaterial,Salinity) RESULT(bi)
+    TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
+    REAL(KIND=dp), INTENT(IN) :: Salinity
+    REAL(KIND=dp):: bi(2)
+    !----------
+    REAL(KIND=dp)::  aux,d1,d2
+
+    d1 = CurrentSoluteMaterial % d1
+    d2 = CurrentSoluteMaterial % d2
+
+    aux = Salinity/(1.0_dp - Salinity)
+    bi(1) = aux*(d1 + 0.5_dp*d2*aux)
+    bi(2) = aux*(d1 + d2*aux)/(1.0_dp - Salinity)
+  END FUNCTION GetBi
+  !---------------------------------------------------------------------------------------------
+!!$  FUNCTION GetBiYc(CurrentSoluteMaterial,&
+!!$       Xi0tilde,bij,Salinity) RESULT(biYc)
+!!$    TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
+!!$    REAL(KIND=dp), INTENT(IN) :: Xi0tilde,bij(2),Salinity
+!!$    REAL(KIND=dp):: biYc(2)
+!!$    !----------
+!!$    REAL(KIND=dp)::  aux,d1,d2
+!!$
+!!$    d1 = CurrentSoluteMaterial % d1
+!!$    d2 = CurrentSoluteMaterial % d2
+!!$
+!!$    aux = 1.0_dp/(Xi0tilde - Salinity)
+!!$    bijYc(1,1) = (d1 + d2*Salinity*aux)*Xi0tilde*aux*aux
+!!$    bijYc(1,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*(Xi0tilde**2.0_dp)*aux*aux + bij(1,2))
+!!$    aux = 1.0_dp/(1.0_dp - Salinity)
+!!$    bijYc(2,1) = aux*(d1 + d2*Salinity*aux)
+!!$    bijYc(2,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*aux*aux + bij(2,2))        
+!!$  END FUNCTION GetBiYc
   !---------------------------------------------------------------------------------------------
   FUNCTION GetBijYc(CurrentSoluteMaterial,&
        Xi0tilde,bij,Salinity) RESULT(bijYc)
@@ -1320,6 +1354,27 @@ LocalSolventMaterial % ckw(0:5) = &
     bijYc(2,1) = aux*(d1 + d2*Salinity*aux)
     bijYc(2,2) = aux*((d1 + 2.0_dp*d2*Salinity*aux)*aux*aux + bij(2,2))        
   END FUNCTION GetBijYc
+    !---------------------------------------------------------------------------------------------
+  FUNCTION GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
+       Xi0tilde,delta,deltaG,GasConstant,bi,Temperature) RESULT(B)
+    IMPLICIT NONE
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    REAL(KIND=dp), INTENT(IN) :: Xi0tilde,delta,deltaG,GasConstant,bi(2),Temperature
+    INTEGER, INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp) :: B
+    REAL(KIND=dp) :: e1,Mw
+    Mw = CurrentSolventMaterial % Mw
+    e1 = CurrentRockMaterial % e1(RockMaterialID)
+
+    B =(Mw*deltaG/(GasConstant*Temperature) +&
+         (1.0_dp - Xi0Tilde)*e1 - bi(1))/(Xi0Tilde*e1 + delta + bi(2))
+    
+    IF (B .NE. B) THEN
+      PRINT *, "B:", Mw, deltaG,Temperature,bi(1),e1,delta,bi(2)
+      STOP
+    END IF
+  END FUNCTION GetB
   !---------------------------------------------------------------------------------------------
   FUNCTION GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
        delta,deltaG,GasConstant,bij,Temperature) RESULT(B1)
@@ -1380,6 +1435,21 @@ LocalSolventMaterial % ckw(0:5) = &
       STOP
     END IF
   END FUNCTION D2
+    !---------------------------------------------------------------------------------------------
+  REAL (KIND=dp) FUNCTION D(CurrentRockMaterial,RockMaterialID,Xi0Tilde,delta,bi)
+    IMPLICIT NONE
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp), INTENT(IN) :: Xi0Tilde,delta,bi(2)
+    REAL(KIND=dp) :: e1
+    e1 = CurrentRockMaterial % e1(RockMaterialID)
+    ! local
+    D = delta/(e1*Xi0Tilde + delta + bi(2))
+    IF (D .NE. D) THEN
+      PRINT *, "D"
+      STOP
+    END IF
+  END FUNCTION D
   !---------------------------------------------------------------------------------------------
   FUNCTION GetXi0Tilde(CurrentRockMaterial,RockMaterialID,Porosity) RESULT(Xi0tilde)
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
@@ -1429,9 +1499,16 @@ LocalSolventMaterial % ckw(0:5) = &
     REAL(KIND=dp) :: Xi
     Xi= Xi0tilde/(1.0_dp + 0.5_dp*B1 + SQRT(0.25_dp*B1*B1 + D1)) &
          + (1.0_dp - Xi0tilde)/(1.0_dp + 0.5_dp*B2 + SQRT(0.25_dp*B2*B2 + D2))
-    IF (Xi <= 0.0_dp) Xi = 0.0000001_dp
+
+    
+    IF (Xi <= 0.0000001_dp) Xi = 0.0000001_dp
     IF (Xi > 1.0_dp) Xi = 1.0_dp
   END FUNCTION GetXi
+!!$  FUNCTION GetXi(B,D) RESULT(Xi)
+!!$    REAL(KIND=dp), INTENT(IN) :: B1,B2,D1,D2,Xi0tilde
+!!$    REAL(KIND=dp) :: Xi
+!!$    Xi= 1.0_dp/(1.0_dp + 0.5_dp*B + SQRT(0.25_dp*B*B + D))
+!!$  END FUNCTION GetXi
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
        B1,B2,D1,D2,Xi0Tilde,bij,p0,delta,deltaG,T0,gwaT,giaT,GasConstant,Temperature, Pressure)
@@ -1566,6 +1643,67 @@ LocalSolventMaterial % ckw(0:5) = &
       XiEta = 0.0_dp
     END IF
   END FUNCTION XiEta
+  !----------------------------------------------------------------------
+  SUBROUTINE GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+     CurrentSoluteMaterial,CurrentSolventMaterial,&
+     TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+     Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+     GasConstant,p0,T0,&
+     XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+     ComputeXiT, ComputeXiYc, ComputeXiP)
+
+  IMPLICIT NONE
+  
+  TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+  TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
+  TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+  INTEGER :: RockMaterialID
+  REAL(KIND=dp), INTENT(IN) :: Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP
+  REAL(KIND=dp), INTENT(IN) :: GasConstant,p0,T0
+  REAL(KIND=dp), INTENT(IN) :: TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP
+  REAL(KIND=dp), INTENT(OUT) :: XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP
+  LOGICAL, INTENT(IN) :: ComputeXiT, ComputeXiYc, ComputeXiP
+  !---------------------------
+  REAL(KIND=dp) :: bijAtIP(2,2),bijYcAtIP(2,2),gwaAtIP,gwaTAtIP,gwapAtIP,&
+       giaAtIP,giaTAtIP,giapAtIP,deltaGAtIP,D1AtIP,D2AtIP,B1AtIP,B2AtIP
+  !---------------------------    
+  bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
+  bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
+  gwaAtIP = gwa(CurrentSolventMaterial,&
+       p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
+  gwaTAtIP =  gwaT(CurrentSolventMaterial,&
+       p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
+  gwapAtIP = 1.0_dp/rhowAtIP
+  giaAtIP = gia(CurrentSolventMaterial,&
+       p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
+  giaTAtIP = giaT(CurrentSolventMaterial,&
+             p0,T0,rhoiAtIP,TemperatureAtIP)
+  giapAtIP = 1.0_dp/rhoiAtIP
+  deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
+  D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)
+  D2AtIP= D2(deltaInElement,bijAtIP)
+  B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
+             GasConstant,bijAtIP,TemperatureAtIP)
+  B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
+  !----------------------------------------------------
+  XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
+  !----------------------------------------------------
+  XiTAtIP = 0.0_dp
+  XiYcAtIP = 0.0_dp
+  XiPAtIP = 0.0_dp
+  IF (ComputeXiT) &
+       XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
+       B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
+       deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
+  IF (ComputeXiYC) &
+       XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
+       B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
+       Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
+  IF (ComputeXiP) &
+       XiPAtIP = XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
+       B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
+       deltaInElement,GasConstant,TemperatureAtIP)
+END SUBROUTINE GetXiHartikainen
   !---------------------------------------------------------------------------------------------
   ! Densities and their derivatives, thermal expansion, isothermal chemical compaction and
   !     compressibility coefficients
@@ -1830,8 +1968,17 @@ LocalSolventMaterial % ckw(0:5) = &
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: rhow,rhoc,Xi,Salinity
     !------------
-    REAL(KIND=dp) :: xc    
+    REAL(KIND=dp) :: xc, LSalinity    
     !------------
+!!$    IF (Salinity < 0.0_dp) THEN
+!!$      CALL WARN("rhogw","Salinity smaller than 0")
+!!$      LSalinity = 0.0_dp
+!!$    ELSE IF (Salinity > 0.3_dp) THEN
+!!$      CALL WARN("rhogw","Salinity larger than 0.3")
+!!$      LSalinity = 0.3_dp
+!!$    ELSE
+!!$      LSalinity =Salinity 
+!!$    END IF
     xc = Salinity/Xi
     rhogw = rhow + xc*(rhoc - rhow)
   END FUNCTION rhogw
@@ -2507,7 +2654,7 @@ CONTAINS
     REAL(KIND=dp) :: Cgwpp,CgwTAtIP,CgwppAtIP,KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),&
          meanfactor,MinKgw,gradTAtIP(3),gradPAtIP(3),gradYcAtIP(3),fluxTAtIP(3),fluxgAtIP(3) ! needed in equation
     REAL(KIND=dp) :: JgwDAtIP(3),JcFAtIP(3), DmAtIP, r12AtIP(2), KcAtIP(3,3), KcYcYcAtIP(3,3), fcAtIP(3), DispersionCoefficient ! from salinity transport
-    REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
+    REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP,bijAtIP(2,2),bijYcAtIP(2,2),&
          gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
     REAL(KIND=dp) :: fwAtIP, mugwAtIP !  JgwD stuff
@@ -2603,7 +2750,7 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N) )
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N) )
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N) )
-
+      
       ! Variable gradients at IP
       DO i=1,DIM        
         gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
@@ -2617,8 +2764,8 @@ CONTAINS
       rhowPAtIP = rhowP(CurrentSolventMaterial,rhowAtIP,p0,PressureAtIP)
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
       rhoiPAtIP = rhoiP(CurrentSolventMaterial,rhoiAtIP,T0,TemperatureAtIP)
-      !PRINT *,"Densities",rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP
-
+      Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
+      
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('anderson')
@@ -2635,62 +2782,40 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-        bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-        bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-        gwaAtIP = gwa(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP) 
-        gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!
-        gwapAtIP = 1.0_dp/rhowAtIP
-        giaAtIP = gia(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP) !NEW
-        !PRINT *, "Darcy:",rhoiAtIP
-        giaTAtIP = giaT(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP) 
-        giapAtIP = 1.0_dp/rhoiAtIP
-        deltaGAtIP = deltaG(gwaAtIP,giaAtIP) 
-        !PRINT *, "Darcy:",gwaAtIP,giaAtIP
-        D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-        D2AtIP= D2(deltaInElement,bijAtIP)
-        B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-             GasConstant,bijAtIP,TemperatureAtIP)
-        !PRINT *, "Darcy:",deltaInElement,deltaGAtIP,bijAtIP
-        B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
+
+        CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+             CurrentSoluteMaterial,CurrentSolventMaterial,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+             Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+             GasConstant,p0,T0,&
+             XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+             .TRUE.,.FALSE.,.TRUE.)
         IF (XiAtIP .NE. XiAtIP) THEN
           PRINT *, "Darcy: XiAtIP", B1AtIP,D1AtIP,Xi0Tilde
           PRINT *, "Darcy:  XiAtIP", deltaInElement, CurrentRockMaterial % e1(RockMaterialID), bijAtIP
           PRINT *, "Darcy:  XiAtIP", Xi0tilde,SalinityAtIP
-          PRINT *, "Darcy: XiAtIP", B1AtIP*B1AtIP + D1AtIP !1.0/(1.0 + 0.5*B1AtIP + SQRT(B1AtIP*B1AtIP + D1AtIP))
-          !PRINT *, "Darcy: XiAtIP", 1.0/(1.0 + 0.5*B2AtIP + SQRT(B2AtIP*B2AtIP + D2AtIP))
+          PRINT *, "Darcy: XiAtIP", B1AtIP*B1AtIP + D1AtIP !1.0/(1.0 + 0.5*B1AtIP + SQRT(B1AtIP*B1AtIP + D1AtIP)
           CALL FATAL(SolverName,"XiAtIP is NaN")
-        END IF
-
-        XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-        !PRINT *, "Darcy:",B1AtIP,B2AtIP,deltaGAtIP
-        XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
-             deltaInElement,GasConstant,TemperatureAtIP)         
+        END IF 
       END SELECT
 
-      ! on Xi dpendent material parameters at IP
+      ! on Xi dpendent material parameters (incl. updates) at IP
       rhowAtIP = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP,SalinityAtIP,ConstVal)
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
       rhocPAtIP = rhocP(CurrentSoluteMaterial,rhocAtIP,ConstVal)
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
       rhogwpAtIP = rhogwP(rhowPAtIP,rhocPAtIP,XiAtIP,SalinityAtIP)
-      !IF(SalinityAtIP > 0.02) &
-      !     PRINT *,"Darcy: rhogw",rhogwAtIP,rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
+
+      !IF ((rhogwAtIP < 980.0_dp) .OR. (rhogwpAtIP > 1250.0_dp)) THEN
+      !  PRINT *,"rhogwAtIP:",rhogwAtIP, rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
+      !END IF
+
+      
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
            XiAtIP,T0,SalinityAtIP,TemperatureAtIP,ConstVal)
-      !PRINT *,"Darcy:","mugwAtIP",XiAtIP,T0,SalinityAtIP,TemperatureAtIP
       KgwAtIP = 0.0_dp
       KgwAtIP = GetKgw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            mugwAtIP,XiAtIP,MinKgw)
-      !PRINT *,"Darcy:","KgwAtIP",mugwAtIP,XiAtIP,MinKgw
       fwAtIP = fw(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
            Xi0Tilde,rhowAtIP,XiAtIP,GasConstant,TemperatureAtIP)
       KgwpTAtIP = 0.0_dp
@@ -2703,7 +2828,6 @@ CONTAINS
       !IF (CgwppAtIP > 1.0d-03) PRINT *,"Darcy: Cgwpp=", CgwppAtIP, rhogwAtIP, rhoiAtIP, rhogwPAtIP,rhoiPAtIP,XiAtIP,XiPAtIP
 
      
-
       ! parameters for diffusion-dispersion flow
       r12AtIP = GetR(CurrentSoluteMaterial,CurrentSolventMaterial,GasConstant,rhowAtIP,rhocAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)
       DmAtIP = Dm(CurrentSoluteMaterial,N0,GasConstant,rhocAtIP,mugwAtIP,TemperatureAtIP)
@@ -2713,18 +2837,12 @@ CONTAINS
         JgwDAtIP = 0.0_dp
         JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM)
         KcAtIP = GetKc(CurrentRockMaterial,RockMaterialID,DmAtIP,XiAtIP,JgwDAtIP,PorosityAtIP)
-      END IF
-      
-
+      END IF      
       KcYcYcAtIP = GetKcYcYc(KcAtIP,r12AtIP)
       fcAtIP = GetFc(rhocAtIP,rhowAtIP,Gravity,r12AtIP,XiTAtIP,XiPAtIP,XiAtIP,gradPAtIP,gradTAtIP)
       JcFAtIP = GetJcF(KcYcYcAtIP,KcAtIP,fcAtIP,gradYcAtIP,SalinityAtIP)
 
-
-
-
       ! fluxes other than pressure induced at IP
-
       DO i=1,DIM
         fluxTAtIP(i) =  SUM(KgwpTAtIP(i,1:DIM)*gradTAtIP(1:DIM))
         fluxgAtIP(i) = rhogwAtIP * SUM(KgwAtIP(i,1:DIM)*Gravity(1:DIM))   !!
@@ -2745,7 +2863,8 @@ CONTAINS
         DO q=1,nd         
           ! time derivative (Cgwpp*dp/dt,v):
           ! ------------------------------
-          MASS(p,q) = MASS(p,q) + Weight * CgwppAtIP * Basis(q) * Basis(p)
+          !! INSERT SWITCHED SHUTOFF OF THIS TERM FOR VERY FIRST TIMESTEP
+          MASS(p,q) = MASS(p,q) + Weight * CgwppAtIP * Basis(q) * Basis(p) 
 
           ! advection term (still needs vstar, hence commented)
           !STIFF (p,q) = STIFF(p,q) + Weight * &
@@ -2760,21 +2879,16 @@ CONTAINS
               StiffPQ = StiffPQ +  rhogwAtIP * KgwppAtIP(i,j) * dBasisdx(p,j)* dBasisdx(q,i)              
             END DO
           END DO
-          !PRINT *,"KgwppAtIP,KgwAtIP",KgwppAtIP(1,1),KgwAtIP(1,1)
-          !StiffPQ = 1.0d-04 *  SUM(dBasisdx(p,1:DIM)* dBasisdx(q,1:DIM))
           STIFF(p,q) = STIFF(p,q) + Weight * StiffPQ
         END DO
       END DO
-      !IF (XiAtIP > 0.0_dp) THEN
       ! body forces
       DO p=1,nd     
-        !FORCE(p) = FORCE(p) + Weight * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM)) !!
         FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
         !FORCE(p) = FORCE(p) + &
         !     Weight * PorosityAtIP * (rhocAtIP - rhowAtIP)* SUM(JcFAtIP(1:DIM)*dBasisdx(p,1:DIM))
       END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
-      !END IF
     END DO
 
     IF(TransientSimulation) CALL Default1stOrderTime(MASS,STIFF,FORCE)
@@ -3056,7 +3170,7 @@ CONTAINS
     REAL(KIND=dp) :: GasConstant, N0, meanfactor,DeltaT, T0, p0, eps, Gravity(3) ! constants read only once
     REAL(KIND=dp) :: KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),MinKgw,gradTAtIP(3),gradPAtIP(3),&
          JgwDAtIP(3) ! needed in equation
-    REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
+    REAL(KIND=dp) :: XiAtIP,Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, &
          bijAtIP(2,2), bijYcAtIP(2,2),gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
     REAL(KIND=dp) :: fwAtIP, mugwAtIP !  JgwD stuf
@@ -3201,6 +3315,7 @@ CONTAINS
         !        rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
         rhowAtIP =  rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
         rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
+        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
         
         ! unfrozen pore-water content at IP
         SELECT CASE(PhaseChangeModel)
@@ -3218,34 +3333,13 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)       
         CASE DEFAULT ! Hartikainen model
-          Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-          bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-          bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-!          PRINT *, "1_Flux:",SalinityAtIP,Xi0tilde,bijAtIP(1:2,1:2)
-          gwaAtIP = gwa(CurrentSolventMaterial,&
-               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP) 
-          gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!
-          gwapAtIP = 1.0_dp/rhowAtIP
-          giaAtIP = gia(CurrentSolventMaterial,&
-               p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP) !NEW
-          giaTAtIP = giaT(CurrentSolventMaterial,&
-               p0,T0,rhoiAtIP,TemperatureAtIP)
-          giapAtIP = 1.0_dp/rhoiAtIP
-          deltaGAtIP = deltaG(gwaAtIP,giaAtIP) 
-          D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-          D2AtIP= D2(deltaInElement,bijAtIP)
-          !PRINT *,"Flux:",deltaInElement,bijAtIP,SalinityAtIP
-          B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-               GasConstant,bijAtIP,TemperatureAtIP)
-          B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-          XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
-          XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-          XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
-             deltaInElement,GasConstant,TemperatureAtIP)
+          CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+               CurrentSoluteMaterial,CurrentSolventMaterial,&
+               TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+               Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+               GasConstant,p0,T0,&
+               XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+               .TRUE.,.FALSE.,.TRUE.)
         END SELECT
         rhowAtIP = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP,SalinityAtIP,ConstVal)
         rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
@@ -3661,7 +3755,7 @@ CONTAINS
 
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
-
+      Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
       !PRINT *,"HTEQ: rhowAtIP, rhoiAtIP, rhosAtIP", rhowAtIP, rhoiAtIP, rhosAtIP
       
       ! unfrozen pore-water content at IP
@@ -3680,39 +3774,13 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)       
       CASE DEFAULT ! Hartikainen model
-        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-        bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-        bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-        gwaAtIP = gwa(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
-        gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
-        gwapAtIP = 1.0_dp/rhowAtIP
-        giaAtIP = gia(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-        giaTAtIP = giaT(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP)
-        giapAtIP = 1.0_dp/rhoiAtIP
-        deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-        D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-        D2AtIP= D2(deltaInElement,bijAtIP)
-        B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-             GasConstant,bijAtIP,TemperatureAtIP)
-        !PRINT *,"HTEQ:", B1AtIP,deltaInElement,deltaGAtIP, GasConstant,bijAtIP,TemperatureAtIP
-        !STOP
-        B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
-        XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-        !PRINT *,"HTEQ: gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP",&
-        !     gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP
-        XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
-             Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
-        !PRINT *,"HTEQ:",XiYcAtIP, B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
-        !     Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP
-        !STOP
+        CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+             CurrentSoluteMaterial,CurrentSolventMaterial,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+             Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+             GasConstant,p0,T0,&
+             XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+             .TRUE.,.TRUE.,.TRUE.)
       END SELECT
 
       !Materialproperties needed at IP:
@@ -4116,6 +4184,7 @@ SUBROUTINE PermafrostSoluteTransport( Model,Solver,dt,TransientSimulation )
 
     DO I=1,Solver % Mesh % NumberOfNodes
       Salinity(SalinityPerm(I)) = MAX(0.0,Salinity(SalinityPerm(I)))
+      Salinity(SalinityPerm(I)) = MIN(0.3,Salinity(SalinityPerm(I)))
     END DO
     
     IF( Solver % Variable % NonlinConverged > 0 ) EXIT
@@ -4252,7 +4321,7 @@ CONTAINS
       ! water/ice densitities
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)      
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
-      
+      Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
       !PRINT *,"Solute: rhowAtIP, rhoiAtIP, rhosAtIP", rhowAtIP, rhoiAtIP, rhosAtIP
       
       ! unfrozen pore-water content at IP
@@ -4271,51 +4340,14 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)       
       CASE DEFAULT ! Hartikainen model
-        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-        bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-        bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-        gwaAtIP = gwa(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
-        gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
-        gwapAtIP = 1.0_dp/rhowAtIP
-        giaAtIP = gia(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-        giaTAtIP = giaT(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP)
-        giapAtIP = 1.0_dp/rhoiAtIP
-        deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-        D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-        D2AtIP= D2(deltaInElement,bijAtIP)
-        B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-             GasConstant,bijAtIP,TemperatureAtIP)
-        B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
-        XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-        XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
-             deltaInElement,GasConstant,TemperatureAtIP)
-        !PRINT *,"Solute: gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP",&
-        !     gwaTAtIP,giaTAtIP,gwaAtIP,giaAtIP,TemperatureAtIP
-        XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
-             Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
+        CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+             CurrentSoluteMaterial,CurrentSolventMaterial,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+             Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+             GasConstant,p0,T0,&
+             XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+             .TRUE.,.TRUE.,.TRUE.)
       END SELECT
-
-      !!!! REMOVE THIS !!!!!
-      !XiAtIP = 1.0_dp
-      !XiTAtIP=0.0_dp
-      !XiPAtIP=0.0_dp
-      !XiYcAtIP =0.0_dp
-
-
-      
-      !IF (XiAtIP < 0.98_dp) THEN
-      !  PRINT *,"XiAtIP:",XiAtIP,B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0
-      !  PRINT *,deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP
-      !END IF
       
       ! solute and rock densities and derivatives
       rhowAtIP = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP,SalinityAtIP,ConstVal)
@@ -4475,7 +4507,7 @@ CONTAINS
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName='PermafrostSoluteTransport (LocalMatrixBCSolute)'
     REAL(KIND=dp) :: deltaInElement,D1AtIP,D2AtIP
     REAL(KIND=dp) :: GasConstant, N0, DeltaT, T0, p0, eps, Gravity(3) ! constants read only once
-    REAL(KIND=dp) :: XiAtIP, Xi0Tilde  !, XiTAtIP, XiPAtIP
+    REAL(KIND=dp) :: XiAtIP, Xi0Tilde, XiTAtIP, XiPAtIP, XiYcAtIP
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, bijAtIP(2,2), bijYcAtIP(2,2),&
          gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP,&
          rhowAtIP, rhoiAtIP, rhocAtIP !needed by XI
@@ -4575,7 +4607,7 @@ CONTAINS
 
         rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal) !!
         rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
-
+        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
         !PRINT *,"Solute: rhowAtIP, rhoiAtIP, rhosAtIP", rhowAtIP, rhoiAtIP, rhosAtIP
 
         ! unfrozen pore-water content at IP
@@ -4587,26 +4619,32 @@ CONTAINS
                T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)
           ! NB: XiTAtIP, XiPAtIP not needed
         CASE DEFAULT ! Hartikainen model
-          Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-          bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-          bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-          gwaAtIP = gwa(CurrentSolventMaterial,&
-               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
-          gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
-          gwapAtIP = 1.0_dp/rhowAtIP
-          giaAtIP = gia(CurrentSolventMaterial,&
-               p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-          giaTAtIP = giaT(CurrentSolventMaterial,&
-               p0,T0,rhoiAtIP,TemperatureAtIP)
-          giapAtIP = 1.0_dp/rhoiAtIP
-          deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-          D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-          D2AtIP= D2(deltaInElement,bijAtIP)
-          B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-               GasConstant,bijAtIP,TemperatureAtIP)
-          B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-          XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
+          CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+               CurrentSoluteMaterial,CurrentSolventMaterial,&
+               TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+               Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+               GasConstant,p0,T0,&
+               XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+               .FALSE., .FALSE., .FALSE.)
+!!$          bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
+!!$          bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
+!!$          gwaAtIP = gwa(CurrentSolventMaterial,&
+!!$               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
+!!$          gwaTAtIP =  gwaT(CurrentSolventMaterial,&
+!!$               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
+!!$          gwapAtIP = 1.0_dp/rhowAtIP
+!!$          giaAtIP = gia(CurrentSolventMaterial,&
+!!$               p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
+!!$          giaTAtIP = giaT(CurrentSolventMaterial,&
+!!$               p0,T0,rhoiAtIP,TemperatureAtIP)
+!!$          giapAtIP = 1.0_dp/rhoiAtIP
+!!$          deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
+!!$          D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
+!!$          D2AtIP= D2(deltaInElement,bijAtIP)
+!!$          B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
+!!$               GasConstant,bijAtIP,TemperatureAtIP)
+!!$          B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
+!!$          XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
           ! NB: XiTAtIP, XiPAtIP, XiYcAtIP not needed
         END SELECT
         rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
@@ -4821,7 +4859,7 @@ CONTAINS
     LOGICAL :: ComputeXiT
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
-    REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,ksthAtIP  ! function values needed for KGTT
+    REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,ksthAtIP  ! function values needed for KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, bijAtIP(2,2), bijYcAtIP(2,2),&
          gwaAtIP, giaAtIP, gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
     REAL(KIND=dp) :: JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3), MinKgw, KgwppAtIP(3,3), fwAtIp, mugwAtIP !  JgwD stuff
@@ -4898,8 +4936,9 @@ CONTAINS
       ! Material properties at IP
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+      Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
 
-      
+
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('anderson')
@@ -4916,34 +4955,15 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-        bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-        bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-        gwaAtIP = gwa(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP) 
-        gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!
-        gwapAtIP = 1.0_dp/rhowAtIP
-        giaAtIP = gia(CurrentSolventMaterial,& 
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP) !NEW
-        giaTAtIP = giaT(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP)
-        giapAtIP = 1.0_dp/rhoiAtIP
-        deltaGAtIP = deltaG(gwaAtIP,giaAtIP) 
-        D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-        D2AtIP= D2(deltaInElement,bijAtIP)
-        B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-             GasConstant,bijAtIP,TemperatureAtIP)
-        B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
-        XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-        XiPAtIP= XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,gwapAtIP,giapAtIP,Xi0Tilde,&
-             deltaInElement,GasConstant,TemperatureAtIP)
+        CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+             CurrentSoluteMaterial,CurrentSolventMaterial,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+             Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+             GasConstant,p0,T0,&
+             XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+             .TRUE.,.FALSE.,.TRUE.)
       END SELECT
-      
+
       Weight = IP % s(t) * DetJ
 
       DO p=1,n
@@ -5242,8 +5262,9 @@ SUBROUTINE PermafrostMaterialOutput( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName,&
        PhaseChangeModel, VariableName,ElementRockMaterialName
 
-  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,NumberOfRockRecords,&
-       NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,ElementWiseRockMaterial
+  SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
+       NumberOfRockRecords,NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGwFlux,&
+       ElementWiseRockMaterial
   !------------------------------------------------------------------------------
   Params => GetSolverParams()
   VariableName = ListGetString(Params,"Output Property",Found)
@@ -5456,7 +5477,8 @@ CONTAINS
 
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal) !!
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
-
+      Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
+      
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
       CASE('anderson')
@@ -5473,32 +5495,13 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)       
       CASE DEFAULT ! Hartikainen model
-        Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
-        bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-        bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-        gwaAtIP = gwa(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
-        gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-             p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
-        gwapAtIP = 1.0_dp/rhowAtIP
-        giaAtIP = gia(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-        giaTAtIP = giaT(CurrentSolventMaterial,&
-             p0,T0,rhoiAtIP,TemperatureAtIP)
-        giapAtIP = 1.0_dp/rhoiAtIP
-        deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-        D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-        D2AtIP= D2(deltaInElement,bijAtIP)
-        B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-             GasConstant,bijAtIP,TemperatureAtIP)
-        B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-        XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
-        XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde,bijAtIP,p0,&
-             deltaInElement,deltaGAtIP,T0,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP,PressureAtIP)
-        XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
-             B1AtIP,B2AtIP,D1AtIP,D2AtIP,bijAtIP,bijYcAtIP,&
-             Xi0Tilde,XiAtIP,deltaInElement,SalinityAtIP)
+        CALL  GetXiHartikainen (CurrentRockMaterial,RockMaterialID,&
+             CurrentSoluteMaterial,CurrentSolventMaterial,&
+             TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
+             Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,rhocAtIP,&
+             GasConstant,p0,T0,&
+             XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,&
+             .TRUE.,.TRUE.,.FALSE.)
       END SELECT
 
       !Materialproperties needed at IP:
@@ -5588,8 +5591,9 @@ CONTAINS
         PropertyAtIP = KgwpTAtIP(TensorComponent(1),TensorComponent(2))
       CASE('kgwpp')
         PropertyAtIP = KgwppAtIP(TensorComponent(1),TensorComponent(2))
-      CASE('Kc')
+      CASE('kc')
         PropertyAtIP = KgwppAtIP(TensorComponent(1),TensorComponent(2))
+        
       CASE DEFAULT
         WRITE(Message,*) ' Variable "', TRIM(VariableName), '" not implemented.'
         CALL FATAL(SolverName,Message)
