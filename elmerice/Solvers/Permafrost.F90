@@ -4639,13 +4639,15 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
        NodalTemperature(:),DummyNodalGWflux(:,:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
        ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE., &
-       ComputeXiT=.FALSE., DummyLog,GivenGWFlux
+       ComputeXiT=.FALSE., DummyLog,GivenGWFlux,ElementWiseRockMaterial
   !CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostUnfrozenWaterContent'
-  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName, PhaseChangeModel
+  CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, TemperatureName,&
+       PhaseChangeModel, ElementRockMaterialName
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
-       NumberOfRockRecords,NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,DummyNodalGWflux
+       NumberOfRockRecords,ElementWiseRockMaterial,&
+       NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,DummyNodalGWflux
   !------------------------------------------------------------------------------
   Params => GetSolverParams()
   ComputeXiT = GetLogical(Params,"Compute XiT",Found)
@@ -4676,12 +4678,28 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
     Material => GetMaterial(Element)
     PhaseChangeModel = ListGetString(Material, &
          'Permafrost Phase Change Model', Found )
+    
     IF (Found) THEN
       WRITE (Message,'(A,A)') '"Permafrost Phase Change Model" set to ', TRIM(PhaseChangeModel)
       CALL INFO(SolverName,Message,Level=9)
     END IF
-    IF (FirstTime) THEN
-      NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants, CurrentRockMaterial )
+    
+    IF (FirstTime) THEN        
+      ! check, whether we have globally or element-wise defined values of rock-material parameters
+      ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
+      IF (ElementWiseRockMaterial) THEN
+        WRITE (Message,*) 'Found "Element Rock Material File"'
+        CALL INFO(SolverName,Message,Level=3)
+        CALL INFO(SolverName,'Using element-wise rock material definition',Level=3)
+      END IF
+      IF (ElementWiseRockMaterial) THEN
+        ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
+        NumberOfRockRecords = &
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+      ELSE
+        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
+      END IF
+
       IF (NumberOfRockRecords < 1) THEN
         CALL FATAL(SolverName,'No Rock Material specified')
       ELSE
@@ -4692,6 +4710,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
       CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
       dim = CoordinateSystemDimension()
     END IF
+    
     CALL ReadVars(N,Element,Model,Material,&
        NodalTemperature,NodalPressure,NodalPorosity,NodalSalinity,DummyNodalGWflux,&
        Temperature, Pressure, Porosity,Salinity,DummyGWflux,DummyGWflux,DummyGWflux,&
@@ -4699,9 +4718,9 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
        DummyGWfluxPerm, DummyGWfluxPerm,DummyGWfluxPerm,&
        NoSalinity,NoPressure,ConstantPorosity,GivenGWFlux,&
        PorosityName,SolverName,DIM)
-    CALL LocalMatrixXi(  Element, n, NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
+    CALL LocalMatrixXi(  Element, n, t, NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
           CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
-          PhaseChangeModel,ComputeXiT)
+          PhaseChangeModel,ComputeXiT, ElementWiseRockMaterial)
   END DO
   
   CALL DefaultFinishBoundaryAssembly()
@@ -4723,12 +4742,12 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
 CONTAINS
   ! Assembly of the matrix entries arising from the bulk elements
   !------------------------------------------------------------------------------
-  SUBROUTINE LocalMatrixXi( Element, n, NodalTemperature, NodalPressure, &
+  SUBROUTINE LocalMatrixXi( Element, n, elem, NodalTemperature, NodalPressure, &
        NodalPorosity, NodalSalinity, CurrentRockMaterial, CurrentSoluteMaterial,&
-       CurrentSolventMaterial, PhaseChangeModel, ComputeXit)
+       CurrentSolventMaterial, PhaseChangeModel, ComputeXit, ElementWiseRockMaterial)
     !------------------------------------------------------------------------------
     IMPLICIT NONE
-    INTEGER :: n
+    INTEGER :: n, elem
     TYPE(Element_t), POINTER :: Element
     TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
@@ -4736,7 +4755,7 @@ CONTAINS
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
-    LOGICAL :: ComputeXiT
+    LOGICAL :: ComputeXiT, ElementWiseRockMaterial
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,XiEtaAtIP,ksthAtIP  ! function values needed for KGTT
@@ -4775,7 +4794,6 @@ CONTAINS
 
     ! Get stuff from SIF Material section
     Material => GetMaterial(Element)
-    RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
     meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",Found)
     IF (.NOT.Found) THEN
       CALL INFO(FunctionName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
@@ -4793,6 +4811,14 @@ CONTAINS
       IF (ConstVal) &
            CALL INFO(FunctionName,'"Constant Permafrost Properties" set to true',Level=9)
     END IF
+
+    ! check, whether we have globally or element-wise defined values of rock-material parameters
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = elem  ! each element has it's own set of parameters
+    ELSE
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
+    END IF
+    
     deltaInElement = delta(CurrentSolventMaterial,eps,DeltaT,T0,GasConstant)
     ! Numerical integration:
     !-----------------------
