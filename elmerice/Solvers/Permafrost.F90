@@ -117,10 +117,12 @@ CONTAINS
       ! heat capacity water      
       LocalSolventMaterial % cw0  = 4207.7_dp
       LocalSolventMaterial % acw(0:5) = &
-           RESHAPE([1.0,-0.087,0.2859,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % acw))
+           RESHAPE([1.0_dp,-0.0887_dp,0.2859_dp,0.0_dp,0.0_dp,0.0_dp], &
+           SHAPE(LocalSolventMaterial % acw))
       LocalSolventMaterial % acwl=2      
       LocalSolventMaterial % bcw(0:5) = &
-           RESHAPE([1.0,1.5852,8.0686,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % bcw))
+           RESHAPE([1.0_dp,1.5852_dp,8.0686_dp,0.0_dp,0.0_dp,0.0_dp],&
+           SHAPE(LocalSolventMaterial % bcw))
       LocalSolventMaterial % bcwl=2
 
       !heat conductivity of water
@@ -131,43 +133,50 @@ CONTAINS
       LocalSolventMaterial % rhow0 = 999.9_dp ! density at reference temperature
       LocalSolventMaterial % kw0  = 4.4534d-10 ! Isothermal compressibility
 
-LocalSolventMaterial % ckw(0:5) = &
-           RESHAPE([1.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % ckw))
+      LocalSolventMaterial % ckw(0:5) = &
+           RESHAPE([1.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp],&
+           SHAPE(LocalSolventMaterial % ckw))
       LocalSolventMaterial % ckwl=0      
       LocalSolventMaterial % aw0  = -5.3358d-05 ! Isobaric thermal expansion
       LocalSolventMaterial % aaw(0:5) = &
-                 RESHAPE([1.0,-79.1305,207.4836,-403.8270,395.5347,-166.1466], SHAPE(LocalSolventMaterial % aaw))
+           RESHAPE([1.0_dp,-79.1305_dp,207.4836_dp,-403.8270_dp,395.5347_dp,-166.1466_dp],&
+           SHAPE(LocalSolventMaterial % aaw))
       LocalSolventMaterial % aawl=5
       LocalSolventMaterial % zw0  = -2.0217d-01 ! Isothermal chemical compaction
       LocalSolventMaterial % bzw(0:5) = &
-           RESHAPE([1.0,12.8298,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % bzw))
+           RESHAPE([1.0_dp,12.8298_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp],&
+           SHAPE(LocalSolventMaterial % bzw))
       LocalSolventMaterial % bzwl=1
 
       !viscosity water
       LocalSolventMaterial % muw0 = 1.7914d-03   ! viscosity at reference temperature
       LocalSolventMaterial % nu10 = -0.034376_dp ! temperature dependence of viscosity
       LocalSolventMaterial % anw(0:5) = &
-           RESHAPE([1.0,-2.3302,4.0084,-2.9697,0.0,0.0], SHAPE(LocalSolventMaterial % anw))
+           RESHAPE([1.0_dp,-2.3302_dp,4.0084_dp,-2.9697_dp,0.0_dp,0.0_dp],&
+           SHAPE(LocalSolventMaterial % anw))
       LocalSolventMaterial % anwl=3
       LocalSolventMaterial % bnw(0:5) = &
-           RESHAPE([1.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % bnw))
+           RESHAPE([1.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp],&
+           SHAPE(LocalSolventMaterial % bnw))
       LocalSolventMaterial % bnwl=0
 
       !!!!! ice !!!!!!
       
-      ! desity ice
+      ! density ice
       LocalSolventMaterial % rhoi0 = 916.8_dp !reference density
       LocalSolventMaterial % ki0  = 1.1417d-10 ! Isothermal compressibility
       LocalSolventMaterial % cki(0:5) = &
-           RESHAPE([1.0,0.0,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % cki))
+           RESHAPE([1.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp],&
+	    SHAPE(LocalSolventMaterial % cki))
       LocalSolventMaterial % ckil=0
       LocalSolventMaterial % ai0  = 1.6781d-04 ! Isobaric thermal expansion
       LocalSolventMaterial % aai(0:5) = &
-           RESHAPE([1.0,1.1923,0.0,0.0,0.0,0.0], SHAPE(LocalSolventMaterial % aai))
+           RESHAPE([1.0_dp,1.1923_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+	   SHAPE(LocalSolventMaterial % aai))
       LocalSolventMaterial % aail=1
       
       ! specivic volume ice
-      LocalSolventMaterial % vi0 = 1.0_dp/LocalSolventMaterial % rhoi0 ! reference specisfic volume
+      LocalSolventMaterial % vi0 = 1.0_dp/(LocalSolventMaterial % rhoi0) ! reference specific volume
       
       ! heat conductivity ice
       LocalSolventMaterial % ki0th = 2.24_dp!!      
@@ -176,7 +185,8 @@ LocalSolventMaterial % ckw(0:5) = &
       ! heat capacity     
       LocalSolventMaterial % ci0  = 2088.8_dp ! reference value
       LocalSolventMaterial % aci(0:5) = &
-           RESHAPE([1.0,0.9557,0.0,0.0,0.0,0.0],SHAPE(LocalSolventMaterial % aci))
+           RESHAPE([1.0_dp,0.9557_dp,0.0_dp,0.0_dp,0.0_dp,0.0_dp], &
+	   SHAPE(LocalSolventMaterial % aci))
       LocalSolventMaterial % acil=1
      
 
@@ -235,31 +245,38 @@ LocalSolventMaterial % ckw(0:5) = &
         ! heat capacity polynomials
         LocalSoluteMaterial % cc0   = 1906.6_dp
         LocalSoluteMaterial % acc(0:5) = &
-             RESHAPE([1.0_dp,-0.0887_dp,0.2859_dp,0.0_dp,0.0_dp,0.0_dp], SHAPE(LocalSoluteMaterial % acc))
+             RESHAPE([1.0_dp,-0.0887_dp,0.2859_dp,0.0_dp,0.0_dp,0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % acc))
         LocalSoluteMaterial % accl = 2
         LocalSoluteMaterial % bcc(0:5) = &
-             RESHAPE([1.0_dp,-1.5852_dp,8.0686_dp,0.0_dp,0.0_dp,0.0_dp], SHAPE(LocalSoluteMaterial % bcc))
+             RESHAPE([1.0_dp,-1.5852_dp,8.0686_dp,0.0_dp,0.0_dp,0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % bcc))
         LocalSoluteMaterial % bccl = 2
         ! density        
         LocalSoluteMaterial % ac0 =   -5.3358d-05 ! thermal expansion
         LocalSoluteMaterial % kc0 =   4.4534d-10  ! compressibility
         LocalSoluteMaterial % zc0 =   2.0217d-01  ! chemical compaction
         LocalSoluteMaterial % aac = &
-             RESHAPE([1.0_dp, -79.1305_dp, 207.4835_dp, -403.827_dp, 395.5347_dp, -166.1466_dp], SHAPE(LocalSoluteMaterial % aac))
+             RESHAPE([1.0_dp, -79.1305_dp, 207.4835_dp, -403.827_dp, 395.5347_dp, -166.1466_dp],&
+	      SHAPE(LocalSoluteMaterial % aac))
         LocalSoluteMaterial % aacl = 5
         LocalSoluteMaterial % ckc = &
-             RESHAPE([1.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp], SHAPE(LocalSoluteMaterial % ckc))
+             RESHAPE([1.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % ckc))
         LocalSoluteMaterial % ckcl = 0 
         LocalSoluteMaterial % bzc = &
-             RESHAPE([1.0_dp, -12.8298_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp], SHAPE(LocalSoluteMaterial % bzc))
+             RESHAPE([1.0_dp, -12.8298_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % bzc))
         LocalSoluteMaterial % bzcl = 1
         ! viscosity
         LocalSoluteMaterial % nu20 = 2.6870_dp !influence of salinity on viscosity
         LocalSoluteMaterial % anc = &
-             RESHAPE([1.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp], SHAPE(LocalSoluteMaterial % anc))
+             RESHAPE([1.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp, 0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % anc))
         LocalSoluteMaterial % ancl = 0
         LocalSoluteMaterial % bnc= &
-             RESHAPE([1.0_dp, 6.7992_dp, -31.3293_dp, 44.7717_dp, 0.0_dp, 0.0_dp], SHAPE(LocalSoluteMaterial % bnc))
+             RESHAPE([1.0_dp, 6.7992_dp, -31.3293_dp, 44.7717_dp, 0.0_dp, 0.0_dp],&
+	      SHAPE(LocalSoluteMaterial % bnc))
         LocalSoluteMaterial % bncl = 3
         DataRead=.TRUE.
       ELSE      
@@ -1276,19 +1293,30 @@ LocalSolventMaterial % ckw(0:5) = &
     deltaG = gwa - gia
   END FUNCTION deltaG
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetBi(CurrentSoluteMaterial,Salinity) RESULT(bi)
+  FUNCTION GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
+       Xi0Tilde,Salinity,Update) RESULT(bi)
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
-    REAL(KIND=dp), INTENT(IN) :: Salinity
-    REAL(KIND=dp):: bi(2)
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    REAL(KIND=dp), INTENT(IN) :: Xi0Tilde,Salinity
+    INTEGER,  INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp):: bi(4)
+    LOGICAL :: Update
     !----------
-    REAL(KIND=dp)::  aux,d1,d2
+    REAL(KIND=dp)::  aux,d1,d2,e1
 
-    d1 = CurrentSoluteMaterial % d1
-    d2 = CurrentSoluteMaterial % d2
-
-    aux = Salinity/(1.0_dp - Salinity)
-    bi(1) = aux*(d1 + 0.5_dp*d2*aux)
-    bi(2) = aux*(d1 + d2*aux)/(1.0_dp - Salinity)
+    IF (Update) THEN
+      e1 = CurrentRockMaterial % e1(RockMaterialID)
+      bi(3) = (1.0_dp - Xi0Tilde)*e1
+      bi(4) = Xi0Tilde*e1
+    ELSE
+      d1 = CurrentSoluteMaterial % d1
+      d2 = CurrentSoluteMaterial % d2
+      aux = Salinity/(1.0_dp - Salinity)
+      bi(1) = aux*(d1 + 0.5_dp*d2*aux)
+      bi(2) = aux*(d1 + d2*aux)/(1.0_dp - Salinity)
+      bi(3) = 0.0_dp
+      bi(4) = 0.0_dp
+    END IF
   END FUNCTION GetBi
   !---------------------------------------------------------------------------------------------
   FUNCTION GetBiYc(CurrentSoluteMaterial,Salinity) RESULT(biYc)
@@ -1311,31 +1339,30 @@ LocalSolventMaterial % ckw(0:5) = &
     IMPLICIT NONE
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    REAL(KIND=dp), INTENT(IN) :: Xi0tilde,delta,deltaG,GasConstant,bi(2),Temperature
+    REAL(KIND=dp), INTENT(IN) :: Xi0tilde,delta,deltaG,GasConstant,bi(4),Temperature
     INTEGER, INTENT(IN) :: RockMaterialID
     REAL(KIND=dp) :: B
     REAL(KIND=dp) :: e1,Mw
     Mw = CurrentSolventMaterial % Mw
     e1 = CurrentRockMaterial % e1(RockMaterialID)
 
-    B =(Mw*deltaG/(GasConstant*Temperature) +&
-         (1.0_dp - Xi0Tilde)*e1 - bi(1))/(Xi0Tilde*e1 + delta + bi(2))
-    
+    !B =(Mw*deltaG/(GasConstant*Temperature) +&
+    !     (1.0_dp - Xi0Tilde)*e1 - bi(1))/(Xi0Tilde*e1 + delta + bi(2))
+    B =(Mw*deltaG/(GasConstant*Temperature) - bi(1) + bi(3))/(delta + bi(2) + bi(4)) 
+        
     IF (B .NE. B) THEN
-      PRINT *, "B:", Mw, deltaG,Temperature,bi(1),e1,delta,bi(2)
+      PRINT *, "B:", Mw, deltaG,Temperature,bi(1),e1,delta,bi(2),bi(4)
       STOP
     END IF
   END FUNCTION GetB
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION D(CurrentRockMaterial,RockMaterialID,Xi0Tilde,delta,bi)
+  REAL (KIND=dp) FUNCTION D(CurrentRockMaterial,RockMaterialID,delta,bi)
     IMPLICIT NONE
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     INTEGER, INTENT(IN) :: RockMaterialID
-    REAL(KIND=dp), INTENT(IN) :: Xi0Tilde,delta,bi(2)
-    REAL(KIND=dp) :: e1
-    e1 = CurrentRockMaterial % e1(RockMaterialID)
+    REAL(KIND=dp), INTENT(IN) :: delta,bi(4)
     ! local
-    D = delta/(e1*Xi0Tilde + delta + bi(2))
+    D = delta/(delta + bi(2) + bi(4))
     IF (D .NE. D) THEN
       PRINT *, "D"
       STOP
@@ -1391,13 +1418,11 @@ LocalSolventMaterial % ckw(0:5) = &
     Xi= 1.0_dp/(1.0_dp + 0.5_dp*B + SQRT(0.25_dp*B*B + D))
   END FUNCTION GetXi
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-       B,D,Xi,Xi0Tilde,bi,p0,delta,deltaG,T0,gwa,gia,gwaT,giaT,GasConstant,Temperature)
+  REAL (KIND=dp) FUNCTION XiT(CurrentSolventMaterial,&
+       B,D,Xi,bi,p0,delta,deltaG,T0,gwa,gia,gwaT,giaT,GasConstant,Temperature)
     IMPLICIT NONE
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B,D,Xi,Xi0Tilde,bi(2),p0,delta,deltaG,&
+    REAL(KIND=dp), INTENT(IN) :: B,D,Xi,bi(4),p0,delta,deltaG,&
          T0,gwa,gia,gwaT,giaT,GasConstant,Temperature
     !local
     REAL(KIND=dp) :: aux1, aux2, aux3, Mw,e1, hi0,hw0,rhow0,rhoi0,cw0,ci0
@@ -1415,22 +1440,19 @@ LocalSolventMaterial % ckw(0:5) = &
       ci0   = CurrentSolventMaterial % ci0  
       FirstTime=.FALSE.
     END IF
-    e1 = CurrentRockMaterial % e1(RockMaterialID)
-    aux1 = 1.0_dp/(Xi0Tilde*e1 + delta + bi(2))
+    aux1 = 1.0_dp/(delta + bi(2) + bi(4))
     aux2 = (1.0_dp + B/SQRT(B*B + 4.0_dp*D))
     aux3 = ((gwa - gia)/Temperature - (gwaT - giaT))
     XiT = 0.5_dp*(Mw/(GasConstant*Temperature))*aux1*aux2*aux3*Xi*Xi
   END FUNCTION XiT
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-       B,D,bi,Xi,Xi0Tilde,gwap,giap,delta,GasConstant,Temperature)
+  REAL (KIND=dp) FUNCTION XiP(CurrentSolventMaterial,&
+       B,D,bi,Xi,gwap,giap,delta,GasConstant,Temperature)
     IMPLICIT NONE
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B,D,bi(2),Xi,Xi0Tilde,gwap,giap,delta,GasConstant,Temperature
+    REAL(KIND=dp), INTENT(IN) :: B,D,bi(4),Xi,gwap,giap,delta,GasConstant,Temperature
     !local
-    REAL(KIND=dp) :: aux1, aux2, rhow0,rhoi0, Mw,e1
+    REAL(KIND=dp) :: aux1, aux2, rhow0,rhoi0, Mw
     LOGICAL :: FirstTime=.TRUE.
 
     SAVE Mw,rhow0,rhoi0,FirstTime
@@ -1440,61 +1462,56 @@ LocalSolventMaterial % ckw(0:5) = &
       rhoi0 = CurrentSolventMaterial % rhoi0
       FirstTime=.FALSE.
     END IF
-    e1 = CurrentRockMaterial % e1(RockMaterialID)
     IF (Temperature <= 0.0_dp) CALL FATAL("Permafrost (XiP)","(sub-)Zero Temperature detected")
-    aux1 = 1.0_dp/(Xi0Tilde*e1 + delta + bi(2))
+    aux1 = 1.0_dp/(delta + bi(2) + bi(4))
     aux2 = (1.0_dp + B/SQRT(B*B + 4.0_dp*D))
     XiP = 0.5_dp * aux1 * aux2 *(giap - gwap)* Mw/(GasConstant*Temperature)*Xi*Xi
   END FUNCTION XiP
   !---------------------------------------------------------------------------------------------
-  REAL (KIND=dp) FUNCTION XiYc(CurrentRockMaterial,RockMaterialID,&
-       B,D,bi,biYc,Xi0Tilde,Xi,delta)
+  REAL (KIND=dp) FUNCTION XiYc(B,D,bi,biYc,Xi,delta)
     IMPLICIT NONE
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B,D,bi(2),biYc(2),Xi0Tilde,Xi,delta
+    REAL(KIND=dp), INTENT(IN) :: B,D,bi(4),biYc(2),Xi,delta
     !local
-    REAL(KIND=dp) :: aux1, aux2, aux3, aux_sqrt, e1
+    REAL(KIND=dp) :: aux1, aux2, aux3, aux_sqrt
 
-    e1 = CurrentRockMaterial % e1(RockMaterialID)
     aux_sqrt = B*B + 4.0_dp*D
-    aux1 = 1.0_dp/(Xi0Tilde*e1 + delta + bi(2))
+    aux1 = 1.0_dp/(delta + bi(2) + bi(4))
     aux2 = ( 1.0_dp + B/SQRT(aux_sqrt) )*(biYc(1) + B*biYc(2)) &
          + biYc(2)/(SQRT(aux_sqrt))
     aux3 = 2.0_dp*D*biYc(2)/(SQRT(aux_sqrt))
     XiYc = 0.5_dp*aux1*(aux2 + aux3)*Xi*Xi      
     IF (XiYc .NE. XiYc) THEN
-      PRINT *, "XiYc:", aux1, aux2,RockMaterialID        
-      PRINT *, B, D, biYc(1), biYc(2),Xi0Tilde,e1,delta
+      PRINT *, "XiYc:", aux1, aux2
+      PRINT *, B, D, biYc(1), biYc(2),delta
       STOP
     END IF
   END FUNCTION XiYc
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION XiEta(CurrentRockMaterial,RockMaterialID,&
-       B,D,bi,biYc,Xi,Xi0Tilde,delta,Porosity)
+       B,D,bi,biYc,Xi,delta,Porosity)
     IMPLICIT NONE
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     INTEGER, INTENT(IN) :: RockMaterialID    
-    REAL(KIND=dp), INTENT(IN) :: B,D,bi(2),biYc(2),Xi,Xi0Tilde,delta,Porosity
+    REAL(KIND=dp), INTENT(IN) :: B,D,bi(4),biYc(2),Xi,delta,Porosity
     !local
-    REAL(KIND=dp) :: aux1, aux2, aux3, aux_sqrt,Xi0,eta0, e1
+    REAL(KIND=dp) :: aux1, aux2, aux3, aux_sqrt,Xi0,eta0
 
     Xi0 = CurrentRockMaterial % Xi0(RockMaterialID)
     eta0 = CurrentRockMaterial % eta0(RockMaterialID)
-    e1 = CurrentRockMaterial % e1(RockMaterialID)
     
     aux_sqrt = B*B + 4.0_dp*D
     
     IF (Porosity >= 0.0_dp) THEN
-      IF (Xi0Tilde < 1.0_dp) THEN
-        aux1 = 1.0_dp/(Xi0Tilde*e1 + delta + bi(2))
-        aux2 = ( 1.0_dp + B/SQRT(aux_sqrt) )*(1.0_dp + B)
-        aux3 = 2.0_dp*D*biYc(2)/SQRT(aux_sqrt)
-        XiEta = 0.5_dp*aux1*(aux2 + aux3) * (Xi0*eta0/(1.0_dp - eta0))*(1.0_dp/(Porosity**2.0_dp))*Xi*Xi
-      ELSE
-        XiEta = 0.0_dp
-      END IF
+ !     IF (Xi0Tilde < 1.0_dp) THEN
+      aux1 = 1.0_dp/(delta + bi(2) + bi(4))
+      aux2 = ( 1.0_dp + B/SQRT(aux_sqrt) )*(1.0_dp + B)
+      aux3 = 2.0_dp*D*biYc(2)/SQRT(aux_sqrt)
+      XiEta = 0.5_dp*aux1*(aux2 + aux3) * (Xi0*eta0/(1.0_dp - eta0))&
+           *(1.0_dp/(Porosity**2.0_dp))*Xi*Xi
+!      ELSE
+!        XiEta = 0.0_dp
+!      END IF
     ELSE
       CALL WARN("Permafrost(XiEta)","Porosity out of physical range - returning zero")
       XiEta = 0.0_dp
@@ -1521,12 +1538,12 @@ LocalSolventMaterial % ckw(0:5) = &
     REAL(KIND=dp), INTENT(OUT) :: XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,XiEtaAtIP
     LOGICAL, INTENT(IN) :: ComputeXiT, ComputeXiYc, ComputeXiP, ComputeXiEta
     !---------------------------
-    REAL(KIND=dp) :: biAtIP(2),biYcAtIP(2),gwaAtIP,gwaTAtIP,gwapAtIP,&
+    REAL(KIND=dp) :: biAtIP(4),biYcAtIP(2),gwaAtIP,gwaTAtIP,gwapAtIP,&
          giaAtIP,giaTAtIP,giapAtIP,deltaGAtIP,DAtIP,BAtIP
     !---------------------------
     !PRINT *, "GetXiHartikainen:",p0,PressureAtIP
-    biAtIP = GetBi(CurrentSoluteMaterial,SalinityAtIP)
-    biYcAtIP = GetBiYc(CurrentSoluteMaterial,SalinityAtIP)
+    biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
+         Xi0Tilde,SalinityAtIP,.FALSE.) 
     gwaAtIP = gwa(CurrentSolventMaterial,&
        p0,T0,rhowAtIP,TemperatureAtIP,PressureAtIP)
     gwaTAtIP =  gwaT(CurrentSolventMaterial,&
@@ -1537,31 +1554,37 @@ LocalSolventMaterial % ckw(0:5) = &
     giaTAtIP = giaT(CurrentSolventMaterial,&
          p0,T0,rhoiAtIP,TemperatureAtIP)
     giapAtIP = 1.0_dp/rhoiAtIP
-    deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-    DAtIP= D(CurrentRockMaterial,RockMaterialID,Xi0Tilde,deltaInElement,biAtIP)
+    deltaGAtIP = deltaG(gwaAtIP,giaAtIP)
+    ! first shot with b3,b4=0
+    DAtIP= D(CurrentRockMaterial,RockMaterialID,deltaInElement,biAtIP)
     BAtIP = GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
        Xi0tilde,deltaInElement,deltaGAtIP,GasConstant,biAtIP,TemperatureAtIP)
+    XiAtIP = GetXi(BAtIP,DAtIP)
+    ! conditional update
+    IF (XiAtIP < Xi0tilde)  THEN
+      biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
+           Xi0Tilde,SalinityAtIP,.TRUE.)
+      XiAtIP = GetXi(BAtIP,DAtIP)
+    END IF
     !----------------------------------------------------
-    XiAtIP = GetXi(BAtIP,DAtIP) ! the beef
-    !----------------------------------------------------
+    biYcAtIP = GetBiYc(CurrentSoluteMaterial,SalinityAtIP)
     XiTAtIP = 0.0_dp
     XiYcAtIP = 0.0_dp
     XiPAtIP = 0.0_dp
     !XiEtaAtIP = 0.0_dp
     IF (ComputeXiT) &
-         XiTAtIP= XiT(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-         BAtIP,DAtIP,XiAtIP,Xi0Tilde,biAtIP,p0,&
+         XiTAtIP= XiT(CurrentSolventMaterial,&
+         BAtIP,DAtIP,XiAtIP,biAtIP,p0,&
          deltaInElement,deltaGAtIP,T0,gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP)
     IF (ComputeXiYC) &
-         XiYcAtIP = XiYc(CurrentRockMaterial,RockMaterialID,&
-         BAtIP,DAtIP,biAtIP,biYcAtIP,Xi0Tilde,XiAtIP,deltaInElement)
+         XiYcAtIP = XiYc(BAtIP,DAtIP,biAtIP,biYcAtIP,XiAtIP,deltaInElement)
     IF (ComputeXiP) &
-         XiPAtIP = XiP(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-         BAtIP,DAtIP,biAtIP,gwapAtIP,giapAtIP,XiAtIP,Xi0Tilde,&
+         XiPAtIP = XiP(CurrentSolventMaterial,&
+         BAtIP,DAtIP,biAtIP,gwapAtIP,giapAtIP,XiAtIP,&
          deltaInElement,GasConstant,TemperatureAtIP)
-    !IF(ComputeXiEta) &
+    !IF(ComputeXiEta .AND (Xi0Tilde < 1.0_dp)) &
     !     XiEta(CurrentRockMaterial,RockMaterialID,&
-    !     BAtIP,DAtIP,biAtIP,biYcAtIP,gXiAtIP,Xi0Tilde,PorosityAtIP)
+    !     BAtIP,DAtIP,biAtIP,biYcAtIP,gXiAtIP,PorosityAtIP)
   END SUBROUTINE GetXiHartikainen
   !---------------------------------------------------------------------------------------------
   ! Densities and their derivatives, thermal expansion, isothermal chemical compaction and
