@@ -1648,10 +1648,10 @@ CONTAINS
            CurrentSolventMaterial % aawl)
       rhow = rhow * EXP(aux1 - aux2)
       IF (rhow < 800.0) THEN
-        PRINT *, "rhow:", aux1, aux2
+        PRINT *, "rhow:",  rhow,CurrentSolventMaterial % rhow0,aux1, aux2,Pressure,Temperature
       END IF
       IF (rhow .NE. rhow) THEN
-        PRINT *, "rhow:", aux1, aux2
+        PRINT *, "rhow:", rhow,CurrentSolventMaterial % rhow0,aux1, aux2,Pressure,Temperature
         STOP
       END IF
     END IF
@@ -2603,6 +2603,7 @@ CONTAINS
     END IF
     DispersionCoefficient = GetConstReal(Material,"Dispersion Coefficient", ConstantDispersion)
     CryogenicSuction = GetLogical(Material,"Compute Cryogenic Suction", Found)
+    IF (.NOT.Found) CryogenicSuction = .FALSE.
    
 
     ! check, whether we have globally or element-wise defined values of rock-material parameters
@@ -3867,7 +3868,9 @@ CONTAINS
           END DO
           FORCE(1:nd) = FORCE(1:nd) + Weight * C*Ext * Basis(1:nd)
         ELSE IF (Fluxcondition) THEN
-          FORCE(1:nd) = FORCE(1:nd) + Weight * (F + C*Ext) * Basis(1:nd)
+          !FORCE(1:nd) = FORCE(1:nd) + Weight * (F + C*Ext) * Basis(1:nd)
+          FORCE(1:nd) = FORCE(1:nd) + Weight * F * Basis(1:nd)
+          !PRINT *,"LocalMatrixBCHTEQ:",F
         END IF
       END DO
     END IF
