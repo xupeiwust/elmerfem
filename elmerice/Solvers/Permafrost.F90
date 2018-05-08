@@ -5524,9 +5524,10 @@ CONTAINS
         PropertyAtIP = KgwpTAtIP(TensorComponent(1),TensorComponent(2))
       CASE('kgwpp')
         PropertyAtIP = KgwppAtIP(TensorComponent(1),TensorComponent(2))
-      CASE('kc')
-        PropertyAtIP = KgwppAtIP(TensorComponent(1),TensorComponent(2))
-        
+      CASE('CgwTT')
+        PropertyAtIP = CGTTAtIP
+      CASE('KGTT')
+        PropertyAtIP = KGTTAtIP(TensorComponent(1),TensorComponent(2))
       CASE DEFAULT
         WRITE(Message,*) ' Variable "', TRIM(VariableName), '" not implemented.'
         CALL FATAL(SolverName,Message)
