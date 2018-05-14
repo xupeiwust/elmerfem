@@ -609,6 +609,8 @@ CONTAINS
       ELSE        
         !------------------------------------------------------------------------------
         ! Read in the number of records in file (first line integer)
+        ! MIND: all receiving array numbers are shifted by -1 in index with resepect
+        !       to J. Hartikainen's instructions in input_data_forsmark_2d_example.pdf!
         !------------------------------------------------------------------------------
         WRITE (Message,*) "Attempting read ",NoElements,&
              " from data file ",TRIM(MaterialFileName)
@@ -621,42 +623,42 @@ CONTAINS
           IF (LocalRockMaterial % e1(I) > 0.01) PRINT *,"e1:", ReceivingArray(34)
           IF (LocalRockMaterial % e1(I) < 0.0) PRINT *,"e1:", ReceivingArray(34)
           LocalRockMaterial % bs(I) = ReceivingArray(24) ! b11,1 (mail from Juha 11.10.)
-          LocalRockMaterial % rhos0(I) = ReceivingArray(2)
-          LocalRockMaterial % Xi0(I) = ReceivingArray(33)
+          LocalRockMaterial % rhos0(I) = ReceivingArray(1)
+          LocalRockMaterial % Xi0(I) = ReceivingArray(32)
           !-----------------------------
-          LocalRockMaterial % eta0(I) = ReceivingArray(31) ! eta_t (mail from Juha 11.10.)
+          LocalRockMaterial % eta0(I) = ReceivingArray(30) ! eta_t (mail from Juha 11.10.)
           LocalRockMaterial % hs0(I) = 0.0_dp! will be removed
           !-----------------------------
-          LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(36)
-          LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(37)
-          LocalRockMaterial % Kgwh0(3,3,I) = ReceivingArray(38)
-          LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(39)
-          LocalRockMaterial % Kgwh0(1,3,I) = ReceivingArray(40)
-          LocalRockMaterial % Kgwh0(2,3,I) = ReceivingArray(41)
+          LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(35)
+          LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(36)
+          LocalRockMaterial % Kgwh0(3,3,I) = ReceivingArray(37)
+          LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(38)
+          LocalRockMaterial % Kgwh0(1,3,I) = ReceivingArray(39)
+          LocalRockMaterial % Kgwh0(2,3,I) = ReceivingArray(40)
           LocalRockMaterial % Kgwh0(2,1,I) = LocalRockMaterial % Kgwh0(1,2,I)
           LocalRockMaterial % Kgwh0(3,1,I) = LocalRockMaterial % Kgwh0(1,3,I)
           LocalRockMaterial % Kgwh0(3,2,I) = LocalRockMaterial % Kgwh0(2,3,I)
           !-----------------------------
-          LocalRockMaterial % qexp(I) = ReceivingArray(42) !?????????????????????????????????????????????
-          LocalRockMaterial % alphaL(I) = ReceivingArray(48)
-          LocalRockMaterial % alphaT(I) = ReceivingArray(49)
-          LocalRockMaterial % RadGen(I) = ReceivingArray(30)
+          LocalRockMaterial % qexp(I) = ReceivingArray(41) !?????????????????????????????????????????????
+          LocalRockMaterial % alphaL(I) = ReceivingArray(47)
+          LocalRockMaterial % alphaT(I) = ReceivingArray(48)
+          LocalRockMaterial % RadGen(I) = ReceivingArray(29)
           !-----------------------------
-          LocalRockMaterial % cs0(I) = ReceivingArray(9)
-          LocalRockMaterial % acs(0,I) =  ReceivingArray(10)
-          LocalRockMaterial % acs(1,I) =  ReceivingArray(11)
+          LocalRockMaterial % cs0(I) = ReceivingArray(8)
+          LocalRockMaterial % acs(0,I) =  ReceivingArray(9)
+          LocalRockMaterial % acs(1,I) =  ReceivingArray(10)
           LocalRockMaterial % acs(2:5,I) = 0.0_dp
           LocalRockMaterial % acsl(I)= 1
           !-----------------------------
-          LocalRockMaterial % as0(I)= ReceivingArray(3)
-          LocalRockMaterial % aas(0,I) =  ReceivingArray(4)
-          LocalRockMaterial % aas(1,I) =  ReceivingArray(5)
+          LocalRockMaterial % as0(I)= ReceivingArray(2)
+          LocalRockMaterial % aas(0,I) =  ReceivingArray(3)
+          LocalRockMaterial % aas(1,I) =  ReceivingArray(4)
           LocalRockMaterial % aas(2:5,I) = 0.0_dp
           LocalRockMaterial % aasl(I)= 1
           !-----------------------------
-          LocalRockMaterial % ks0(I)= ReceivingArray(6)
-          LocalRockMaterial % cks(0,I) = ReceivingArray(7)
-          LocalRockMaterial % cks(1,I) = ReceivingArray(8)
+          LocalRockMaterial % ks0(I)= ReceivingArray(5)
+          LocalRockMaterial % cks(0,I) = ReceivingArray(6)
+          LocalRockMaterial % cks(1,I) = ReceivingArray(7)
           LocalRockMaterial % cks(2:5,I)= 0.0_dp
           LocalRockMaterial % cksl(I)= 1
           !-----------------------------
@@ -809,16 +811,20 @@ CONTAINS
       END IF
     END IF
 
-    TemperatureName = ListGetString(Params, &
-         'Temperature Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Temperature Variable' not found. Using default 'Temperature' ")
-      WRITE(TemperatureName,'(A)') 'Temperature'
+    IF (TRIM(CallerSolverName) == "PermafrostHeatEquation") THEN
+      TemperatureVar => Solver % Variable
     ELSE
-      WRITE(Message,'(A,A)') "'Temperature Variable' found and set to: ", TemperatureName
-      CALL INFO(SolverName,Message,Level=9)
+      TemperatureName = ListGetString(Params, &
+           'Temperature Variable', Found )
+      IF (.NOT.Found) THEN
+        CALL WARN(SolverName," 'Temperature Variable' not found. Using default 'Temperature' ")
+        WRITE(TemperatureName,'(A)') 'Temperature'
+      ELSE
+        WRITE(Message,'(A,A)') "'Temperature Variable' found and set to: ", TemperatureName
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      TemperatureVar => VariableGet(Solver % Mesh % Variables,TemperatureName)
     END IF
-    TemperatureVar => VariableGet(Solver % Mesh % Variables,TemperatureName)
     IF (.NOT.ASSOCIATED(TemperatureVar)) THEN
       WRITE(Message,'(A,A,A)') "'Temperature Variable ", TRIM(TemperatureName), " not associated"
       CALL FATAL(SolverName,Message)
@@ -829,16 +835,20 @@ CONTAINS
       CALL INFO(SolverName,Message,Level=9)
     END IF
 
-    PressureName = ListGetString(Params, &
-         'Pressure Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
-      WRITE(PressureName,'(A)') 'Pressure'
+    IF (TRIM(CallerSolverName) == "PermafrostGroundWaterFlow") THEN
+      PressureVar => Solver % Variable
     ELSE
-      WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
-      CALL INFO(SolverName,Message,Level=9)
+      PressureName = ListGetString(Params, &
+           'Pressure Variable', Found )
+      IF (.NOT.Found) THEN
+        CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
+        WRITE(PressureName,'(A)') 'Pressure'
+      ELSE
+        WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
     END IF
-    PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
     IF (.NOT.ASSOCIATED(PressureVar)) THEN
       NULLIFY(Pressure)
       NoPressure = .TRUE.
@@ -874,16 +884,20 @@ CONTAINS
       NULLIFY(PorosityVar)
     END IF
 
-    SalinityName = ListGetString(Params, &
-         'Salinity Variable', Found )
-    IF (.NOT.Found) THEN
-      CALL WARN(SolverName," 'Salinity Variable' not found. Using default 'Salinity' ")
-      WRITE(SalinityName,'(A)') 'Salinity'
+    IF (TRIM(CallerSolverName) == 'PermafrostSoluteTransport') THEN
+      PressureVar => Solver % Variable
     ELSE
-      WRITE(Message,'(A,A)') "'Salinity Variable' found and set to: ", SalinityName
-      CALL INFO(SolverName,Message,Level=9)
+      SalinityName = ListGetString(Params, &
+         'Salinity Variable', Found )
+      IF (.NOT.Found) THEN
+        CALL WARN(SolverName," 'Salinity Variable' not found. Using default 'Salinity' ")
+        WRITE(SalinityName,'(A)') 'Salinity'
+      ELSE
+        WRITE(Message,'(A,A)') "'Salinity Variable' found and set to: ", SalinityName
+        CALL INFO(SolverName,Message,Level=9)
+      END IF
+      SalinityVar => VariableGet(Solver % Mesh % Variables,SalinityName)
     END IF
-    SalinityVar => VariableGet(Solver % Mesh % Variables,SalinityName)
     IF (.NOT.ASSOCIATED(SalinityVar)) THEN
       CALL WARN(SolverName,'Salinity Variable not found. Switching Salinity off')
       NoSalinity = .TRUE.
@@ -928,7 +942,7 @@ CONTAINS
         END IF
       END IF
       CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
-    END IF    
+    END IF
   END SUBROUTINE AssignVars
 
   
@@ -3724,8 +3738,6 @@ CONTAINS
            GetCGTT(XiAtIP,XiTAtIP,rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,&
            cwAtIP,ciAtIP,csAtIP,ccAtIP,hiAtIP,hwAtIP,&
            PorosityAtIP,SalinityAtIP)
-      !IF ((TemperatureAtIP < 273.65) .AND. (TemperatureAtIP > 272.65))&
-      !     PRINT *, "HTEQ: CGTTAtIP", CGTTAtIP, XiAtIP,XiTAtIP,hiAtIP,hwAtIP
       CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,XiAtIP,SalinityAtIP)
       !PRINT *,"CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
       ! compute groundwater flux for advection term
@@ -3949,7 +3961,7 @@ SUBROUTINE PermafrostSoluteTransport( Model,Solver,dt,TransientSimulation )
        ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.,GivenGWFlux=.FALSE.,&
        ElementWiseRockMaterial
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
-  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostSoluteTransportEquation'
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostSoluteTransport'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, VarName, TemperatureName, GWfluxName, PhaseChangeModel,&
        ElementRockMaterialName
 
