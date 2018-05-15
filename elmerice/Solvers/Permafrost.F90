@@ -757,7 +757,43 @@ CONTAINS
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
   END FUNCTION ReadPermafrostConstants
   !---------------------------------------------------------------------------------------------
-
+  ! assign depth variable
+  SUBROUTINE AssignVarDepth(Solver,Model,NodalDepth,DepthVar,DepthName,DepthExists)
+    IMPLICIT NONE
+    
+    TYPE(Solver_t) :: Solver
+    TYPE(Model_t) :: Model
+    REAL(KIND=dp),POINTER :: NodalDepth(:)
+    LOGICAL :: DepthExists
+    CHARACTER(LEN=MAX_NAME_LEN) :: DepthName
+    TYPE(Variable_t), POINTER :: DepthVar
+    ! ----
+    LOGICAL :: AllocationsDone=.FALSE.
+    INTEGER :: N, istat
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='AssignVarDepth'
+    
+    SAVE AllocationsDone
+    
+    IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
+      N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
+      IF (AllocationsDone) &
+           DEALLOCATE(NodalDepth)
+      ALLOCATE(NodalDepth(N),STAT=istat )
+      IF ( istat /= 0 ) THEN
+        CALL FATAL(SolverName,"Allocation error")
+      ELSE
+        AllocationsDone = .TRUE.
+        CALL INFO(SolverName,"Allocations Done",Level=1)
+      END IF
+    END IF    
+    DepthVar => VariableGet(Solver % Mesh % Variables,DepthName)
+    IF (.NOT.ASSOCIATED(DepthVar)) THEN
+      DepthExists = .FALSE.
+    ELSE
+      DepthExists = .TRUE.
+    END IF
+  END SUBROUTINE AssignVarDepth
+  ! assign variables 
   !---------------------------------------------------------------------------------------------
   SUBROUTINE AssignVars(Solver,Model,AllocationsDone,&
        NodalTemperature,NodalPressure,NodalPorosity,NodalSalinity,NodalGWflux, &
@@ -943,8 +979,7 @@ CONTAINS
       END IF
       CALL INFO(SolverName,'Groundwater flux Variable found. Using this as prescribed groundwater flux',Level=9)
     END IF
-  END SUBROUTINE AssignVars
-
+  END SUBROUTINE AssignVars 
   
   ! compute element-wise nodal variables
   SUBROUTINE ReadVars(N,Element,Model,Material,&
@@ -2346,7 +2381,16 @@ CONTAINS
     !-------------------------
     CcYcYc = Porosity*(rhoc + Salinity*rhocYc)
   END FUNCTION CcYcYc
-
+  !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION RadiogenicHeatProduction(CurrentRockMaterial,RockMaterialID,Depth,RefDepth)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Depth,RefDepth
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    !---------
+    RadiogenicHeatProduction = CurrentRockMaterial % RadGen(RockMaterialID) &
+         * EXP(-Depth/RefDepth)    
+  END FUNCTION RadiogenicHeatProduction
   !---------------------------------------------------------------------------------------------
 END MODULE PermafrostMaterials
 !---------------------------------------------------------------------------------------------
@@ -3414,7 +3458,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   TYPE(Element_t),POINTER :: Element
   TYPE(ValueList_t), POINTER :: Params, Material
   TYPE(Variable_t), POINTER :: TemperatureVar,PressureVar,PorosityVar,SalinityVar,&
-       GWfluxVar1,GWfluxVar2,GWfluxVar3
+       GWfluxVar1,GWfluxVar2,GWfluxVar3,DepthVar
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
@@ -3426,18 +3470,19 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Temperature(:), Pressure(:), Porosity(:), Salinity(:),GWflux1(:),GWflux2(:),GWflux3(:)
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
-       NodalTemperature(:),NodalGWflux(:,:)
+       NodalTemperature(:),NodalGWflux(:,:),NodalDepth(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
        ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.,GivenGWFlux=.FALSE.,&
-       ElementWiseRockMaterial
+       ElementWiseRockMaterial, DepthExists
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName, PhaseChangeModel,&
-       ElementRockMaterialName,VarName
+       ElementRockMaterialName,VarName, DepthName
 
-  SAVE DIM,FirstTime,AllocationsDone,GivenGWFlux,&
+  SAVE DIM,FirstTime,AllocationsDone,GivenGWFlux,DepthName,&
        CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords,&
-       NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux,ElementWiseRockMaterial!,NodalGWflux,NoGWflux
+       NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux,NodalDepth,&
+       ElementWiseRockMaterial!,NodalGWflux,NoGWflux
   !------------------------------------------------------------------------------
   CALL Info( SolverName, '-------------------------------------',Level=1 )
   CALL Info( SolverName, 'Computing heat transfer              ',Level=1 )
@@ -3457,6 +3502,16 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
        GWFlux1,GWFlux2,GWFlux3, &
        NoPressure, NoSalinity,ConstantPorosity,GivenGWFlux, DIM, SolverName)
 
+  IF (FirstTime) THEN
+    DepthName = ListGetString(Params,'Depth Variable Name', Found)
+    IF (.NOT.Found) THEN
+      WRITE(DepthName,'(A)') 'Depth'
+      CALL WARN(SolverName,' "Depth Variable Name" not found. Assuming default "Depth"')
+    END IF
+  END IF
+  
+  CALL AssignVarDepth(Solver, Model,NodalDepth,DepthVar,DepthName,DepthExists)
+  
   maxiter = ListGetInteger( Params,&
        'Nonlinear System Max Iterations',Found,minv=1)
   IF(.NOT. Found ) maxiter = 1
@@ -3519,9 +3574,12 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
        NoSalinity,NoPressure,ConstantPorosity,GivenGWFlux,&
        PorosityName,SolverName,DIM)
 
+      IF (DepthExists) &
+           NodalDepth(1:N) = DepthVar % Values(DepthVar % Perm(Element % NodeIndexes(1:N)))
+      
       CALL LocalMatrixHTEQ(  Element, t, Active, n, nd+nb,&
-           NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
-           NodalGWflux,GivenGWflux,&
+           NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&           
+           NodalGWflux, NodalDepth,GivenGWflux, DepthExists, &
            CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
            NumberOfRockRecords, PhaseChangeModel,ElementWiseRockMaterial)
     END DO
@@ -3561,7 +3619,7 @@ CONTAINS
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixHTEQ(  Element, ElementNo, NoElements, n, nd,&
        NodalTemperature, NodalPressure, NodalPorosity, NodalSalinity,&
-       NodalGWflux, GivenGWflux,&
+       NodalGWflux, NodalDepth,GivenGWflux,DepthExists, &
        CurrentRockMaterial, CurrentSoluteMaterial, CurrentSolventMaterial,&
        NumberOfRockRecords, PhaseChangeModel, ElementWiseRockMaterial)
     IMPLICIT NONE
@@ -3572,11 +3630,11 @@ CONTAINS
     TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
-         NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:)
-    LOGICAL, INTENT(IN) :: GivenGWflux, ElementWiseRockMaterial
+         NodalGWflux(:,:), NodalPorosity(:), NodalPressure(:),NodalDepth(:)
+    LOGICAL, INTENT(IN) :: GivenGWflux, ElementWiseRockMaterial,DepthExists
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: CGTTAtIP, CgwTTAtIP, CGTpAtIP, CGTycAtIP,KGTTAtIP(3,3)   ! needed in equation
+    REAL(KIND=dp) :: RefDepth,CGTTAtIP, CgwTTAtIP, CGTpAtIP, CGTycAtIP,KGTTAtIP(3,3)   ! needed in equation
     REAL(KIND=dp) :: XiAtIP, Xi0Tilde,XiTAtIP,XiPAtIP,XiYcAtIP,XiEtaAtIP,&
          ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,hiAtIP,hwAtIP  ! function values needed for C's and KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, bijAtIP(2,2), bijYcAtIP(2,2),&
@@ -3616,8 +3674,9 @@ CONTAINS
     ! Get stuff from SIF BodyForce section
     BodyForce => GetBodyForce()
     IF ( ASSOCIATED(BodyForce) ) &
-         LOAD(1:n) = GetReal( BodyForce,'Heat Source', Found )
+         LOAD(1:n) = GetReal( BodyForce,'Heat Source', Found )   
 
+    
     ! Get stuff from SIF Material section
     Material => GetMaterial(Element)
     IF (ElementWiseRockMaterial) THEN
@@ -3626,6 +3685,18 @@ CONTAINS
       RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
     END IF
 
+    IF (DepthExists) THEN
+      RefDepth = GetConstReal(Material,'Radiogenic Reference Depth',Found)
+      IF (Found) THEN
+        DO I=1,N
+          LOAD(I) = LOAD(I) + &
+               RadiogenicHeatProduction(CurrentRockMaterial,RockMaterialID,NodalDepth(I),RefDepth)
+          !PRINT *,"HTEQ: RGEN",RadiogenicHeatProduction(CurrentRockMaterial,RockMaterialID,NodalDepth(I),RefDepth), NodalDepth(I)
+        END DO
+ 
+      END IF
+    END IF
+    
     ConstVal = GetLogical(Material,'Constant Permafrost Properties',Found)
     IF (.NOT.Found) THEN
       ConstVal = .FALSE.
