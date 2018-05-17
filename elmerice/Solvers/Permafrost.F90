@@ -3478,7 +3478,8 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName, PhaseChangeModel,&
        ElementRockMaterialName,VarName, DepthName
-
+  TYPE(ValueHandle_t) :: Load_h
+  
   SAVE DIM,FirstTime,AllocationsDone,GivenGWFlux,DepthName,&
        CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux,NodalDepth,&
@@ -3487,6 +3488,10 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   CALL Info( SolverName, '-------------------------------------',Level=1 )
   CALL Info( SolverName, 'Computing heat transfer              ',Level=1 )
   CALL Info( SolverName, '-------------------------------------',Level=1 )
+
+  ! Handle to Heat Source (possible description of heat source at elements/IP's) 
+  CALL ListInitElementKeyword( Load_h,'Body Force','Heat Source')
+
   CALL DefaultStart()
 
   VarName = Solver % Variable % Name
@@ -3639,7 +3644,8 @@ CONTAINS
          ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,hiAtIP,hwAtIP  ! function values needed for C's and KGTT
     REAL(KIND=dp) :: B1AtIP,B2AtIP,DeltaGAtIP, bijAtIP(2,2), bijYcAtIP(2,2),&
          gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,gwapAtIP,giapAtIP !needed by XI
-    REAL(KIND=dp) ::  gradTAtIP(3),gradPAtIP(3),JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3),MinKgw,KgwppAtIP(3,3),fwAtIP,mugwAtIP!  JgwD stuff
+    REAL(KIND=dp) ::  gradTAtIP(3),gradPAtIP(3),JgwDAtIP(3),KgwAtIP(3,3),KgwpTAtIP(3,3),MinKgw,&
+         KgwppAtIP(3,3),fwAtIP,mugwAtIP!  JgwD stuff
     REAL(KIND=dp) :: deltaInElement,D1AtIP,D2AtIP
     REAL(KIND=dp) :: GasConstant, N0, DeltaT, T0, p0, eps, Gravity(3) ! constants read only once
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP,csAtIP,cwAtIP,ciAtIP,ccAtIP ! material properties at IP
@@ -3671,10 +3677,6 @@ CONTAINS
     FORCE = 0._dp
     LOAD = 0._dp
 
-    ! Get stuff from SIF BodyForce section
-    BodyForce => GetBodyForce()
-    IF ( ASSOCIATED(BodyForce) ) &
-         LOAD(1:n) = GetReal( BodyForce,'Heat Source', Found )   
 
     
     ! Get stuff from SIF Material section
@@ -3726,8 +3728,12 @@ CONTAINS
            IP % W(t), detJ, Basis, dBasisdx )
 
       ! The source term at the integration point:
-      LoadAtIP = SUM( Basis(1:n) * LOAD(1:n) )
-
+      !LoadAtIP = SUM( Basis(1:n) * LOAD(1:n) )
+      ! The heat soruce term
+      LoadAtIP = ListGetElementReal( Load_h, Basis, Element, Found, GaussPoint=t)
+      ! Contirbution from other heat source
+      LoadAtIP = LoadAtIP + SUM( Basis(1:n) * LOAD(1:n) )
+      
       ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
       TemperatureAtIP = SUM( Basis(1:N) * NodalTemperature(1:N) )
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
@@ -3801,8 +3807,8 @@ CONTAINS
       kcthAtIP = GetKalphath(CurrentSoluteMaterial % kc0th,CurrentSoluteMaterial % bc,T0,TemperatureAtIP)      
       KGTTAtIP = GetKGTT(ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,XiAtIP,&
            SalinityATIP,PorosityAtIP,meanfactor)
-      !IF ((TemperatureAtIP < 273.25))&! .AND. (TemperatureAtIP > 273.05))&
-      !     PRINT *, "HTEQ: KGTTAtIP",KGTTAtIP(1,1),TemperatureAtIP,XiAtIP,XiTAtIP
+      !IF (TemperatureAtIP > 419.00_dp) &
+      !     PRINT *, "HTEQ: KGTTAtIP",KGTTAtIP(1,1),KGTTAtIP(2,2),"ksthAtIP",ksthAtIP
 
       ! heat capacities at IP
       CGTTAtIP = &
@@ -3864,17 +3870,14 @@ CONTAINS
           END DO
           ! advection term (CgwTT * (Jgw.grad(u)),v)
           ! -----------------------------------
-          !IF (.NOT.NoGWFlux .OR. ComputeGWFlux) THEN
           STIFF (p,q) = STIFF(p,q) + Weight * &
                CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p) !
           ! PRINT *,JgwDAtIP(1:dim),CgwTTAtIP,Weight,"adv",Weight * CgwTTAtIP * SUM(JgwDAtIP(1:dim)*dBasisdx(q,1:dim)) * Basis(p)
-          !END IF
           ! time derivative (rho*du/dt,v):
           ! ------------------------------
           MASS(p,q) = MASS(p,q) + Weight * (CGTTAtIP + 0.0_dp*CGTycAtIP) * Basis(q) * Basis(p) ! check CGTycAtIP
         END DO
       END DO
-
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
 
