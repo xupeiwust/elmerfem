@@ -562,23 +562,60 @@ CONTAINS
   END FUNCTION ReadPermafrostRockMaterial
   
   !---------------------------------------------------------------------------------------------  
-  FUNCTION ReadPermafrostElementRockMaterial(CurrentRockMaterial,MaterialFileName,NoElements) RESULT(NumberOfRockRecords)
+  FUNCTION ReadPermafrostElementRockMaterial(CurrentRockMaterial,MaterialFileName,Solver) RESULT(NumberOfRockRecords)
     IMPLICIT NONE
     CHARACTER(LEN=MAX_NAME_LEN), INTENT(IN) :: MaterialFileName
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
-    INTEGER, INTENT(IN) :: NoElements
+    TYPE(Solver_t) :: Solver
     INTEGER :: NumberOfRockRecords
     !-----------------------------------------------------------
     CHARACTER(LEN=MAX_NAME_LEN) :: SubroutineName="ReadPermafrostElementRockMaterial"
-    LOGICAL :: FirstTime=.TRUE.
+    LOGICAL :: FirstTime=.TRUE., Parallel=.FALSE.
     TYPE(RockMaterial_t), TARGET :: LocalRockMaterial
-    INTEGER :: OK, CurrentNo, I, io
-    REAL(KIND=dp) :: ReceivingArray(50)
+    TYPE(Element_t), POINTER :: CurrentElement
+    INTEGER, ALLOCATABLE :: GlobalToLocalPerm(:)
+    INTEGER :: OK, CurrentNo, I, J, io, NoElements, minglobalelementnumber, maxglobalelementnumber
+    REAL(KIND=dp) :: ReceivingArray(50)    
 
-    SAVE LocalRockMaterial, FirstTime
+    SAVE LocalRockMaterial, FirstTime, Parallel, minglobalelementnumber, maxglobalelementnumber,&
+         GlobalToLocalPerm, NoElements
 
+    
     IF (FirstTime) THEN
-      ALLOCATE(&
+      NoElements = Solver % NumberOfActiveElements ! active elements in partition/serial mesh
+      Parallel = ( ParEnv % PEs > 1 )
+      IF ( Parallel ) THEN        
+        DO I=1,NoElements
+          CurrentElement => Solver % Mesh % Elements(I)
+          IF (FirstTime) THEN
+            minglobalelementnumber = CurrentElement % GElementIndex
+            maxglobalelementnumber = minglobalelementnumber
+            FirstTime = .FALSE.
+          ELSE
+            minglobalelementnumber = MIN((CurrentElement % GElementIndex),minglobalelementnumber)
+            maxglobalelementnumber = MAX((CurrentElement % GElementIndex),maxglobalelementnumber)
+          END IF
+        END DO
+        !IF (ParEnv % myPE == 0) &
+        !     PRINT *,"ReadPermafrostElementRockMaterial:",Parenv % myPE, "ming/maxg",&
+        !     minglobalelementnumber,maxglobalelementnumber
+        IF ((maxglobalelementnumber - minglobalelementnumber) < 1) &
+             CALL FATAL("ReadPermafrostElementRockMaterial","Failed to create global to local permutation")
+        ALLOCATE(GlobalToLocalPerm(maxglobalelementnumber - minglobalelementnumber + 1), STAT=OK)
+        IF (OK /= 0) CALL FATAL("ReadPermafrostElementRockMaterial","Allocation error of GlobalToLocalPerm")
+        GlobalToLocalPerm = 0
+        DO I=1,NoElements
+          CurrentElement => Solver % Mesh % Elements(I)
+          GlobalToLocalPerm((CurrentElement % GElementIndex) - minglobalelementnumber + 1) = I
+          !IF (ParEnv % myPE == 0) &
+          !     PRINT *,"ReadPermafrostElementRockMaterial:",Parenv % myPE, &
+          !     "GlobalToLocalPerm(",(CurrentElement % GElementIndex)," - ",minglobalelementnumber," + 1)=",I
+        END DO
+      ELSE
+        minglobalelementnumber = 1
+        maxglobalelementnumber = NoElements
+      END IF      
+      ALLOCATE(&           
            LocalRockMaterial % ks0th(NoElements),&
            LocalRockMaterial % e1(NoElements),&
            LocalRockMaterial % bs(NoElements),&
@@ -615,13 +652,25 @@ CONTAINS
         WRITE (Message,*) "Attempting read ",NoElements,&
              " from data file ",TRIM(MaterialFileName)
         CALL INFO(SubroutineName,Message,level=3)
-        DO I=1,NoElements
-          READ (io, *, END=50, ERR=60, IOSTAT=OK) CurrentNo, ReceivingArray(1:50)
+        DO J=1,maxglobalelementnumber                             
+          READ (io, *, END=50, ERR=60, IOSTAT=OK) CurrentNo, ReceivingArray(1:50)                    
+          IF ( Parallel ) THEN
+            IF (J < minglobalelementnumber) CYCLE
+            I = GlobalToLocalPerm(J - minglobalelementnumber +1)
+            !IF (I> 0) &
+            !     PRINT *,"ReadPermafrostElementRockMaterial:", Parenv % myPE, &
+            !     "GlobalToLocalPerm(",J," -", minglobalelementnumber," +1) =", &
+            !     GlobalToLocalPerm(J - minglobalelementnumber +1)
+            IF (I == 0) CYCLE 
+          ELSE
+            I=J
+          END IF
+          CurrentElement => Solver % Mesh % Elements(I)          
           LocalRockMaterial % ks0th(I) = ReceivingArray(12) ! shall be changed to tensor
           !-----------------------------
           LocalRockMaterial % e1(I) = ReceivingArray(34) ! e1 (mail from Juha 11.10.)
-          IF (LocalRockMaterial % e1(I) > 0.01) PRINT *,"e1:", ReceivingArray(34)
-          IF (LocalRockMaterial % e1(I) < 0.0) PRINT *,"e1:", ReceivingArray(34)
+          !IF (LocalRockMaterial % e1(I) > 0.01) PRINT *,"e1:", ReceivingArray(34)
+          !IF (LocalRockMaterial % e1(I) < 0.0) PRINT *,"e1:", ReceivingArray(34)
           LocalRockMaterial % bs(I) = ReceivingArray(24) ! b11,1 (mail from Juha 11.10.)
           LocalRockMaterial % rhos0(I) = ReceivingArray(1)
           LocalRockMaterial % Xi0(I) = ReceivingArray(32)
@@ -677,6 +726,7 @@ CONTAINS
           CALL INFO(TRIM(SubroutineName),Message,Level=3)
         END IF
       END IF
+      IF (Parallel) DEALLOCATE(GlobalToLocalPerm)
       CurrentRockMaterial => LocalRockMaterial
       FirstTime = .FALSE.
     ELSE
@@ -2499,11 +2549,12 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
         IF (NumberOfRockRecords < 1) THEN
+          PRINT *, "NumberOfRockRecords=", NumberOfRockRecords
           CALL FATAL(SolverName,'No Rock Material specified')
         ELSE
           CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
@@ -3170,7 +3221,7 @@ CONTAINS
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
           PRINT *, "NumberOfRockRecords", NumberOfRockRecords
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
@@ -3545,7 +3596,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
@@ -3731,7 +3782,8 @@ CONTAINS
       !LoadAtIP = SUM( Basis(1:n) * LOAD(1:n) )
       ! The heat soruce term
       LoadAtIP = ListGetElementReal( Load_h, Basis, Element, Found, GaussPoint=t)
-      ! Contirbution from other heat source
+      !IF (LoadAtIP > 0.0_dp) PRINT *,"HTEQ:LoadAtIP", LoadAtIP
+      ! Contribution from other heat source
       LoadAtIP = LoadAtIP + SUM( Basis(1:n) * LOAD(1:n) )
       
       ! Variables (Temperature, Porosity, Pressure, Salinity) at IP
@@ -3808,15 +3860,16 @@ CONTAINS
       KGTTAtIP = GetKGTT(ksthAtIP,kwthAtIP,kithAtIP,kcthAtIP,XiAtIP,&
            SalinityATIP,PorosityAtIP,meanfactor)
       !IF (TemperatureAtIP > 419.00_dp) &
-      !     PRINT *, "HTEQ: KGTTAtIP",KGTTAtIP(1,1),KGTTAtIP(2,2),"ksthAtIP",ksthAtIP
+      !     PRINT *, "HTEQ: KGTTAtIP",KGTTAtIP(1,1),KGTTAtIP(1,2),KGTTAtIP(2,2),KGTTAtIP(2,1),"ksthAtIP",ksthAtIP
 
       ! heat capacities at IP
       CGTTAtIP = &
            GetCGTT(XiAtIP,XiTAtIP,rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,&
            cwAtIP,ciAtIP,csAtIP,ccAtIP,hiAtIP,hwAtIP,&
            PorosityAtIP,SalinityAtIP)
-      CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,XiAtIP,SalinityAtIP)
-      !PRINT *,"CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
+      !IF (TemperatureAtIP > 419.0_dp) PRINT *,"HTEQ: CGTTAtIP",CGTTAtIP,csAtIP,rhosAtIP,csAtIP*rhosAtIP
+      !CgwTTAtIP = GetCgwTT(rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,XiAtIP,SalinityAtIP)
+      !IF (TemperatureAtIP > 419.0_dp) PRINT *,"HTEQ: CgwTTAtIP",CgwTTAtIP,rhowAtIP,rhocAtIP,cwAtIP,ccAtIP,SalinityAtIP
       ! compute groundwater flux for advection term
 
 
@@ -4097,7 +4150,7 @@ SUBROUTINE PermafrostSoluteTransport( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
@@ -4807,7 +4860,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
       END IF
@@ -5095,7 +5148,7 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
         PRINT *, "NumberOfRockRecords", NumberOfRockRecords
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
@@ -5125,6 +5178,7 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
       ELSE
         PorosityValues(CurrentNode) = CurrentRockMaterial % eta0(RockMaterialID)
       END IF
+      
     END DO
   END DO
 
@@ -5152,31 +5206,35 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   !------------------------------------------------------------------------------
   TYPE(Variable_t), POINTER :: NodalVariable
   TYPE(ValueList_t), POINTER :: SolverParams,Material
+  TYPE(Mesh_t), POINTER :: Mesh
   INTEGER, POINTER :: NodalVariablePerm(:)
   INTEGER,PARAMETER :: io=26
+  INTEGER, ALLOCATABLE :: GlobalToLocalPerm(:)
   REAL(KIND=dp), POINTER :: NodalVariableValues(:)
   REAL(KIND=dp) :: InputField, ValueOffset
-  INTEGER :: DIM, i, CurrentNode, NumberOfNodes, OK,  counter
+  INTEGER :: DIM, i, j, CurrentNode, NumberOfNodes, MinNumberOfGNodes, OK,  counter, localGlobalRange
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="NodalVariableInit"
   CHARACTER(LEN=MAX_NAME_LEN) :: NodalVariableName,NodalVariableFileName
-  LOGICAL :: Visited = .False., Found, GotIt,ElementWiseRockMaterial
+  LOGICAL :: Visited = .False., Found, Parallel, GotIt
 
-  SAVE Visited,ElementWiseRockMaterial
+  !SAVE Visited
   !,DIM,CurrentRockMaterial,NumberOfRockRecords
 
   !------------------------------------------------------------------------------
   
   ! Execute solver only once at beginning
-  if (Visited) RETURN
+  !if (Visited) RETURN
 
   CALL Info(SolverName, '-----------------------------------', Level=1)
   CALL Info(SolverName, 'Initializing variable to reference ', Level=1)
   CALL Info(SolverName, 'levels in material file            ', Level=1)
   CALL Info(SolverName, '-----------------------------------', Level=1)
 
-  ! Get variables
+ 
   DIM = CoordinateSystemDimension()
-
+  Parallel = (ParEnv % PEs > 1)
+  Mesh => GetMesh()
+  
   ! Get variable to fill in
   SolverParams => GetSolverParams()
 
@@ -5185,7 +5243,7 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   IF (.NOT.GotIt) THEN
     CALL FATAL(SolverName, ' "Nodal Variable" not found')
   END IF
-  NodalVariable => VariableGet( Solver % Mesh % Variables, NodalVariableName,GotIt )
+  NodalVariable => VariableGet( Mesh % Variables, NodalVariableName,GotIt )
 
   IF ( ASSOCIATED( NodalVariable ) ) THEN
     NodalVariablePerm    => NodalVariable % Perm
@@ -5208,10 +5266,26 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     WRITE (Message,*) ' "Variable Offset" found and set to: ', ValueOffset
     CALL INFO(SolverName,Message,Level=3)
   END IF
+
+  IF (Parallel) THEN
+    NumberOfNodes = MAXVAL(Mesh % ParallelInfo % GlobalDOFs)
+    MinNumberOfGNodes = MINVAL(Mesh % ParallelInfo % GlobalDOFs)
+    localGlobalRange = NumberOfNodes - MinNumberOfGNodes
+    IF (localGlobalRange < 1) CALL FATAL(SolverName,"No nodes in parallel domain")
+    ALLOCATE(GlobalToLocalPerm(localGlobalRange), STAT=OK)
+    IF (OK /= 0) CALL FATAL(SolverName,"Allocation error of GlobalToLocalPerm")
+    GlobalToLocalPerm = 0
+    DO i=1,Mesh % NumberOfNodes
+      GlobalToLocalPerm((Mesh % ParallelInfo % GlobalDOFs(i)) - MinNumberOfGNodes + 1) = i
+    END DO
+    PRINT *, TRIM(SolverName),": ParENV:",ParEnv % MyPE,".  Global Nodal Numbers from",&
+         MinNumberOfGNodes,"to",NumberOfNodes
+  ELSE
+    MinNumberOfGNodes = 1
+    NumberOfNodes = Model % Mesh % NumberOfNodes   
+  END IF
   
-  NumberOfNodes = Model % Mesh % NumberOfNodes
-  
-  OPEN(unit = io, file = TRIM(NodalVariableFileName), status = 'old',iostat = ok)
+  OPEN(unit = io, file = TRIM(NodalVariableFileName), status = 'old',action='read',iostat = ok)
   IF (ok /= 0) THEN
     WRITE(Message,'(A,A)') 'Unable to open file ',TRIM(NodalVariableFileName)
     CALL FATAL(TRIM(SolverName),TRIM(message))
@@ -5219,11 +5293,19 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     !------------------------------------------------------------------------------
     ! Read in the number of records in file (first line integer)
     !------------------------------------------------------------------------------
-    DO i=1,NumberOfNodes
+    DO i=1,NumberOfNodes ! all or in parallel up to max global index
       READ (io, *, END=70, IOSTAT=OK, ERR=80) counter, InputField
       IF (counter .NE. i) CALL FATAL(SolverName,'No concecutive numbering in file')
-      IF (NodalVariablePerm(i)==0) CALL FATAL(SolverName,'No corresponding entry of target variable')
-      NodalVariableValues(NodalVariablePerm(i)) = InputField + ValueOffset
+ 
+      IF (Parallel) THEN
+        IF (i < MinNumberOfGNodes) CYCLE
+        J = GlobalToLocalPerm(i - MinNumberOfGNodes + 1)
+        IF (J == 0) CYCLE ! point in range, but not in partition        
+      ELSE
+        J=I
+      END IF
+      IF (NodalVariablePerm(J)==0) CALL FATAL(SolverName,'No corresponding entry of target variable')
+      NodalVariableValues(NodalVariablePerm(J)) = InputField + ValueOffset
      ! PRINT *,i,counter
     END DO
     !PRINT *, "END", i,counter
@@ -5233,6 +5315,8 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
       CALL FATAL(SolverName,Message)
     END IF
     CLOSE (io)
+    IF (Parallel) &
+         DEALLOCATE(GlobalToLocalPerm)
     RETURN
 80  CALL FATAL(SolverName,"I/O error")
   END IF
@@ -5336,7 +5420,7 @@ SUBROUTINE PermafrostMaterialOutput( Model,Solver,dt,TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Active)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
         PRINT *, "NumberOfRockRecords", NumberOfRockRecords
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
