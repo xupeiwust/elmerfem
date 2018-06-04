@@ -971,7 +971,7 @@ CONTAINS
     END IF
 
     IF (TRIM(CallerSolverName) == 'PermafrostSoluteTransport') THEN
-      PressureVar => Solver % Variable
+      SalinityVar => Solver % Variable
     ELSE
       SalinityName = ListGetString(Params, &
          'Salinity Variable', Found )
@@ -2483,11 +2483,12 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalTemperature(:), NodalSalinity(:),&
        NodalPressure(:), DummyNodalGWflux(:,:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
-       ConstantPorosity=.FALSE., NoSalinity=.FALSE.,GivenGWFlux,ElementWiseRockMaterial, DummyLog
+       ConstantPorosity=.FALSE., NoSalinity=.FALSE.,GivenGWFlux,ElementWiseRockMaterial, DummyLog,&
+       InitializeSteadyState, ActiveMassMatrix
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow'
   CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, VarName, PhaseChangeModel,&
-       ElementRockMaterialName 
+       ElementRockMaterialName
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
        NodalPorosity,NodalTemperature,NodalSalinity,NodalPressure,ElementWiseRockMaterial
@@ -2496,6 +2497,18 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
 
   Params => GetSolverParams()
 
+  ! check, whether we assume steady state (despite transient run)
+  ! this can come handy to produce a balance-pressure field at the
+  ! start of the simulation
+  !---------------------------------------------------------------
+  InitializeSteadyState = GetLogical(Params,'Initialize Steady State',Found)
+  IF (Found .AND. InitializeSteadyState .AND. (GetTimeStep() == 1)) THEN
+    CALL INFO(SolverName,"Initializing with steady state (no mass matrix)",Level=1)
+    ActiveMassMatrix = .FALSE.
+  ELSE
+    ActiveMassMatrix = .TRUE.
+  END IF
+  
   maxiter = ListGetInteger( Params, &
        'Nonlinear System Max Iterations',Found,minv=1)
   IF(.NOT. Found ) maxiter = 1
@@ -2592,11 +2605,12 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
       ELSE
         NodalSalinity(1:N) = Salinity(SalinityPerm(Element % NodeIndexes(1:N)))
       END IF
+                
 
       ! compose element-wise contributions to matrix and R.H.S
       CALL LocalMatrixDarcy( Model, Element, t, N, ND+NB, Active, NodalPressure, NodalTemperature, &
            NodalPorosity, NodalSalinity, CurrentRockMaterial,CurrentSoluteMaterial,&
-           CurrentSolventMaterial,PhaseChangeModel,ElementWiseRockMaterial)
+           CurrentSolventMaterial,PhaseChangeModel,ElementWiseRockMaterial, ActiveMassMatrix)
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -2630,7 +2644,7 @@ CONTAINS
   !------------------------------------------------------------------------------
   SUBROUTINE LocalMatrixDarcy( Model, Element, ElementID, n, nd, NoElements, NodalPressure, NodalTemperature, &
        NodalPorosity, NodalSalinity, CurrentRockMaterial, CurrentSoluteMaterial,&
-       CurrentSolventMaterial, PhaseChangeModel, ElementWiseRockMaterial )
+       CurrentSolventMaterial, PhaseChangeModel, ElementWiseRockMaterial, ActiveMassMatrix )
     IMPLICIT NONE
     !------------------------------------------------------------------------------
     TYPE(Model_t) :: Model
@@ -2641,7 +2655,7 @@ CONTAINS
     TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
     REAL(KIND=dp) :: NodalTemperature(:), NodalSalinity(:),&
          NodalPorosity(:), NodalPressure(:)
-    LOGICAL :: ElementWiseRockMaterial
+    LOGICAL :: ElementWiseRockMaterial, ActiveMassMatrix
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: Cgwpp,CgwTAtIP,CgwppAtIP,KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),&
@@ -2677,6 +2691,7 @@ CONTAINS
       ConstantsRead = &
            ReadPermafrostConstants(Model, FunctionName, DIM, GasConstant, N0, DeltaT, T0, p0, eps, Gravity)      
     END IF
+    
 
     CALL GetElementNodes( Nodes )
     MASS  = 0._dp
@@ -2861,11 +2876,12 @@ CONTAINS
       ! composition of the matrix:
       ! -----------------------------------
       DO p=1,nd
-        DO q=1,nd         
+        DO q=1,nd
+          ! next term can be switched off
           ! time derivative (Cgwpp*dp/dt,v):
           ! ------------------------------
-          !! INSERT SWITCHED SHUTOFF OF THIS TERM FOR VERY FIRST TIMESTEP
-          MASS(p,q) = MASS(p,q) + Weight * CgwppAtIP * Basis(q) * Basis(p) 
+          IF (ActiveMassMatrix) &
+               MASS(p,q) = MASS(p,q) + Weight * CgwppAtIP * Basis(q) * Basis(p) 
 
           ! advection term (still needs vstar, hence commented)
           !STIFF (p,q) = STIFF(p,q) + Weight * &
@@ -4439,7 +4455,8 @@ CONTAINS
         !END IF
         ! gradT and gradP have been moved upwards, as needed elsewhere
         
-        JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM,CryogenicSuction)
+        JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,&
+             Gravity,rhogwAtIP,DIM,CryogenicSuction)
 
       END IF
       
@@ -4490,7 +4507,7 @@ CONTAINS
           !JgwDAtIP(2) = -1.0d-07
           STIFF (p,q) = STIFF(p,q) &
                - Weight * rhocAtIP * Basis(q) * SUM(JgwDAtIP(1:DIM) * dBasisdx(p,1:DIM))/XiAtIP
-          !         PRINT *, "LocalMatrixSolute: ", JgwDAtIP(1:DIM), XiAtIP, rhocAtIP
+!                   PRINT *, "LocalMatrixSolute: ", JgwDAtIP(1:DIM), XiAtIP, rhocAtIP
           
           ! porosity rhoc  (u,(Kc.fc).grad(v))         
           DO i=1,DIM
@@ -4623,7 +4640,7 @@ CONTAINS
 
     ! if none of the above, we can call it a day
     IF (.NOT.(FluxCondition .OR. GWFluxCondition .OR. WeakDirichletCond)) RETURN
-    
+
     ! Numerical integration:
     !-----------------------
     IP = GaussPoints( Element )
@@ -4674,25 +4691,6 @@ CONTAINS
                GasConstant,p0,T0,&
                XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,XiEtaAtIP,&
                .FALSE., .FALSE., .FALSE.,.FALSE.)
-!!$          bijAtIP = GetBij(CurrentSoluteMaterial,Xi0tilde,SalinityAtIP)
-!!$          bijYcAtIP = GetBijYc(CurrentSoluteMaterial,Xi0tilde,bijAtIP,SalinityAtIP)
-!!$          gwaAtIP = gwa(CurrentSolventMaterial,&
-!!$               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP)
-!!$          gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-!!$               p0,T0,rhowAtIP,XiAtIP,TemperatureAtIP,SalinityAtIP)!        
-!!$          gwapAtIP = 1.0_dp/rhowAtIP
-!!$          giaAtIP = gia(CurrentSolventMaterial,&
-!!$               p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-!!$          giaTAtIP = giaT(CurrentSolventMaterial,&
-!!$               p0,T0,rhoiAtIP,TemperatureAtIP)
-!!$          giapAtIP = 1.0_dp/rhoiAtIP
-!!$          deltaGAtIP = deltaG(gwaAtIP,giaAtIP)         
-!!$          D1AtIP= D1(CurrentRockMaterial,RockMaterialID,deltaInElement,bijAtIP)! Changed Argument
-!!$          D2AtIP= D2(deltaInElement,bijAtIP)
-!!$          B1AtIP = GetB1(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,deltaInElement,deltaGAtIP,&
-!!$               GasConstant,bijAtIP,TemperatureAtIP)
-!!$          B2AtIP = GetB2(CurrentSolventMaterial,deltaInElement,deltaGAtIP,GasConstant,bijAtIP,TemperatureAtIP)
-!!$          XiAtIP = GetXi(B1AtIP,B2AtIP,D1AtIP,D2AtIP,Xi0Tilde)
           ! NB: XiTAtIP, XiPAtIP, XiYcAtIP not needed
         END SELECT
         rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
@@ -4714,7 +4712,7 @@ CONTAINS
         ! Given flux:
         ! -----------
         IF (Fluxcondition) THEN
-          F = SUM(Basis(1:n)*flux(1:n))
+          F = SUM(Basis(1:n)*Flux(1:n))
           FORCE(1:nd) = FORCE(1:nd) + Weight * PorosityAtIP * rhocAtIP * F * Basis(1:nd)
         END IF
       END IF
@@ -5212,7 +5210,8 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
   INTEGER, ALLOCATABLE :: GlobalToLocalPerm(:)
   REAL(KIND=dp), POINTER :: NodalVariableValues(:)
   REAL(KIND=dp) :: InputField, ValueOffset
-  INTEGER :: DIM, i, j, CurrentNode, NumberOfNodes, MinNumberOfGNodes, OK,  counter, localGlobalRange
+  INTEGER :: DIM, i, j, CurrentNode, NumberOfNodes, MaxNumberOfGNodes, MinNumberOfGNodes,&
+       OK,  counter, localGlobalRange
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="NodalVariableInit"
   CHARACTER(LEN=MAX_NAME_LEN) :: NodalVariableName,NodalVariableFileName
   LOGICAL :: Visited = .False., Found, Parallel, GotIt
@@ -5244,7 +5243,8 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     CALL FATAL(SolverName, ' "Nodal Variable" not found')
   END IF
   NodalVariable => VariableGet( Mesh % Variables, NodalVariableName,GotIt )
-
+  IF (.NOT.GotIt) CALL FATAL(SolverName,"Variable not found")
+  
   IF ( ASSOCIATED( NodalVariable ) ) THEN
     NodalVariablePerm    => NodalVariable % Perm
     NodalVariableValues  => NodalVariable % Values
@@ -5267,22 +5267,24 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     CALL INFO(SolverName,Message,Level=3)
   END IF
 
+  NumberOfNodes = Mesh % NumberOfNodes
+  
   IF (Parallel) THEN
-    NumberOfNodes = MAXVAL(Mesh % ParallelInfo % GlobalDOFs)
+    MaxNumberOfGNodes = MAXVAL(Mesh % ParallelInfo % GlobalDOFs)
     MinNumberOfGNodes = MINVAL(Mesh % ParallelInfo % GlobalDOFs)
-    localGlobalRange = NumberOfNodes - MinNumberOfGNodes
-    IF (localGlobalRange < 1) CALL FATAL(SolverName,"No nodes in parallel domain")
-    ALLOCATE(GlobalToLocalPerm(localGlobalRange), STAT=OK)
+    !localGlobalRange = MaxNumberOfGNodes - MinNumberOfGNodes
+    IF (MaxNumberOfGNodes <= MinNumberOfGNodes) CALL FATAL(SolverName,"No nodes in parallel domain")
+    ALLOCATE(GlobalToLocalPerm(MinNumberOfGNodes:MaxNumberOfGNodes), STAT=OK)
     IF (OK /= 0) CALL FATAL(SolverName,"Allocation error of GlobalToLocalPerm")
     GlobalToLocalPerm = 0
-    DO i=1,Mesh % NumberOfNodes
-      GlobalToLocalPerm((Mesh % ParallelInfo % GlobalDOFs(i)) - MinNumberOfGNodes + 1) = i
+    DO I=1,NumberOfNodes
+      GlobalToLocalPerm(Mesh % ParallelInfo % GlobalDOFs(I)) = I
     END DO
     PRINT *, TRIM(SolverName),": ParENV:",ParEnv % MyPE,".  Global Nodal Numbers from",&
-         MinNumberOfGNodes,"to",NumberOfNodes
+         MinNumberOfGNodes,"to",MaxNumberOfGNodes
   ELSE
     MinNumberOfGNodes = 1
-    NumberOfNodes = Model % Mesh % NumberOfNodes   
+    MaxNumberOfGNodes = NumberOfNodes   
   END IF
   
   OPEN(unit = io, file = TRIM(NodalVariableFileName), status = 'old',action='read',iostat = ok)
@@ -5291,27 +5293,33 @@ SUBROUTINE NodalVariableInit(Model, Solver, Timestep, TransientSimulation )
     CALL FATAL(TRIM(SolverName),TRIM(message))
   ELSE
     !------------------------------------------------------------------------------
-    ! Read in the number of records in file (first line integer)
+    ! Read in the number of records ordered in global node-numbering
+    ! in file (first line integer)
     !------------------------------------------------------------------------------
-    DO i=1,NumberOfNodes ! all or in parallel up to max global index
+    DO J=1,MaxNumberOfGNodes ! all or in parallel up to max global index
       READ (io, *, END=70, IOSTAT=OK, ERR=80) counter, InputField
-      IF (counter .NE. i) CALL FATAL(SolverName,'No concecutive numbering in file')
- 
+      IF (counter .NE. J) CALL FATAL(SolverName,'No concecutive numbering in file')
+      IF (J < MinNumberOfGNodes) CYCLE
+      
       IF (Parallel) THEN
-        IF (i < MinNumberOfGNodes) CYCLE
-        J = GlobalToLocalPerm(i - MinNumberOfGNodes + 1)
-        IF (J == 0) CYCLE ! point in range, but not in partition        
+        I = GlobalToLocalPerm(J)
+        IF (I == 0) CYCLE ! point in range, but not in partition        
       ELSE
-        J=I
+        I=J
       END IF
-      IF (NodalVariablePerm(J)==0) CALL FATAL(SolverName,'No corresponding entry of target variable')
-      NodalVariableValues(NodalVariablePerm(J)) = InputField + ValueOffset
+      !IF ((NodalVariablePerm(I)<1) .OR. (NodalVariablePerm(I)>NumberOfNodes)) THEN
+      !  PRINT *, "NodalVariableInit:", ParEnv % myPE, "NodalVariablePerm(",I,")=",&
+      !       NodalVariablePerm(I),">",NumberOfNodes
+      !  CALL FATAL(SolverName,'No corresponding entry of target variable')
+      !END IF
+      NodalVariableValues(NodalVariablePerm(I)) = InputField + ValueOffset
      ! PRINT *,i,counter
     END DO
     !PRINT *, "END", i,counter
-70  IF (i-1 .NE. NumberOfNodes) THEN
+70  IF (J-1 .NE. MaxNumberOfGNodes) THEN
       WRITE (Message,*) 'Number of records ',i,' in file ',&
-           TRIM(NodalVariableFileName),' does not match number of nodes ', NumberOfNodes, ' in mesh'
+           TRIM(NodalVariableFileName),' does not match number of nodes ',&
+           NumberOfNodes, ' in mesh'
       CALL FATAL(SolverName,Message)
     END IF
     CLOSE (io)
