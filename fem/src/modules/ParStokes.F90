@@ -348,8 +348,10 @@ SUBROUTINE StokesSolver( Model,Solver,dt,TransientSimulation )
      CALL DefaultInitialize()
 
      IF (BlockPreconditioning) THEN
-       CALL InitializeToZero( AMatrix, AMatrix % RHS ) 
-       CALL InitializeToZero( PMatrix, PMatrix % RHS )        
+       !CALL InitializeToZero( AMatrix, AMatrix % RHS ) 
+       !CALL InitializeToZero( PMatrix, PMatrix % RHS )        
+       CALL DefaultInitialize(USolver=VelocitySolver)
+       CALL DefaultInitialize(USolver=PressureSolver)
      END IF
 
      !------------------------------------------------------------
@@ -1861,7 +1863,7 @@ SUBROUTINE ComputeVarLoads(Solver)
     TYPE(Matrix_t), POINTER :: Aaid, Projector
     TYPE(Variable_t), POINTER ::  NodalLoads
 
-    REAL(KIND=dp), POINTER :: SaveValues(:)
+    REAL(KIND=dp), POINTER CONTIG :: SaveValues(:)
     REAL(KIND=dp), ALLOCATABLE :: x(:),TempVector(:), TempRHS(:)
 
     INTEGER :: DOFs
