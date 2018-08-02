@@ -77,7 +77,7 @@ MODULE PermafrostMaterials
      INTEGER :: NumerOfRockRecords
      REAL(KIND=dp), ALLOCATABLE :: ks0th(:),e1(:),bs(:),rhos0(:),&
           Xi0(:),eta0(:),hs0(:),Kgwh0(:,:,:),qexp(:),alphaL(:),alphaT(:),RadGen(:),&
-          cs0(:),acs(:,:),as0(:),aas(:,:),ks0(:),cks(:,:)
+          cs0(:),acs(:,:),as0(:),aas(:,:),ks0(:),kG(:),cks(:,:)
      INTEGER, ALLOCATABLE :: acsl(:),aasl(:),cksl(:)
      CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   END TYPE RockMaterial_t
@@ -464,6 +464,7 @@ CONTAINS
              LocalRockMaterial % as0, &
              LocalRockMaterial % aas, &
              LocalRockMaterial % ks0, &
+             LocalRockMaterial % kG, &
              LocalRockMaterial % cks, &
              LocalRockMaterial % acsl, &
              LocalRockMaterial % aasl, &
@@ -488,6 +489,7 @@ CONTAINS
            LocalRockMaterial % as0(NumerOfRockRecords), &
            LocalRockMaterial % aas(0:5,NumerOfRockRecords), &
            LocalRockMaterial % ks0(NumerOfRockRecords), &
+           LocalRockMaterial % kG(NumerOfRockRecords), &
            LocalRockMaterial % cks(0:5,NumerOfRockRecords), &
            LocalRockMaterial % acsl(NumerOfRockRecords), &     
            LocalRockMaterial % aasl(NumerOfRockRecords), &
@@ -518,7 +520,7 @@ CONTAINS
         CALL INFO(FunctionName,Message,Level=9)
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % Xi0(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % eta0(I), Comment
-        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % ks0th(I), Comment          
+        READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % ks0th(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % e1(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % bs(I), Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % rhos0(I), Comment
@@ -537,6 +539,9 @@ CONTAINS
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % as0(I),  Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aas(0:5,I),  Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % ks0(I),  Comment
+        ! needs to be changed
+        LocalRockMaterial % ks0th(I) = 0.0_dp
+        !--------------------
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % cks(0:5,I),  Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % acsl(I),  Comment
         READ (io, *, END=30, IOSTAT=OK, ERR=40) LocalRockMaterial % aasl(I),  Comment
@@ -633,6 +638,7 @@ CONTAINS
            LocalRockMaterial % as0(NoElements), &
            LocalRockMaterial % aas(0:5,NoElements), &
            LocalRockMaterial % ks0(NoElements), &
+           LocalRockMaterial % kG(NoElements), &
            LocalRockMaterial % cks(0:5,NoElements), &
            LocalRockMaterial % acsl(NoElements), &
            LocalRockMaterial % aasl(NoElements), &
@@ -706,6 +712,7 @@ CONTAINS
           LocalRockMaterial % aasl(I)= 1
           !-----------------------------
           LocalRockMaterial % ks0(I)= ReceivingArray(5)
+          LocalRockMaterial % kG(I) = 0.0_dp ! NEEDS TO BE CHANGED
           LocalRockMaterial % cks(0,I) = ReceivingArray(6)
           LocalRockMaterial % cks(1,I) = ReceivingArray(7)
           LocalRockMaterial % cks(2:5,I)= 0.0_dp
@@ -2211,7 +2218,7 @@ CONTAINS
     REAL(KIND=dp) :: kappaG, kappas
     !-------------------------
     kappas = CurrentRockMaterial % ks0(RockMaterialID)
-    kappaG = 0.0_dp ! NEEDS TO BE CHANGED
+    kappaG =  CurrentRockMaterial % kG(RockMaterialID)
     Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
          + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
   END FUNCTION GetCgwpp
@@ -2231,6 +2238,20 @@ CONTAINS
     !-------------------------
     CgwpYc = Porosity * ( (rhogw - rhoi) * XiYc  + Xi * rhogwYc )
   END FUNCTION GetCgwpYc
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetCgwpI1(rhogw,rhoi,Xi,CurrentRockMaterial,RockMaterialID)RESULT(CgwpI1)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,Xi
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp) :: CgwpI1
+    !-------------------------
+    REAL(KIND=dp) ::kappaG,kappas
+    !-------------------------
+    kappas = CurrentRockMaterial % ks0(RockMaterialID)
+    kappaG = CurrentRockMaterial % kG(RockMaterialID)
+    CgwpI1 = (Xi * rhogw + (1.0_dp - Xi) * rhoi)*(kappaG - kappas)/3.0_dp
+  END FUNCTION GetCgwpI1
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
        Xi,T0,Salinity,Temperature,ConstVal)
@@ -2477,7 +2498,8 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
   INTEGER :: i,j,k,l,n,nb, nd,t, DIM, ok, NumberOfRockRecords, Active,iter, maxiter, istat
   INTEGER,PARAMETER :: io=22
-  INTEGER,POINTER :: PressurePerm(:), TemperaturePerm(:),PorosityPerm(:),SalinityPerm(:),DummyGWfluxPerm(:)
+  INTEGER,POINTER :: PressurePerm(:), TemperaturePerm(:),PorosityPerm(:),SalinityPerm(:),StressPerm(:),&
+       DummyGWfluxPerm(:)
   REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Pressure(:), Temperature(:), Porosity(:), Salinity(:),DummyGWflux(:)
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalTemperature(:), NodalSalinity(:),&
@@ -2487,8 +2509,8 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
        InitializeSteadyState, ActiveMassMatrix
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow'
-  CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, VarName, PhaseChangeModel,&
-       ElementRockMaterialName
+  CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, StressName, &
+       VarName,PhaseChangeModel,ElementRockMaterialName
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
        NodalPorosity,NodalTemperature,NodalSalinity,NodalPressure,ElementWiseRockMaterial
