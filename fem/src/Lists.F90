@@ -77,6 +77,7 @@ MODULE Lists
    INTEGER, PARAMETER :: SECTION_TYPE_CONSTANTS = 8
    
 
+   INTEGER, PARAMETER :: MAX_FNC = 32
    
 #ifndef USE_ISO_C_BINDINGS
    INTERFACE
@@ -153,7 +154,13 @@ MODULE Lists
    END INTERFACE
 #endif
 
-   TYPE String_stack_t
+#ifdef HAVE_LUA
+   interface ElmerEvalLua
+     module procedure ElmerEvalLuaS, ElmerEvalLuaT, ElmerEvalLuaV
+   end INTERFACE
+#endif
+
+    TYPE String_stack_t
       TYPE(Varying_string) :: Name
       TYPE(String_stack_t), POINTER :: Next => Null()
    END TYPE String_stack_t
@@ -1264,12 +1271,15 @@ END DO
       IF( .NOT. Found ) UseProjector = .TRUE.
 
       IF( PRESENT( MaskName ) ) THEN
-       CALL InterpolateMeshToMesh( PVar % PrimaryMesh, &
+        CALL Info('VariableGet','Performing masked on-the-fly interpolation',Level=15)
+        CALL InterpolateMeshToMesh( PVar % PrimaryMesh, &
             CurrentModel % Mesh, Var, Variables, MaskName=MaskName )
       ELSE IF( UseProjector ) THEN
+        CALL Info('VariableGet','Performing interpolation with projector',Level=15)
         CALL InterpolateMeshToMesh( PVar % PrimaryMesh, &
             CurrentModel % Mesh, Var, Variables, Projector=Projector )
       ELSE
+        CALL Info('VariableGet','Performing on-the-fly interpolation',Level=15)
         AidVar => VariableGet( CurrentModel % Mesh % Variables, Name, ThisOnly = .TRUE. ) 
         IF( ASSOCIATED( AidVar ) ) THEN
           AidVar % Values = 0.0_dp
@@ -1277,7 +1287,12 @@ END DO
         CALL InterpolateMeshToMesh( PVar % PrimaryMesh, &
             CurrentModel % Mesh, Var, Variables )        
       END IF
-
+     
+      IF( InfoActive( 20 ) ) THEN
+        AidVar => VariableGet( CurrentModel % Mesh % Variables, Name, ThisOnly = .TRUE. )         
+        PRINT *,'Interpolation range:',TRIM(AidVar % Name),MINVAL(AidVar % Values),MAXVAL( AidVar % Values)
+      END IF     
+      
       WRITE( Message,'(A,ES12.3)' ) 'Interpolation time for > '//TRIM(Name)//' < :', CPUTime()-t1
       CALL Info( 'VariableGet', Message, Level=7 )
 
@@ -1694,6 +1709,9 @@ END DO
      LOGICAL, OPTIONAL :: Found
 !------------------------------------------------------------------------------
      TYPE(String_stack_t), POINTER :: stack
+#ifdef HAVE_LUA
+     CHARACTER(:), ALLOCATABLE :: stra
+#endif
      CHARACTER(:), ALLOCATABLE :: strn
      CHARACTER(LEN=LEN_TRIM(Name)) :: str
 !------------------------------------------------------------------------------
@@ -1708,7 +1726,13 @@ END DO
      IF( ListGetnamespace(strn) ) THEN
        stack => Namespace_stack
        DO WHILE(.TRUE.)
-         strn = TRIM(strn) //' '//str(1:k)
+#ifdef HAVE_LUA
+         stra = trim(strn)
+         strn = stra //' '//str(1:k)
+         DEALLOCATE(stra)
+#else
+         strn = trim(strn) // ' ' //str(1:k)
+#endif
          k1 = LEN(strn)
          ptr => List % Head
          DO WHILE( ASSOCIATED(ptr) )
@@ -1773,6 +1797,9 @@ END DO
      LOGICAL, OPTIONAL :: Found
 !------------------------------------------------------------------------------
      TYPE(String_stack_t), POINTER :: stack
+#ifdef HAVE_LUA
+     CHARACTER(:), ALLOCATABLE :: stra
+#endif
      CHARACTER(:), ALLOCATABLE :: strn
      CHARACTER(LEN=LEN_TRIM(Name)) :: str
 !------------------------------------------------------------------------------
@@ -1785,7 +1812,13 @@ END DO
      IF ( ListGetNamespace(strn) ) THEN
        stack => Namespace_stack
        DO WHILE(.TRUE.)
-         strn = TRIM(strn) //' '//str(1:k)
+#ifdef HAVE_LUA
+         stra = trim(strn)
+         strn = stra //' '//str(1:k)
+         DEALLOCATE(stra)
+#else
+         strn = trim(strn) // ' ' //str(1:k)
+#endif
          k1 = LEN(strn)
          ptr => List % Head
          DO WHILE( ASSOCIATED(ptr) )
@@ -3221,7 +3254,6 @@ END DO
 
 
   
-#define MAX_FNC 32
 
 
   
@@ -3788,20 +3820,28 @@ END DO
 
          CALL VarsToValuesOnNodes( VarCount, VarTable, k, T, j, AllGlobal )
          
-         IF ( .NOT. ANY( T(1:j)==HUGE(1.0_dp) ) ) THEN
-           DO l=1,j
-             WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+#ifdef HAVE_LUA
+         IF ( .not. ptr % LuaFun ) THEN
+#endif
+           IF ( .NOT. ANY( T(1:j)==HUGE(1.0_dp) ) ) THEN
+             DO l=1,j
+               WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+               k1 = LEN_TRIM(cmd)
+               CALL matc( cmd, tmp_str, k1 )
+             END DO
+
+             cmd = ptr % CValue
              k1 = LEN_TRIM(cmd)
              CALL matc( cmd, tmp_str, k1 )
-           END DO
+             READ( tmp_str(1:k1), * ) F(i)
+             F(i) = Ptr % Coeff * F(i)
+           END IF
 
-           cmd = ptr % CValue
-           k1 = LEN_TRIM(cmd)
-           CALL matc( cmd, tmp_str, k1 )
-           READ( tmp_str(1:k1), * ) F(i)
-           F(i) = Ptr % Coeff * F(i)
+#ifdef HAVE_LUA
+         ELSE
+           call ElmerEvalLua(LuaState, ptr, T, F(i), varcount)
          END IF
-
+#endif
          IF( AllGlobal ) THEN
            F(2:n) = F(1)
            EXIT
@@ -4483,6 +4523,9 @@ END DO
      LOGICAL :: AllGlobal, SomeAtIp, SomeAtNodes, ListSame, ListFound, GotIt, IntFound, &
          ElementSame
      TYPE(Element_t), POINTER :: PElement
+#ifdef HAVE_LUA
+     INTEGER :: lstat
+#endif
 !------------------------------------------------------------------------------
      
      ! If value is not present anywhere then return False
@@ -4881,21 +4924,29 @@ END DO
            DO i=1,n
              k = NodeIndexes(i)
              CALL VarsToValuesOnNodes( VarCount, VarTable, k, T, j, AllGlobal )
+#ifdef HAVE_LUA
+             IF ( .not. ptr % LuaFun ) THEN
+#endif
 
-             IF ( .NOT. ANY( T(1:j)==HUGE(1.0_dp) ) ) THEN
-               DO l=1,j
-                 WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+               IF ( .NOT. ANY( T(1:j)==HUGE(1.0_dp) ) ) THEN
+                 DO l=1,j
+                   WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+                   k1 = LEN_TRIM(cmd)
+                   CALL matc( cmd, tmp_str, k1 )
+                 END DO
+
+                 cmd = ptr % CValue
                  k1 = LEN_TRIM(cmd)
                  CALL matc( cmd, tmp_str, k1 )
-               END DO
-               
-               cmd = ptr % CValue
-               k1 = LEN_TRIM(cmd)
-               CALL matc( cmd, tmp_str, k1 )
-               READ( tmp_str(1:k1), * ) F(i)
-               F(i) = ptr % Coeff * F(i)
-             END IF
-             
+                 READ( tmp_str(1:k1), * ) F(i)
+                 F(i) = ptr % Coeff * F(i)
+               END IF
+#ifdef HAVE_LUA
+               ELSE
+                 call ElmerEvalLua(LuaState, ptr, T, F(i), varcount)
+               END IF
+#endif
+
              IF( AllGlobal ) THEN
                Handle % GlobalInList = .TRUE.
                EXIT
@@ -4978,6 +5029,9 @@ END DO
              CALL VarsToValuesOnNodes( VarCount, VarTable, k, T, j, AllGlobal )
              
              IF ( ptr % TYPE==LIST_TYPE_VARIABLE_TENSOR_STR) THEN
+#ifdef HAVE_LUA
+             IF ( .not. ptr % LuaFun ) THEN
+#endif
                DO l=1,j
                  WRITE( cmd, '(a,g19.12)' ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
                  k1 = LEN_TRIM(cmd)
@@ -4989,7 +5043,11 @@ END DO
                CALL matc( cmd, tmp_str, k1 )
                READ( tmp_str(1:k1), * ) ((Handle % Rtensor(j,k),k=1,N2),j=1,N1)
                
-               
+#ifdef HAVE_LUA
+             ELSE
+               call ElmerEvalLua(LuaState, ptr, T, Handle % RTensor, varcount)
+             END IF
+#endif
              ELSE IF ( ptr % PROCEDURE /= 0 ) THEN
                CALL ExecRealArrayFunction( ptr % PROCEDURE, CurrentModel, &
                    NodeIndexes(i), T, Handle % RTensor )
@@ -5291,14 +5349,19 @@ END DO
 
        CASE( LIST_TYPE_VARIABLE_SCALAR_STR )
 
-
          ! there is no node index, so use zero
          node = 0 
-         TVar => VariableGet( CurrentModel % Variables, 'Time' ) 
 
-         WRITE( cmd, * ) 'tx=0; st = ', TVar % Values(1)
-         k = LEN_TRIM(cmd)
-         CALL matc( cmd, tmp_str, k )         
+#ifdef HAVE_LUA
+         IF ( .not. ptr % LuaFun ) THEN
+#endif
+           TVar => VariableGet( CurrentModel % Variables, 'Time' ) 
+           WRITE( cmd, * ) 'tx=0; st = ', TVar % Values(1)
+           k = LEN_TRIM(cmd)
+           CALL matc( cmd, tmp_str, k )         
+#ifdef HAVE_LUA
+         END IF
+#endif
          
          DO gp = 1, ngp          
            DO j=1,Handle % ParNo 
@@ -5309,19 +5372,27 @@ END DO
            IF( SomeAtIp ) THEN
              CALL VarsToValuesOnIps( VarCount, VarTable, gp, T, j )
            END IF
-             
-           DO l=1,Handle % ParNo
-             WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+
+#ifdef HAVE_LUA
+           IF ( .not. ptr % LuaFun ) THEN
+#endif
+             DO l=1,Handle % ParNo
+               WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+               k1 = LEN_TRIM(cmd)
+               CALL matc( cmd, tmp_str, k1 )
+             END DO
+
+             cmd = ptr % CValue
              k1 = LEN_TRIM(cmd)
+
              CALL matc( cmd, tmp_str, k1 )
-           END DO
+             READ( tmp_str(1:k1), * ) RValue
 
-           cmd = ptr % CValue
-           k1 = LEN_TRIM(cmd)
-
-           CALL matc( cmd, tmp_str, k1 )
-           READ( tmp_str(1:k1), * ) RValue
-           
+#ifdef HAVE_LUA
+           ELSE
+             call ElmerEvalLua(LuaState, ptr, T, RValue, j)
+           END IF
+#endif
            Handle % ValuesVec(gp) = RValue
          END DO
 
@@ -5451,15 +5522,24 @@ END DO
 
          Handle % GlobalInList = .FALSE.
 
-         TVar => VariableGet( CurrentModel % Variables, 'Time' ) 
-         WRITE( cmd, * ) 'tx=0; st = ', TVar % Values(1)
-         k = LEN_TRIM(cmd)
-         CALL matc( cmd, tmp_str, k )
+#ifdef HAVE_LUA
+         IF ( .not. ptr % LuaFun ) THEN
+#endif
+           TVar => VariableGet( CurrentModel % Variables, 'Time' ) 
+           WRITE( cmd, * ) 'tx=0; st = ', TVar % Values(1)
+           k = LEN_TRIM(cmd)
+           CALL matc( cmd, tmp_str, k )
+#ifdef HAVE_LUA
+         END IF
+#endif
 
          DO i=1,n
            k = NodeIndexes(i)
            CALL ListParseStrToValues( Ptr % DependName, Ptr % DepNameLen, k, &
                Handle % Name, T, j, AllGlobal)
+#ifdef HAVE_LUA
+           IF ( .not. ptr % LuaFun ) THEN
+#endif
            IF ( .NOT. ANY( T(1:j)==HUGE(1.0_dp) ) ) THEN
              DO l=1,j
                WRITE( cmd, * ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
@@ -5473,6 +5553,12 @@ END DO
              READ( tmp_str(1:k1), * ) F(i)
              F(i) = ptr % Coeff * F(i)
            END IF
+#ifdef HAVE_LUA
+         ELSE
+           call ElmerEvalLuaS(LuaState, ptr, T, F(i), j)
+           F(i) = ptr % coeff * F(i)
+         END IF
+#endif
 
            IF( AllGlobal ) THEN
              Handle % GlobalInList = .TRUE.
@@ -5965,16 +6051,24 @@ END DO
          IF ( ANY(T(1:j)==HUGE(1._dP)) ) CYCLE
 
          IF ( ptr % TYPE==LIST_TYPE_VARIABLE_TENSOR_STR) THEN
-           DO l=1,j
-             WRITE( cmd, '(a,g19.12)' ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+#ifdef HAVE_LUA
+           IF ( .not. ptr % LuaFun ) THEN
+#endif
+             DO l=1,j
+               WRITE( cmd, '(a,g19.12)' ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
+               k1 = LEN_TRIM(cmd)
+               CALL matc( cmd, tmp_str, k1 )
+             END DO
+
+             cmd = ptr % CValue
              k1 = LEN_TRIM(cmd)
              CALL matc( cmd, tmp_str, k1 )
-           END DO
-
-           cmd = ptr % CValue
-           k1 = LEN_TRIM(cmd)
-           CALL matc( cmd, tmp_str, k1 )
-           READ( tmp_str(1:k1), * ) ((F(j,k,i),k=1,N2),j=1,N1)
+             READ( tmp_str(1:k1), * ) ((F(j,k,i),k=1,N2),j=1,N1)
+#ifdef HAVE_LUA
+           ELSE
+             call ElmerEvalLuaT(LuaState, ptr, T, F(:,:,i), j)
+           END IF
+#endif
          ELSE IF ( ptr % PROCEDURE /= 0 ) THEN
            G => F(:,:,i)
            CALL ExecRealArrayFunction( ptr % PROCEDURE, CurrentModel, &
@@ -6100,6 +6194,9 @@ END DO
          IF ( ANY(T(1:j)==HUGE(1._dP)) ) CYCLE
 
          IF ( ptr % TYPE==LIST_TYPE_VARIABLE_TENSOR_STR) THEN
+#ifdef HAVE_LUA
+           IF ( .not. ptr % LuaFun ) THEN
+#endif
            DO l=1,j
              WRITE( cmd, '(a,g19.12)' ) 'tx('//TRIM(i2s(l-1))//')=', T(l)
              k1 = LEN_TRIM(cmd)
@@ -6110,6 +6207,11 @@ END DO
            k1 = LEN_TRIM(cmd)
            CALL matc( cmd, tmp_str, k1 )
            READ( tmp_str(1:k1), * ) (G(j,i),j=1,N1)
+#ifdef HAVE_LUA
+           ELSE
+             call ElmerEvalLuaV(LuaState, ptr, T, G(:,i), j)
+           END IF
+#endif
          ELSE IF ( ptr % PROCEDURE /= 0 ) THEN
            CALL ExecRealVectorFunction( ptr % PROCEDURE, CurrentModel, &
                      NodeIndexes(i), T, G(:,i) )
@@ -7242,6 +7344,70 @@ END DO
    END FUNCTION ListGetSolverParams
 !------------------------------------------------------------------------------
    
+#ifdef HAVE_LUA
+!-------------------------------------------------------------------------------
+!> evaluates lua string to real array 
+!-------------------------------------------------------------------------------
+SUBROUTINE ElmerEvalLuaT(L, ptr, T, F, varcount)
+!-------------------------------------------------------------------------------
+  TYPE(LuaState_t) :: L
+  TYPE(ValueListEntry_t), POINTER :: ptr
+  REAL(KIND=C_DOUBLE), INTENT(IN) :: T(:)
+  REAL(KIND=C_DOUBLE), INTENT(OUT) :: F(:,:)
+  INTEGER :: VARCOUNT
+!-------------------------------------------------------------------------------
+  integer :: lstat
+
+  L % tx(1:varcount) = T(1:varcount) ! this should be superfluous
+  call lua_exec_fun(L, ptr % cvalue, 0, size(F,1)*size(F,2))
+
+  CALL lua_poptensor(L, F)
+!-------------------------------------------------------------------------------
+END SUBROUTINE
+!-------------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!> evaluates lua string to real vector 
+!-------------------------------------------------------------------------------
+SUBROUTINE ElmerEvalLuaV(L, ptr, T, F, varcount)
+!-------------------------------------------------------------------------------
+  TYPE(LuaState_t) :: L
+  TYPE(ValueListEntry_t), POINTER :: ptr
+  REAL(KIND=C_DOUBLE), INTENT(IN) :: T(:)
+  REAL(KIND=C_DOUBLE), INTENT(INOUT) :: F(:)
+  INTEGER :: VARCOUNT
+!-------------------------------------------------------------------------------
+  integer :: lstat
+
+  L % tx(1:varcount) = T(1:varcount) ! this should be superfluous
+  call lua_exec_fun(L, ptr % cvalue, 0, size(F,1))
+
+  CALL lua_popvector(L, F)
+!-------------------------------------------------------------------------------
+END SUBROUTINE
+!-------------------------------------------------------------------------------
+
+!-------------------------------------------------------------------------------
+!> evaluates lua string to real scalar 
+!-------------------------------------------------------------------------------
+SUBROUTINE ElmerEvalLuaS(L, ptr, T, F, varcount)
+!-------------------------------------------------------------------------------
+  TYPE(LuaState_t) :: L
+  TYPE(ValueListEntry_t), POINTER :: ptr
+  REAL(KIND=C_DOUBLE), INTENT(IN) :: T(:)
+  REAL(KIND=C_DOUBLE), INTENT(OUT) :: F
+  INTEGER :: VARCOUNT
+!-------------------------------------------------------------------------------
+  integer :: lstat
+
+  L % tx(1:varcount) = T(1:varcount) ! this should be superfluous
+  call lua_exec_fun(L, ptr % cvalue, 0, 1)
+  F = lua_popnumber(LuaState)
+!-------------------------------------------------------------------------------
+END SUBROUTINE
+!-------------------------------------------------------------------------------
+#endif
+
 #ifdef DEVEL_LISTCOUNTER
    
    !------------------------------------------------------------------------------
