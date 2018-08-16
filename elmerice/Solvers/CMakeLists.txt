@@ -6,10 +6,19 @@ MARK_AS_ADVANCED(WITH_ScatteredDataInterpolator)
 # ---------------------- #
 # -- NetCDF libraries -- #
 #----------------------- #
-MESSAGE(STATUS "------------------------------------------------")
-MESSAGE(STATUS "Elmer/Ice package: Looking for [NetCDF] & [NetCDF Fortran] libraries")
 
-FIND_PACKAGE(NetCDF)
+IF(WITH_NetCDF OR WITH_GridDataReader)
+  MESSAGE(STATUS "------------------------------------------------")
+  MESSAGE(STATUS "Elmer/Ice package: Looking for [NetCDF] & [NetCDF Fortran] libraries")
+  SET(LOOK_NetCDF TRUE)
+ENDIF()
+
+IF (LOOK_NetCDF)
+  FIND_PACKAGE(NetCDF)
+ELSE()
+  MESSAGE(STATUS "Library not activated: >WITH_NetCDF< OR >WITH_GridDataReader<")
+  SET(HAVE_NETCDF FALSE)
+ENDIF(LOOK_NetCDF)
 
 IF(NetCDF_FOUND)
 
@@ -24,6 +33,7 @@ IF(NetCDF_FOUND)
 ELSE()
   MESSAGE(STATUS "Library not found: >NetCDF_FOUND< ")
   MESSAGE(WARNING "  \n Missing: >NetCDF_INCLUDE_DIR< , >NetCDF_LIBRARY<,  >NetCDFF_LIBRARY< \n some functionalities will be disabled")
+  SET(HAVE_NETCDF FALSE)
 ENDIF(NetCDF_FOUND)
 
 MESSAGE(STATUS "------------------------------------------------")
