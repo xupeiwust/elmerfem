@@ -1,7 +1,8 @@
 5         NumberOfRockRecords
 Sand      1
 0.1       Xi0
-0.1       eta0
+0.35      eta0
+0.1       etak
 3.5       ks0th
 0.006     ew
 0.0       bs
@@ -26,12 +27,15 @@ Sand      1
 1.0 0.0 0.0 0.0 0.0 0.0 aas
 0.0       ks0
 1.0 0.0 0.0 0.0 0.0 0.0 cks
+50.0e06   Es0
+0.30      nuS0
 0         acsl
 0         aasl
 0         cksl
 Granite   2
 0.1       Xi0
 0.01      eta0
+0.01      etak
 3.0851    ks0th
 0.006     ew
 0.6411    bs
@@ -56,12 +60,15 @@ Granite   2
 1.0 0.0 0.0 0.0 0.0 0.0 aas
 0.0       ks0
 1.0 0.0 0.0 0.0 0.0 0.0 cks
+60.0e09   Es0
+0.35      nuS0
 0         acsl
 0         aasl
 0         cksl
 Till      3
 0.6       Xi0
 0.25      eta0
+0.25      etak
 2.0       ks0th
 0.002     ew
 0.0       bs
@@ -86,12 +93,15 @@ Till      3
 1.0 0.0 0.0 0.0 0.0 0.0 aas
 0.0       ks0
 1.0 0.0 0.0 0.0 0.0 0.0 cks
+1.0e06    CHANGE_Es0
+0.3       CHANGE_nus0
 0         acsl
 0         aasl
 0         cksl
 Gravel    4
 0.1       Xi0
 0.25      eta0
+0.25      etak
 5.5       ks0th
 0.006     ew
 0.0       bs
@@ -116,12 +126,15 @@ Gravel    4
 1.0 0.0 0.0 0.0 0.0 0.0 aas
 0.0       ks0
 1.0 0.0 0.0 0.0 0.0 0.0 cks
+1.0e06    CHANGE_Es0
+0.3       CHANGE_nus0
 0         acsl
 0         aasl
 0         cksl
-Sill      5
+Silt      5
 0.45      Xi0
-0.38      eta0
+0.40      eta0
+0.40      etak
 1.8       ks0th
 0.0025    ew
 0.0       bs
@@ -146,6 +159,8 @@ Sill      5
 1.0 0.0 0.0 0.0 0.0 0.0 aas
 0.0       ks0
 1.0 0.0 0.0 0.0 0.0 0.0 cks
+2.0e07    Es0
+0.35      nuS0
 0         acsl
 0         aasl
 0         cksl
