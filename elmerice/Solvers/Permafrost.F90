@@ -682,18 +682,19 @@ CONTAINS
           ELSE
             I=J
           END IF
-          CurrentElement => Solver % Mesh % Elements(I)          
+          CurrentElement => Solver % Mesh % Elements(I)
+          !! IMPORTANT: Mind that all ReceivingArray numbers ar N-1 with respect to the document (input_data_forsmark_2d)
           LocalRockMaterial % ks0th(I) = ReceivingArray(12) ! shall be changed to tensor
           !-----------------------------
-          LocalRockMaterial % e1(I) = ReceivingArray(34) ! e1 (mail from Juha 11.10.)
+          LocalRockMaterial % e1(I) = ReceivingArray(33) ! e1 (mail from Juha 11.10.)
           !IF (LocalRockMaterial % e1(I) > 0.01) PRINT *,"e1:", ReceivingArray(34)
           !IF (LocalRockMaterial % e1(I) < 0.0) PRINT *,"e1:", ReceivingArray(34)
-          LocalRockMaterial % bs(I) = ReceivingArray(24) ! b11,1 (mail from Juha 11.10.)
+          LocalRockMaterial % bs(I) = ReceivingArray(23) ! b11,1 (mail from Juha 11.10.)
           LocalRockMaterial % rhos0(I) = ReceivingArray(1)
           LocalRockMaterial % Xi0(I) = ReceivingArray(32)
           !-----------------------------
           LocalRockMaterial % eta0(I) = ReceivingArray(30) ! eta_t (mail from Juha 11.10.)
-          LocalRockMaterial % etak(I) = ReceivingArray(30)
+          LocalRockMaterial % etak(I) = ReceivingArray(31)
           LocalRockMaterial % hs0(I) = 0.0_dp! will be removed
           !-----------------------------
           LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(35)
@@ -729,6 +730,8 @@ CONTAINS
           LocalRockMaterial % cks(2:5,I)= 0.0_dp
           LocalRockMaterial % cksl(I)= 1
           !-----------------------------
+          LocalRockMaterial % Es0(I) = ReceivingArray(49)
+          LocalRockMaterial % nus0(I) = ReceivingArray(50)
           WRITE(Message,*) 'Element',I
           LocalRockMaterial % VariableBaseName(I) = TRIM(Message)
         END DO
