@@ -576,12 +576,12 @@ CONTAINS
   END FUNCTION ReadPermafrostRockMaterial
   
   !---------------------------------------------------------------------------------------------  
-  FUNCTION ReadPermafrostElementRockMaterial(CurrentRockMaterial,MaterialFileName,Solver) RESULT(NumberOfRockRecords)
+  FUNCTION ReadPermafrostElementRockMaterial(CurrentRockMaterial,MaterialFileName,Solver,DIM) RESULT(NumberOfRockRecords)
     IMPLICIT NONE
     CHARACTER(LEN=MAX_NAME_LEN), INTENT(IN) :: MaterialFileName
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     TYPE(Solver_t) :: Solver
-    INTEGER :: NumberOfRockRecords
+    INTEGER :: NumberOfRockRecords,DIM
     !-----------------------------------------------------------
     CHARACTER(LEN=MAX_NAME_LEN) :: SubroutineName="ReadPermafrostElementRockMaterial"
     LOGICAL :: FirstTime=.TRUE., Parallel=.FALSE.
@@ -696,16 +696,28 @@ CONTAINS
           LocalRockMaterial % eta0(I) = ReceivingArray(30) ! eta_t (mail from Juha 11.10.)
           LocalRockMaterial % etak(I) = ReceivingArray(31)
           LocalRockMaterial % hs0(I) = 0.0_dp! will be removed
-          !-----------------------------
-          LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(35)
-          LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(36)
-          LocalRockMaterial % Kgwh0(3,3,I) = ReceivingArray(37)
-          LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(38)
-          LocalRockMaterial % Kgwh0(1,3,I) = ReceivingArray(39)
-          LocalRockMaterial % Kgwh0(2,3,I) = ReceivingArray(40)
-          LocalRockMaterial % Kgwh0(2,1,I) = LocalRockMaterial % Kgwh0(1,2,I)
-          LocalRockMaterial % Kgwh0(3,1,I) = LocalRockMaterial % Kgwh0(1,3,I)
+          !----------------------------- Hydrol. Conductivity
+          LocalRockMaterial % Kgwh0 = 0.0_dp
+
+          IF(DIM==2) THEN
+            LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(35)
+            LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(37)
+            LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(39)
+            LocalRockMaterial % Kgwh0(2,1,I) = LocalRockMaterial % Kgwh0(1,2,I)
+          ELSE
+            LocalRockMaterial % Kgwh0(1,1,I) = ReceivingArray(35)
+            !PRINT *,"ReceivingArray(34-41)",ReceivingArray(34:41)
+            LocalRockMaterial % Kgwh0(2,2,I) = ReceivingArray(36)
+            LocalRockMaterial % Kgwh0(3,3,I) = ReceivingArray(37)
+            LocalRockMaterial % Kgwh0(1,2,I) = ReceivingArray(38)
+            LocalRockMaterial % Kgwh0(1,3,I) = ReceivingArray(39)
+            LocalRockMaterial % Kgwh0(2,3,I) = ReceivingArray(40)
+            LocalRockMaterial % Kgwh0(2,1,I) = LocalRockMaterial % Kgwh0(1,2,I)
+            LocalRockMaterial % Kgwh0(3,1,I) = LocalRockMaterial % Kgwh0(1,3,I)
           LocalRockMaterial % Kgwh0(3,2,I) = LocalRockMaterial % Kgwh0(2,3,I)
+          END IF
+          !PRINT *,"Kgwh0=",LocalRockMaterial % Kgwh0(1,1:2,I)
+          !PRINT *,LocalRockMaterial % Kgwh0(2,1:2,I) 
           !-----------------------------
           LocalRockMaterial % qexp(I) = ReceivingArray(41) !?????????????????????????????????????????????
           LocalRockMaterial % alphaL(I) = ReceivingArray(47)
@@ -2746,6 +2758,23 @@ CONTAINS
     kappaG = EG/(3.0_dp*(1.0_dp - 2.0_dp * nuG))
   END FUNCTION KappaG
   !---------------------------------------------------------------------------------------------
+  FUNCTION GetKGuu(EG,nuG,DIM) Result(KGuu)
+    REAL(KIND=dp), INTENT(IN) :: EG,nuG
+    REAL(KIND=dp) KGuu(2*DIM,2*DIM)
+    INTEGER, INTENT(IN) :: DIM
+    !----------
+    INTEGER :: I,J
+    !---------
+    KGuu = 0.0_dp
+    DO I=1,DIM
+      KGuu(I,I) = 1.0_dp - nuG
+      KGuu(DIM+I,DIM+I) = 0.5_dp - nuG
+      DO J=1,DIM
+        IF (J /= I) KGuu(I,J) = nuG
+      END DO
+    END DO
+  END FUNCTION GetKGuu
+  !---------------------------------------------------------------------------------------------
 END MODULE PermafrostMaterials
 !---------------------------------------------------------------------------------------------
 !---------------------------------------------------------------------------------------------
@@ -2798,7 +2827,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
        ConstantPorosity=.FALSE., NoSalinity=.FALSE.,GivenGWFlux,ElementWiseRockMaterial, DummyLog=.FALSE.,&
        InitializeSteadyState, ActiveMassMatrix, ComputeDeformation=.FALSE.,&
        StressInvAllocationsDone=.FALSE.,HydroGeo=.FALSE.,ComputeDt=.FALSE.,&
-       TemperatureTimeDerExists=.FALSE.,SalinityTimeDerExists=.FALSE.
+       TemperatureTimeDerExists=.FALSE.,SalinityTimeDerExists=.FALSE., FluxOutput=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow'
   CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, StressInvName, &
@@ -2830,6 +2859,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   IF(.NOT. Found ) maxiter = 1
 
   ComputeDt = GetLogical(Params,'Compute Time Derivatives',Found)
+  FluxOutput = GetLogical(Params,'Groundwater Flux Output',Found)
   
   ! find variables for dependencies
   !--------------------------------
@@ -2905,7 +2935,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
@@ -3634,7 +3664,7 @@ CONTAINS
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
           PRINT *, "NumberOfRockRecords", NumberOfRockRecords
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
@@ -4023,7 +4053,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
@@ -4605,7 +4635,7 @@ SUBROUTINE PermafrostSoluteTransport( Model,Solver,dt,TransientSimulation )
         IF (ElementWiseRockMaterial) THEN
           ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
           NumberOfRockRecords = &
-               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+               ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
         ELSE
           NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
         END IF
@@ -5312,7 +5342,7 @@ SUBROUTINE PermafrostUnfrozenWaterContentOld( Model,Solver,dt,TransientSimulatio
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
       END IF
@@ -5612,7 +5642,7 @@ SUBROUTINE PermafrostUnfrozenWaterContent( Model,Solver,dt,TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
       END IF
@@ -5886,7 +5916,7 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
         PRINT *, "NumberOfRockRecords", NumberOfRockRecords
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
@@ -6177,7 +6207,7 @@ SUBROUTINE PermafrostMaterialOutput( Model,Solver,dt,TransientSimulation )
       IF (ElementWiseRockMaterial) THEN
         ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
         NumberOfRockRecords = &
-             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver)
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
         PRINT *, "NumberOfRockRecords", NumberOfRockRecords
       ELSE
         NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )

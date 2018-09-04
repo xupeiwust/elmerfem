@@ -10977,10 +10977,10 @@ END SUBROUTINE GetMaxDefs
     Mesh_out => AllocateMesh()
     !   Mesh_out = Mesh_in
     buildingblocks = SIZE(in_levels)
-    WRITE(Message,'(A,I2,A)'), "buildingblocks=", buildingblocks, " element levels within blocks:"
+    WRITE(Message,'(A,I2,A)') "buildingblocks=", buildingblocks, " element levels within blocks:"
     CALL INFO('MeshExtrude',Message)
     DO blk=1,buildingblocks
-      WRITE(Message,'(A,I2,A,I3)'), 'Block no. ',blk,': ', in_levels(blk) + 1
+      WRITE(Message,'(A,I2,A,I3)') 'Block no. ',blk,': ', in_levels(blk) + 1
       CALL INFO('MeshExtrude',Message,Level=3)
     END DO
     isParallel = ParEnv % PEs>1
@@ -11036,7 +11036,7 @@ END SUBROUTINE GetMaxDefs
       CALL FATAL('MeshExtrude','Allocation error')
     END IF
     DO blk=1,buildingblocks
-      WRITE (Message,'(A,I2)'), 'Block ',blk
+      WRITE (Message,'(A,I2)') 'Block ',blk
       CALL INFO('MeshExtrude',Message,Level=3)
       CALL UnitSegmentDivision( Wtable_in, in_levels(blk) + 1 )
       Wtable(blk,0:in_levels(blk) + 1) = Wtable_in(0:in_levels(blk) + 1)
