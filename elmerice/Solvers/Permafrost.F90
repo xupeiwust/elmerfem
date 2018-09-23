@@ -3101,7 +3101,7 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   INTEGER, POINTER :: PorosityPerm(:), NodeIndexes(:)
   REAL(KIND=dp), POINTER :: PorosityValues(:)
   REAL(KIND=dp), ALLOCATABLE :: NodalHits(:)
-  INTEGER :: DIM, i, j, k, NumberOfRockRecords,RockMaterialID,CurrentNode,Active
+  INTEGER :: DIM, i, j, k, NumberOfRockRecords,RockMaterialID,CurrentNode,Active,totalunset,totalset
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="PorosityInit"
   CHARACTER(LEN=MAX_NAME_LEN) :: PorosityName,ElementRockMaterialName
   LOGICAL :: Visited = .False., Found, GotIt,ElementWiseRockMaterial
@@ -3139,16 +3139,17 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   ELSE
     CALL FATAL(SolverName, 'Could not find "Porosity Variable"')
   END IF
-  PorosityValues = 0.0_dp
-  
+   
   ! Loop over elements
   Active = Solver % NumberOFActiveElements
   IF (.NOT.Visited) THEN
     ALLOCATE(NodalHits(Solver % Mesh % NumberOfNodes))
     NodalHits = 0.0_dp
-  ELSE
-    NodalHits = 0.0_dp
   END IF
+  
+  NodalHits = 0.0_dp
+  PorosityValues = 0.0_dp
+  
   DO i = 1, Active
     CurrentElement => GetActiveElement(i)
     NodeIndexes => CurrentElement % NodeIndexes
@@ -3190,16 +3191,38 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
     ! Loop over nodes of element
     DO k = 1, GetElementNOFNodes(CurrentElement)
       CurrentNode = PorosityPerm(CurrentElement % NodeIndexes(k))
-      IF (PorosityValues(CurrentNode) >= 0.0_dp) THEN
-        PorosityValues(CurrentNode) = &
-             0.5_dp*(PorosityValues(CurrentNode) + CurrentRockMaterial % eta0(RockMaterialID))
-      ELSE
-        PorosityValues(CurrentNode) = CurrentRockMaterial % eta0(RockMaterialID)
-      END IF
-      
+      NodalHits(CurrentNode) = NodalHits(CurrentNode) + 1
+      PorosityValues(CurrentNode) = &
+           PorosityValues(CurrentNode) + CurrentRockMaterial % eta0(RockMaterialID)
     END DO
   END DO
 
+  totalset = 0
+  totalunset = 0
+  ! norm the result
+  DO i = 1, Solver % Mesh % NumberOfNodes
+    CurrentNode = PorosityPerm(CurrentElement % NodeIndexes(k))
+    IF ((NodalHits(CurrentNode) > 0) .AND. (CurrentNode > 0)) THEN
+      PorosityValues(CurrentNode) =  PorosityValues(CurrentNode)/(1.0_dp * NodalHits(CurrentNode))
+      totalset = totalset + 1
+    ELSE
+      PorosityValues(CurrentNode) =  0.0_dp
+      totalunset = totalunset + 1
+      WRITE(Message,*) 'Porosity value for active node ',CurrentNode,' has not been initiated' 
+      CALL WARN(SolverName,Message)
+    END IF
+  END DO
+
+  WRITE(Message,*) 'Active elements:',Active,'. Initiated:',totalset,' of total meshpoints',  Solver % Mesh % NumberOfNodes
+  
+  CALL Info(SolverName, '-----------------------------------', Level=1)
+  CALL Info(SolverName, 'Done Initializing porosity         ', Level=1)
+  CALL Info(SolverName, Message, Level=1)
+  IF (totalunset > 0) THEN
+    WRITE(Message,*) totalunset, ' points in set'
+    CALL WARN(SolverName,Message)
+  END IF
+  CALL Info(SolverName, '-----------------------------------', Level=1)
   !==============================================================================
 END SUBROUTINE PorosityInit
 !==============================================================================

@@ -168,7 +168,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      INTEGER ::  MaxIter, MinIter, NoModes, Nsize, Dofs
      TYPE(Variable_t), POINTER :: StressSol, iVar, Var, TimeVar
 
-     CHARACTER(LEN=MAX_NAME_LEN) :: VarName
+     CHARACTER(LEN=MAX_NAME_LEN) :: VarName, TemperatureName
 
      REAL(KIND=dp), POINTER :: Temperature(:),Work(:,:,:), &
        VonMises(:), NodalStress(:), NodalStrain(:), StressComp(:), StrainComp(:), ContactPressure(:), &
@@ -191,7 +191,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      LOGICAL :: Contact = .FALSE.
      LOGICAL :: stat, stat2, stat3, RotateC, MeshDisplacementActive, &
                 ConstantBulkSystem, ConstantBulkMatrix, ConstantBulkMatrixInUse, ConstantSystem, &
-                UpdateSystem, GotHeatExp, Converged
+                UpdateSystem, GotHeatExp, Converged, EvaluateAtIP(3) = .FALSE.
 
      LOGICAL :: AllocationsDone = .FALSE., NormalTangential, HarmonicAnalysis
      LOGICAL :: StabilityAnalysis = .FALSE., ModelLumping, FixDisplacement
@@ -207,6 +207,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        LocalContactPressure(:), PreStress(:,:), PreStrain(:,:), &
        StressLoad(:,:), StrainLoad(:,:), NodalMeshVelo(:,:)
 
+     TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
+
      SAVE MASS,DAMP, STIFF,LOAD,LOAD_im,FORCE_im,Beta_im, &
        FORCE,ElementNodes,DampCoeff,SpringCoeff,Beta,Density, Damping, &
        LocalTemperature,AllocationsDone,ReferenceTemperature, &
@@ -219,7 +221,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        RayleighAlpha, RayleighBeta, RayleighDamping, &
        NodalStrain, PrincipalStress, PrincipalStrain, Tresca, &
        PrincipalAngle, PrincipalAngleComp, CalcPrincipalAngle, &
-       CalcPrincipalAll, CalculateStrains
+       CalcPrincipalAll, CalculateStrains, TemperatureName
 !------------------------------------------------------------------------------
      INTEGER :: dim
 #ifdef USE_ISO_C_BINDINGS
@@ -576,7 +578,21 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        END IF
        CALL Info( 'StressSolve', 'Starting assembly...',Level=5 )
 !------------------------------------------------------------------------------
-
+      ! inquire if material parameters shall be replaced by handles
+       EvaluateAtIP(1)= &
+            GetLogical( Material, 'Youngs Modulus at IP',Found)
+       IF(EvaluateAtIP(1)) &
+            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+       EvaluateAtIP(2)= &
+            GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
+       IF(EvaluateAtIP(2)) &
+            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+       IF (EvaluateAtIP(1)) THEN
+         EvaluateAtIP(3) = &
+            GetLogical( Material, 'Poisson Ratio at IP',Found)
+         IF(EvaluateAtIP(1)) &
+              CALL ListInitElementKeyword( nuIP_h,'Material','Youngs Modulus')
+       END IF
 500    CALL DefaultInitialize()
 
        ConstantBulkMatrixInUse = ConstantBulkMatrix .AND. &
@@ -974,7 +990,10 @@ CONTAINS
 
        Equation => GetEquation()
        PlaneStress = GetLogical( Equation, 'Plane Stress',Found )
-
+       TemperatureName = ListGetString( Equation,'Temperature Name', Found)
+       IF (.NOT.Found) &
+            WRITE (TemperatureName,'(A)') 'Temperature' 
+       
        Material => GetMaterial()
        Density(1:n) = GetReal( Material, 'Density', Found )
        IF ( .NOT. Found )  THEN
@@ -993,20 +1012,42 @@ CONTAINS
            RayleighBeta = 0.0d0        
          END IF
        END IF
-         
-       CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
-           'Heat Expansion Coefficient', Material, n, NodeIndexes, GotHeatExp )
 
-       CALL InputTensor( ElasticModulus, Isotropic(1), &
-           'Youngs Modulus', Material, n, NodeIndexes )
+       IF  (EvaluateAtIP(2)) THEN
 
+         HeatExpansionCoeff = 0.0_dp
+         Isotropic(2) = .TRUE. ! we assume isotropy for function, at the moment
+         CALL ListInitElementKeyword(BetaIP_h,'Material','Heat Expansion Coefficient')
+       ELSE
+         CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
+              'Heat Expansion Coefficient', Material, n, NodeIndexes, GotHeatExp )
+       END IF
+
+        EvaluateAtIP(1)= &
+            GetLogical( Material, 'Youngs Modulus at IP',Found)
+       IF  (EvaluateAtIP(1)) THEN
+         ElasticModulus = 0.0_dp
+         Isotropic(1) = .TRUE. ! we assume isotropy for function, at the moment
+         CALL ListInitElementKeyword(EIP_h,'Material','Youngs Modulus')
+       ELSE
+         CALL InputTensor( ElasticModulus, Isotropic(1), &
+              'Youngs Modulus', Material, n, NodeIndexes )
+       END IF
+       
        PoissonRatio = 0.0d0
-       IF ( Isotropic(1) )  PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
+       IF ( Isotropic(1) )  THEN
+         IF (EvaluateAtIP(3)) THEN
+           CALL ListInitElementKeyword(nuIP_h,'Material','Youngs Modulus')
+         ELSE
+           PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
+         END IF
+       END IF
 
        IF( GotHeatExp ) THEN
          ReferenceTemperature(1:n) = GetReal(Material, &
-             'Reference Temperature', Found )
-         CALL GetScalarLocalSolution( LocalTemperature, 'Temperature' )
+              'Reference Temperature', Found )
+         
+         CALL GetScalarLocalSolution( LocalTemperature, TemperatureName)
          LocalTemperature(1:n) = LocalTemperature(1:n) - &
              ReferenceTemperature(1:n)
        ELSE
@@ -1130,7 +1171,8 @@ CONTAINS
                LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, StabilityAnalysis  &
                .AND. iter>1, GeometricStiffness .AND. iter>1, NodalDisplacement,    &
                RotateC, TransformMatrix, NodalMeshVelo, Damping, RayleighDamping,            &
-               RayleighAlpha, RayleighBeta )
+               RayleighAlpha, RayleighBeta,EvaluateAtIP=EvaluateAtIP,&
+               BetaIP_h=BetaIP_h, EIP_h=EIP_h, nuIP_h=nuIP_h )
           END IF
 
        CASE DEFAULT

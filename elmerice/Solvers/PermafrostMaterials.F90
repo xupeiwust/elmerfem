@@ -2759,9 +2759,17 @@ CONTAINS
     kappaG = EG/(3.0_dp*(1.0_dp - 2.0_dp * nuG))
   END FUNCTION KappaG
   !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION rhoG(rhos,rhogw,rhoi,Porosity,Salinity,Xi)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: rhos,rhogw,rhoi,Porosity,Salinity,Xi
+    !---------
+    rhoG = (1.0_dp - Porosity)*rhos + Porosity*Xi*(1.0_dp - Salinity)*rhogw &
+         + Porosity*(1.0_dp - Xi)*rhoi
+  END FUNCTION rhoG
+  !---------------------------------------------------------------------------------------------
   FUNCTION GetKGuu(EG,nuG,DIM) Result(KGuu)
     REAL(KIND=dp), INTENT(IN) :: EG,nuG
-    REAL(KIND=dp) KGuu(2*DIM,2*DIM)
+    REAL(KIND=dp) KGuu(6,6)
     INTEGER, INTENT(IN) :: DIM
     !----------
     INTEGER :: I,J
@@ -2774,6 +2782,6 @@ CONTAINS
         IF (J /= I) KGuu(I,J) = nuG
       END DO
     END DO
-  END FUNCTION GetKGuu
+  END FUNCTION GetKGuu 
   !---------------------------------------------------------------------------------------------
 END MODULE PermafrostMaterials

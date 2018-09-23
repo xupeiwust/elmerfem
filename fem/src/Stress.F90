@@ -47,7 +47,7 @@ MODULE StressLocal
 
 !------------------------------------------------------------------------------
   USE DefUtils
-
+  USE Materialmodels
 
   IMPLICIT NONE
 
@@ -60,7 +60,8 @@ MODULE StressLocal
      NodalPreStress, NodalPreStrain, NodalStressLoad, NodalStrainLoad,           &
      NodalHeatExpansion, NodalTemperature, Element, n, ntot, Nodes, RelIntegOrder, StabilityAnalysis, &
      GeometricStiffness, NodalDisplacement, RotateC, TransformMatrix, NodalMeshVelo, &
-     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta  )
+     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP, &
+     BetaIP_h, EIP_h, nuIP_h )
 !------------------------------------------------------------------------------
      REAL(KIND=dp) :: STIFF(:,:), MASS(:,:), DAMP(:,:), FORCE(:), LOAD(:,:)
      REAL(KIND=dp) :: FORCE_im(:), LOAD_im(:,:)
@@ -72,12 +73,14 @@ MODULE StressLocal
      REAL(KIND=dp) :: RayleighAlpha(:), RayleighBeta(:)
      REAL(KIND=dp), DIMENSION(:) :: NodalPoisson, NodalDensity, NodalDamping
 
+     
      LOGICAL :: PlaneStress, Isotropic(2), StabilityAnalysis, GeometricStiffness
      LOGICAL :: RotateC, RayleighDamping
-
+     LOGICAL, OPTIONAL :: EvaluateAtIP(3)
+     TYPE(ValueHandle_t), OPTIONAL  :: BetaIP_h, EIP_h, nuIP_h
 
      TYPE(Nodes_t) :: Nodes
-     TYPE(Element_t) :: Element
+     TYPE(Element_t),POINTER :: Element
      INTEGER :: RelIntegOrder
 
      INTEGER :: n, ntot
@@ -116,7 +119,6 @@ MODULE StressLocal
      TYPE(Variable_t), POINTER, SAVE :: ve_stress
 
      REAL(KIND=dp), ALLOCATABLE, SAVE :: StressStore(:,:,:,:)
-
 
      dim = CoordinateSystemDimension()
 
@@ -206,7 +208,11 @@ MODULE StressLocal
          HeatExpansion = 0.0d0
          DO i=1,3
            IF ( Isotropic(2) ) THEN
-              HeatExpansion(i,i) = SUM( NodalHeatExpansion(1,1,1:n)*Basis(1:n) )
+             IF (EvaluateAtIP(2)) THEN
+               HeatExpansion(i,i) = ListGetElementReal( BetaIP_h, Basis, Element, Found, GaussPoint=t)
+             ELSE
+               HeatExpansion(i,i) = SUM( NodalHeatExpansion(1,1,1:n)*Basis(1:n) )
+             END IF
            ELSE
               DO j=1,3
                 HeatExpansion(i,j) = SUM( NodalHeatExpansion(i,j,1:n)*Basis(1:n) )
@@ -215,8 +221,14 @@ MODULE StressLocal
          END DO
        END IF
 
-       IF ( Isotropic(1) ) Poisson = SUM( Basis(1:n) * NodalPoisson(1:n) )
-
+       IF ( Isotropic(1) ) THEN
+         IF (EvaluateAtIP(3)) THEN
+           Poisson = ListGetElementReal( nuIP_h, Basis, Element, Found, GaussPoint=t)
+         ELSE
+           Poisson = SUM( Basis(1:n) * NodalPoisson(1:n) )
+         END IF
+       END IF
+       
        C = 0
        IF ( .NOT. Isotropic(1) ) THEN 
           DO i=1,SIZE(ElasticModulus,1)
@@ -225,7 +237,11 @@ MODULE StressLocal
             END DO
           END DO
        ELSE
-          Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
+         IF (EvaluateAtIP(1)) THEN
+           Young = ListGetElementReal( EIP_h, Basis, Element, Found, GaussPoint=t)
+         ELSE
+           Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
+         END IF
        END IF
 
        SELECT CASE(dim)

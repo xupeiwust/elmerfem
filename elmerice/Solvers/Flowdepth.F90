@@ -139,7 +139,7 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
                CALL INFO(SolverName, 'Free surface variable will be calculated', Level=1)
         FreeSurfName = GetString( Solver % Values,'Freesurf Name',GotIt)
         IF (.NOT.GotIt) THEN
-           CALL FATAL(SolverName,'Keyaword >Calc Free Surface< set to true, but keyword >Freesurf Name< not found.')
+           CALL FATAL(SolverName,'Keyword >Calc Free Surface< set to true, but keyword >Freesurf Name< not found.')
         END IF
 
         SurfSol => VariableGet( Solver % Mesh % Variables, TRIM(FreeSurfname))
