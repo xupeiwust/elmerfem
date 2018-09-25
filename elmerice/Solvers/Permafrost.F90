@@ -1184,6 +1184,23 @@ END SUBROUTINE PermafrostGroundwaterFlux_Init
 !-----------------------------------------------------------------------------
 !> heat transfer equation for enhanced permafrost model
 !-----------------------------------------------------------------------------
+SUBROUTINE PermafrostHeatTransfer_init( Model,Solver,dt,TransientSimulation )
+  USE DefUtils
+  IMPLICIT NONE
+
+  TYPE(Model_t)  :: Model
+  TYPE(Solver_t) :: Solver
+  REAL(KIND=dp) :: DT
+  LOGICAL :: TransientSimulation
+  !------------------------------------------------------------------------------
+  TYPE(ValueList_t), POINTER :: SolverParams
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation_init'
+
+  SolverParams => GetSolverParams()
+  CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP Xi' )
+  
+  
+END SUBROUTINE PermafrostHeatTransfer_init
 !------------------------------------------------------------------------------
 SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
@@ -1248,19 +1265,10 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   VarName = Solver % Variable % Name
   Params => GetSolverParams()
   ComputeDt = GetLogical(Params,'Compute Time Derivatives',Found)
-
-  IF (FirstTime) THEN
-    XiAtIPName = ListGetString(Params,'Unfrozen Water Content Variable',Found)
-    IF (.NOT.Found) THEN
-      CALL WARN (SolverName,' "Unfrozen Water Content Variable" keyword not found')
-      CALL WARN (SolverName,' setting default "Xi" ')
-      WRITE (XiAtIPName,*) 'Xi'
-    END IF
-  END IF
   
-  XiAtIPVar => VariableGet( Solver % Mesh % Variables, TRIM(XiAtIPName))
+  XiAtIPVar => VariableGet( Solver % Mesh % Variables, 'Xi')
   IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
-    WRITE(Message,*) 'Variable ', TRIM(XiAtIPName),' is not associated'
+    WRITE(Message,*) 'Variable Xi is not associated'
     CALL FATAL(SolverName,Message)
   END IF
   XiAtIPPerm => XiAtIPVar % Perm

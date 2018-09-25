@@ -2767,21 +2767,56 @@ CONTAINS
          + Porosity*(1.0_dp - Xi)*rhoi
   END FUNCTION rhoG
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetKGuu(EG,nuG,DIM) Result(KGuu)
+  FUNCTION KGuu(EG,nuG,DIM) RESULT(OutKGuu)
     REAL(KIND=dp), INTENT(IN) :: EG,nuG
-    REAL(KIND=dp) KGuu(6,6)
+    REAL(KIND=dp) OutKGuu(6,6)
     INTEGER, INTENT(IN) :: DIM
     !----------
     INTEGER :: I,J
     !---------
-    KGuu = 0.0_dp
+    OutKGuu = 0.0_dp
     DO I=1,DIM
-      KGuu(I,I) = 1.0_dp - nuG
-      KGuu(DIM+I,DIM+I) = 0.5_dp - nuG
+      OutKGuu(I,I) = 1.0_dp - nuG
+      OutKGuu(DIM+I,DIM+I) = 0.5_dp - nuG
       DO J=1,DIM
-        IF (J /= I) KGuu(I,J) = nuG
+        IF (J /= I) OutKGuu(I,J) = nuG
       END DO
     END DO
-  END FUNCTION GetKGuu 
+  END FUNCTION KGuu
   !---------------------------------------------------------------------------------------------
+  FUNCTION GetKGuu(Model,IPNo,InDummy) RESULT(KGuuAtIP)
+    TYPE(Model_t) :: Model
+    INTEGER, INTENT(IN) :: IPNo
+    REAL(KIND=dp) :: InDummy, KGuuAtIP(6,6)
+    !-----------
+    TYPE(Element_t),POINTER :: Element
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER :: RockMaterialID, DIM, t, i, IPPerm
+    REAL(KIND=dp) :: EGAtIP, nuGAtIP, PorosityAtIP
+    TYPE(Variable_t), POINTER :: XiAtIPVar
+    INTEGER, POINTER :: XiAtIPPerm(:)
+    REAL(KIND=dp), POINTER :: XiAtIP(:)
+        
+
+    DIM = CoordinateSystemDimension()
+
+    Element => Model % CurrentElement
+    t = Element % ElementIndex
+    
+    XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+    IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+      WRITE(Message,*) 'Variable Xi is not associated'
+      CALL FATAL('PermafrostMaterials (GetKGuu)',Message)
+    END IF
+    XiAtIPPerm => XiAtIPVar % Perm
+    XiAtIp => XiAtIPVar % Values
+
+    IPPerm = XiAtIPPerm(t) + IPNo
+    
+    EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
+    nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
+    KGuuAtIP = KGuu(EGAtIP,nuGAtIP,DIM)
+    
+  END FUNCTION GetKGuu
 END MODULE PermafrostMaterials
