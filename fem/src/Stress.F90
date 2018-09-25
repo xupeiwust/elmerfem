@@ -107,7 +107,7 @@ MODULE StressLocal
 
      LOGICAL :: stat, CSymmetry, NeedMass, NeedHeat, NeedStress, NeedHarmonic, &
          NeedPreStress, ActiveGeometricStiffness
-     TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
+     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h
 
      TYPE(Mesh_t), POINTER :: Mesh
      INTEGER :: ndim

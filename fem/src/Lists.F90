@@ -4271,8 +4271,8 @@ END DO
          maxn1 = MAX( n1, maxn1 )
          maxn2 = MAX( n2, maxn2 )
        ELSE
-         CALL Fatal('ListInitElementKeyword','Unknown value type: '//TRIM(I2S(ValueType)))
-
+         CALL Fatal('ListInitElementKeyword','Unknown value type '&
+             //TRIM(I2S(ValueType))//' for '//TRIM(Name))
        END IF
 
        FirstList = .FALSE.
@@ -4800,7 +4800,7 @@ END DO
            
        CASE DEFAULT
          
-         CALL Fatal('ListGetElementReal','Unknown case for avaluation at ip')
+         CALL Fatal('ListGetElementReal','Unknown case for avaluation at ip: '//TRIM(I2S(ptr % Type)))
          
        END SELECT
        
