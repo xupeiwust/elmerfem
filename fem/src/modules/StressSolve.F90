@@ -1163,7 +1163,6 @@ CONTAINS
               PlaneStress, Isotropic,StressLoad, StrainLoad, HeatExpansionCoeff,         &
               LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, RotateC, TransformMatrix )
           ELSE
-            PRINT *, "-> StressCompose", EvaluateAtIP,Isotropic
             CALL StressCompose( MASS, DAMP, STIFF, FORCE, FORCE_im, LOAD, LOAD_im, ElasticModulus,  &
                PoissonRatio, Density, PlaneStress, Isotropic,              &
                PreStress, PreStrain, StressLoad, StrainLoad, HeatExpansionCoeff,    &
@@ -1171,7 +1170,6 @@ CONTAINS
                .AND. iter>1, GeometricStiffness .AND. iter>1, NodalDisplacement,    &
                RotateC, TransformMatrix, NodalMeshVelo, Damping, RayleighDamping,            &
                RayleighAlpha, RayleighBeta,EvaluateAtIP)
-               !BetaIP_h,EIP_h, nuIP_h )
           END IF
 
        CASE DEFAULT

@@ -1197,7 +1197,7 @@ SUBROUTINE PermafrostHeatTransfer_init( Model,Solver,dt,TransientSimulation )
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation_init'
 
   SolverParams => GetSolverParams()
-  CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP Xi' )
+  CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP -dofs 1 Xi' )
   
   
 END SUBROUTINE PermafrostHeatTransfer_init

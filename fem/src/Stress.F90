@@ -163,7 +163,6 @@ MODULE StressLocal
      NeedPreStress = ANY( NodalPreStrain(1:6,1:n) /= 0.0d0 ) 
      NeedPreStress = NeedPreStress .OR. ANY( NodalPreStress(1:6,1:n) /= 0.0d0 ) 
 
-PRINT *, "StressCompose", EvaluateAtIP(1:3), Isotropic(1:2)
      !      ! Integration stuff:
      ! ------------------  
      NBasis = ntot
@@ -234,7 +233,6 @@ PRINT *, "StressCompose", EvaluateAtIP(1:3), Isotropic(1:2)
 
        IF ( Isotropic(1) ) THEN
          IF (EvaluateAtIP(3)) THEN
-           PRINT *, "IP"
            Poisson = ListGetElementReal( nuIP_h, Basis, Element, Found, GaussPoint=t)
          ELSE
            Poisson = SUM( Basis(1:n) * NodalPoisson(1:n) )
