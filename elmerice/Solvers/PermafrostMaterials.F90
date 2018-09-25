@@ -442,7 +442,7 @@ CONTAINS
         !------------------------------------------------------------------------------
         READ (io, *, END=30, IOSTAT=OK, ERR=40) NumerOfRockRecords, Comment
         WRITE (Message,*) "Attempting to read ",NumerOfRockRecords," ",&
-             TRIM(Comment)," from data file ",TRIM(MaterialFileName)        
+             TRIM(Comment)," records from data file ",TRIM(MaterialFileName)        
         CALL INFO(FunctionName,Message,level=3)
         InitialNumerOfRockRecords = NumerOfRockRecords
       END IF
@@ -667,8 +667,8 @@ CONTAINS
         ! MIND: all receiving array numbers are shifted by -1 in index with resepect
         !       to J. Hartikainen's instructions in input_data_forsmark_2d_example.pdf!
         !------------------------------------------------------------------------------
-        WRITE (Message,*) "Attempting read ",NoElements,&
-             " from data file ",TRIM(MaterialFileName)
+        WRITE (Message,*) "Attempting to read ",NoElements,&
+             " records from data file ",TRIM(MaterialFileName)
         CALL INFO(SubroutineName,Message,level=3)
         DO J=1,maxglobalelementnumber                             
           READ (io, *, END=50, ERR=60, IOSTAT=OK) CurrentNo, ReceivingArray(1:50)                    

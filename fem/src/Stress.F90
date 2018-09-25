@@ -60,8 +60,8 @@ MODULE StressLocal
      NodalPreStress, NodalPreStrain, NodalStressLoad, NodalStrainLoad,           &
      NodalHeatExpansion, NodalTemperature, Element, n, ntot, Nodes, RelIntegOrder, StabilityAnalysis, &
      GeometricStiffness, NodalDisplacement, RotateC, TransformMatrix, NodalMeshVelo, &
-     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP, &
-     BetaIP_h, EIP_h, nuIP_h )
+     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP)
+     !BetaIP_h, EIP_h, nuIP_h )
 !------------------------------------------------------------------------------
      REAL(KIND=dp) :: STIFF(:,:), MASS(:,:), DAMP(:,:), FORCE(:), LOAD(:,:)
      REAL(KIND=dp) :: FORCE_im(:), LOAD_im(:,:)
@@ -76,8 +76,8 @@ MODULE StressLocal
      
      LOGICAL :: PlaneStress, Isotropic(2), StabilityAnalysis, GeometricStiffness
      LOGICAL :: RotateC, RayleighDamping
-     LOGICAL, OPTIONAL :: EvaluateAtIP(3)
-     TYPE(ValueHandle_t), OPTIONAL  :: BetaIP_h, EIP_h, nuIP_h
+     LOGICAL  :: EvaluateAtIP(3)
+ 
 
      TYPE(Nodes_t) :: Nodes
      TYPE(Element_t),POINTER :: Element
@@ -107,11 +107,11 @@ MODULE StressLocal
 
      LOGICAL :: stat, CSymmetry, NeedMass, NeedHeat, NeedStress, NeedHarmonic, &
          NeedPreStress, ActiveGeometricStiffness
-
+     TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
 
      TYPE(Mesh_t), POINTER :: Mesh
      INTEGER :: ndim
-     LOGICAL :: Found, Incompressible
+     LOGICAL :: Found, Incompressible, FirstTime = .TRUE.
      REAL(KIND=dp) :: Pres, Pres0
      REAL(KIND=dp) :: PSOL(4,32), SOL(4,32), ShearModulus, Viscosity, PrevStress(3,3)
 !------------------------------------------------------------------------------
@@ -120,8 +120,19 @@ MODULE StressLocal
 
      REAL(KIND=dp), ALLOCATABLE, SAVE :: StressStore(:,:,:,:)
 
-     dim = CoordinateSystemDimension()
+     SAVE FirstTime, dim
 
+     IF (FirstTime) THEN
+       IF(EvaluateAtIP(1)) &
+            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+       IF(EvaluateAtIP(2)) &
+            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+       IF(EvaluateAtIP(3)) &
+            CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+        
+       dim = CoordinateSystemDimension()
+       FirstTime = .FALSE.
+     END IF
      Incompressible = GetLogical( GetSolverParams(), 'Incompressible', Found )
      IF (Incompressible) THEN
        ndim = dim+1
@@ -152,7 +163,7 @@ MODULE StressLocal
      NeedPreStress = ANY( NodalPreStrain(1:6,1:n) /= 0.0d0 ) 
      NeedPreStress = NeedPreStress .OR. ANY( NodalPreStress(1:6,1:n) /= 0.0d0 ) 
 
-
+PRINT *, "StressCompose", EvaluateAtIP(1:3), Isotropic(1:2)
      !      ! Integration stuff:
      ! ------------------  
      NBasis = ntot
@@ -223,6 +234,7 @@ MODULE StressLocal
 
        IF ( Isotropic(1) ) THEN
          IF (EvaluateAtIP(3)) THEN
+           PRINT *, "IP"
            Poisson = ListGetElementReal( nuIP_h, Basis, Element, Found, GaussPoint=t)
          ELSE
            Poisson = SUM( Basis(1:n) * NodalPoisson(1:n) )

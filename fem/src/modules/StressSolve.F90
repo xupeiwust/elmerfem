@@ -207,7 +207,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        LocalContactPressure(:), PreStress(:,:), PreStrain(:,:), &
        StressLoad(:,:), StrainLoad(:,:), NodalMeshVelo(:,:)
 
-     TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
+     !TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
 
      SAVE MASS,DAMP, STIFF,LOAD,LOAD_im,FORCE_im,Beta_im, &
        FORCE,ElementNodes,DampCoeff,SpringCoeff,Beta,Density, Damping, &
@@ -578,21 +578,6 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        END IF
        CALL Info( 'StressSolve', 'Starting assembly...',Level=5 )
 !------------------------------------------------------------------------------
-      ! inquire if material parameters shall be replaced by handles
-       EvaluateAtIP(1)= &
-            GetLogical( Material, 'Youngs Modulus at IP',Found)
-       IF(EvaluateAtIP(1)) &
-            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
-       EvaluateAtIP(2)= &
-            GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
-       IF(EvaluateAtIP(2)) &
-            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
-       IF (EvaluateAtIP(1)) THEN
-         EvaluateAtIP(3) = &
-            GetLogical( Material, 'Poisson Ratio at IP',Found)
-         IF(EvaluateAtIP(1)) &
-              CALL ListInitElementKeyword( nuIP_h,'Material','Youngs Modulus')
-       END IF
 500    CALL DefaultInitialize()
 
        ConstantBulkMatrixInUse = ConstantBulkMatrix .AND. &
@@ -996,6 +981,22 @@ CONTAINS
        
        Material => GetMaterial()
        Density(1:n) = GetReal( Material, 'Density', Found )
+
+       ! inquire if material parameters shall be replaced by handles
+       EvaluateAtIP(1)= &
+            GetLogical( Material, 'Youngs Modulus at IP',Found)
+       !IF(EvaluateAtIP(1)) &
+       !     CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+       
+       EvaluateAtIP(2)= &
+            GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
+       !IF(EvaluateAtIP(2)) &
+       !     CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+       EvaluateAtIP(3) = &
+            GetLogical( Material, 'Poisson Ratio at IP',Found)
+         !IF(EvaluateAtIP(1)) &
+         !     CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       
        IF ( .NOT. Found )  THEN
          IF ( Transient .OR. EigenOrHarmonicAnalysis() ) &
             CALL Fatal( 'StressSolve', 'No value for density found.' )
@@ -1017,7 +1018,7 @@ CONTAINS
 
          HeatExpansionCoeff = 0.0_dp
          Isotropic(2) = .TRUE. ! we assume isotropy for function, at the moment
-         CALL ListInitElementKeyword(BetaIP_h,'Material','Heat Expansion Coefficient')
+         !CALL ListInitElementKeyword(BetaIP_h,'Material','Heat Expansion Coefficient')
        ELSE
          CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
               'Heat Expansion Coefficient', Material, n, NodeIndexes, GotHeatExp )
@@ -1028,7 +1029,7 @@ CONTAINS
        IF  (EvaluateAtIP(1)) THEN
          ElasticModulus = 0.0_dp
          Isotropic(1) = .TRUE. ! we assume isotropy for function, at the moment
-         CALL ListInitElementKeyword(EIP_h,'Material','Youngs Modulus')
+         !CALL ListInitElementKeyword(EIP_h,'Material','Youngs Modulus')
        ELSE
          CALL InputTensor( ElasticModulus, Isotropic(1), &
               'Youngs Modulus', Material, n, NodeIndexes )
@@ -1036,11 +1037,8 @@ CONTAINS
        
        PoissonRatio = 0.0d0
        IF ( Isotropic(1) )  THEN
-         IF (EvaluateAtIP(3)) THEN
-           CALL ListInitElementKeyword(nuIP_h,'Material','Youngs Modulus')
-         ELSE
-           PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
-         END IF
+         IF (.NOT.EvaluateAtIP(3)) &
+              PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
        END IF
 
        IF( GotHeatExp ) THEN
@@ -1165,14 +1163,15 @@ CONTAINS
               PlaneStress, Isotropic,StressLoad, StrainLoad, HeatExpansionCoeff,         &
               LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, RotateC, TransformMatrix )
           ELSE
+            PRINT *, "-> StressCompose", EvaluateAtIP,Isotropic
             CALL StressCompose( MASS, DAMP, STIFF, FORCE, FORCE_im, LOAD, LOAD_im, ElasticModulus,  &
                PoissonRatio, Density, PlaneStress, Isotropic,              &
                PreStress, PreStrain, StressLoad, StrainLoad, HeatExpansionCoeff,    &
                LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, StabilityAnalysis  &
                .AND. iter>1, GeometricStiffness .AND. iter>1, NodalDisplacement,    &
                RotateC, TransformMatrix, NodalMeshVelo, Damping, RayleighDamping,            &
-               RayleighAlpha, RayleighBeta,EvaluateAtIP=EvaluateAtIP,&
-               BetaIP_h=BetaIP_h, EIP_h=EIP_h, nuIP_h=nuIP_h )
+               RayleighAlpha, RayleighBeta,EvaluateAtIP)
+               !BetaIP_h,EIP_h, nuIP_h )
           END IF
 
        CASE DEFAULT
