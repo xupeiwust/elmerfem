@@ -60,7 +60,7 @@ MODULE StressLocal
      NodalPreStress, NodalPreStrain, NodalStressLoad, NodalStrainLoad,           &
      NodalHeatExpansion, NodalTemperature, Element, n, ntot, Nodes, RelIntegOrder, StabilityAnalysis, &
      GeometricStiffness, NodalDisplacement, RotateC, TransformMatrix, NodalMeshVelo, &
-     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP)
+     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP,EvaluateLoadAtIp)
      !BetaIP_h, EIP_h, nuIP_h )
 !------------------------------------------------------------------------------
      REAL(KIND=dp) :: STIFF(:,:), MASS(:,:), DAMP(:,:), FORCE(:), LOAD(:,:)
@@ -76,7 +76,7 @@ MODULE StressLocal
      
      LOGICAL :: PlaneStress, Isotropic(2), StabilityAnalysis, GeometricStiffness
      LOGICAL :: RotateC, RayleighDamping
-     LOGICAL  :: EvaluateAtIP(3)
+     LOGICAL  :: EvaluateAtIP(3),EvaluateLoadAtIp
  
 
      TYPE(Nodes_t) :: Nodes

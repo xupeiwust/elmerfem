@@ -191,7 +191,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      LOGICAL :: Contact = .FALSE.
      LOGICAL :: stat, stat2, stat3, RotateC, MeshDisplacementActive, &
                 ConstantBulkSystem, ConstantBulkMatrix, ConstantBulkMatrixInUse, ConstantSystem, &
-                UpdateSystem, GotHeatExp, Converged, EvaluateAtIP(3) = .FALSE.
+                UpdateSystem, GotHeatExp, Converged, EvaluateAtIP(3) = .FALSE., EvaluateLoadAtIp = .FALSE.
 
      LOGICAL :: AllocationsDone = .FALSE., NormalTangential, HarmonicAnalysis
      LOGICAL :: StabilityAnalysis = .FALSE., ModelLumping, FixDisplacement
@@ -980,7 +980,7 @@ CONTAINS
             WRITE (TemperatureName,'(A)') 'Temperature' 
        
        Material => GetMaterial()
-       Density(1:n) = GetReal( Material, 'Density', Found )
+
 
        ! inquire if material parameters shall be replaced by handles
        EvaluateAtIP(1)= &
@@ -995,7 +995,9 @@ CONTAINS
        EvaluateAtIP(3) = &
             GetLogical( Material, 'Poisson Ratio at IP',Found)
          !IF(EvaluateAtIP(1)) &
-         !     CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       !     CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       
+       Density(1:n) = GetReal( Material, 'Density', Found )
        
        IF ( .NOT. Found )  THEN
          IF ( Transient .OR. EigenOrHarmonicAnalysis() ) &
@@ -1114,16 +1116,21 @@ CONTAINS
        StressLoad = 0.0d0
        StrainLoad = 0.0d0
        IF ( ASSOCIATED( BodyForce ) ) THEN
-         LOAD(1,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 1', Found )
-         LOAD(2,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 2', Found )
-         LOAD(3,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 3', Found )
-         LOAD(4,1:n)  = GetReal( BodyForce, 'Stress Pressure', Found )
+         EvaluateLoadAtIP= &
+              GetLogical( BodyForce, 'Stress Bodyforce at IP',Found)
 
-         IF ( HarmonicAnalysis ) THEN
-           LOAD_im(1,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 1 im', Found )
-           LOAD_im(2,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 2 im', Found )
-           LOAD_im(3,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 3 im', Found )
-           LOAD_im(4,1:n)  = GetReal( BodyForce, 'Stress Pressure im', Found )
+         IF (.NOT.EvaluateLoadAtIP) THEN         
+           LOAD(1,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 1', Found )
+           LOAD(2,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 2', Found )
+           LOAD(3,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 3', Found )
+           LOAD(4,1:n)  = GetReal( BodyForce, 'Stress Pressure', Found )
+
+           IF ( HarmonicAnalysis ) THEN
+             LOAD_im(1,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 1 im', Found )
+             LOAD_im(2,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 2 im', Found )
+             LOAD_im(3,1:n)  = GetReal( BodyForce, 'Stress Bodyforce 3 im', Found )
+             LOAD_im(4,1:n)  = GetReal( BodyForce, 'Stress Pressure im', Found )
+           END IF
          END IF
 
          CALL ListGetRealArray( BodyForce, 'Stress Load', Work, n, NodeIndexes, Found )
@@ -1169,7 +1176,7 @@ CONTAINS
                LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, StabilityAnalysis  &
                .AND. iter>1, GeometricStiffness .AND. iter>1, NodalDisplacement,    &
                RotateC, TransformMatrix, NodalMeshVelo, Damping, RayleighDamping,            &
-               RayleighAlpha, RayleighBeta,EvaluateAtIP)
+               RayleighAlpha, RayleighBeta,EvaluateAtIP,EvaluateLoadAtIp)
           END IF
 
        CASE DEFAULT

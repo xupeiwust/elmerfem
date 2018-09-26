@@ -160,6 +160,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
       ! inquire what components have to computed/omitted
       HydroGeo = GetLogical(Material,'Hydrogeological Model',Found)
       IF (.NOT.Found) HydroGeo = .FALSE.
+      
       IF(HydroGeo) ComputeDt = .FALSE.
       IF (ComputeDt) THEN
         CALL AssignSingleVarTimeDer(Solver,Model,Element,NodalTemperatureDt,&
@@ -228,7 +229,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
            NodalPorosity, NodalSalinity, NodalTemperatureDt,NodalDummyDt,NodalSalinityDt, &
            CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
            PhaseChangeModel,ElementWiseRockMaterial, ActiveMassMatrix, &
-           NodalStressInv,NoSalinity,ComputeDt,ComputeDeformation)
+           NodalStressInv,NoSalinity,ComputeDt,ComputeDeformation,HydroGeo)
     END DO
     CALL DefaultFinishBulkAssembly()
     Active = GetNOFBoundaryElements()
@@ -264,7 +265,7 @@ CONTAINS
        NodalPorosity, NodalSalinity, NodalTemperatureDt,NodalPressureDt,NodalSalinityDt,&
        CurrentRockMaterial, CurrentSoluteMaterial,CurrentSolventMaterial,&
        PhaseChangeModel, ElementWiseRockMaterial, ActiveMassMatrix,&
-       NodalStress,NoSalinity,ComputeDt,ComputeDeformation )
+       NodalStress,NoSalinity,ComputeDt,ComputeDeformation,HydroGeo )
     IMPLICIT NONE
     !------------------------------------------------------------------------------
     TYPE(Model_t) :: Model
@@ -277,7 +278,7 @@ CONTAINS
          NodalPorosity(:), NodalPressure(:),&
          NodalTemperatureDt(:),NodalPressureDt(:),NodalSalinityDt(:),&
          NodalStress(:)
-    LOGICAL :: ElementWiseRockMaterial, ActiveMassMatrix,ComputeDt,ComputeDeformation,NoSalinity
+    LOGICAL :: ElementWiseRockMaterial, ActiveMassMatrix,ComputeDt,ComputeDeformation,NoSalinity,HydroGeo
     CHARACTER(LEN=MAX_NAME_LEN) :: PhaseChangeModel
     !------------------------------------------------------------------------------
     REAL(KIND=dp) :: CgwppAtIP,CgwpTAtIP,CgwpYcAtIP,CgwpI1AtIP,KgwAtIP(3,3),KgwppAtIP(3,3),KgwpTAtIP(3,3),&
@@ -335,7 +336,7 @@ CONTAINS
 
     ! Get stuff from SIF Material section
     Material => GetMaterial(Element)
-
+    
     meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",Found)
     IF (.NOT.Found) THEN
       CALL INFO(FunctionName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
@@ -366,8 +367,7 @@ CONTAINS
     END IF
 
     deltaInElement = delta(CurrentSolventMaterial,eps,DeltaT,T0,GasConstant)
-
-     
+    
     ! Numerical integration:
     !-----------------------
     IP = GaussPoints( Element )
@@ -493,8 +493,12 @@ CONTAINS
       EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
       nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
       kappaGAtIP = kappaG(EGAtIP,nuGAtIP)
-      CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,kappaGAtIP,&
-           XiAtIP,XiPAtIP,CurrentRockMaterial,RockMaterialID,PorosityAtIP)
+      IF (HydroGeo) THEN   ! Simplifications: Xip=0 Xi=1 kappas=0
+        CgwppAtIP = PorosityAtIP * rhogwPAtIP + rhogwAtIP * kappaGAtIP
+      ELSE     
+        CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,kappaGAtIP,&
+             XiAtIP,XiPAtIP,CurrentRockMaterial,RockMaterialID,PorosityAtIP)
+      END IF
       CgwpTAtIP = GetCgwpT(rhogwAtIP,rhoiAtIP,rhogwTAtIP,rhoiTAtIP,XiAtIP,XiTAtIP,PorosityAtIP)
       IF (.NOT.NoSalinity) THEN
         CgwpYcAtIP = GetCgwpYc(rhogwAtIP,rhoiAtIP,rhogwYcAtIP,XiAtIP,XiYcAtIP,PorosityAtIP)        
@@ -1195,11 +1199,24 @@ SUBROUTINE PermafrostHeatTransfer_init( Model,Solver,dt,TransientSimulation )
   !------------------------------------------------------------------------------
   TYPE(ValueList_t), POINTER :: SolverParams
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation_init'
-
+  LOGICAL :: OutputXi = .FALSE. , Found
+  !------------------------------------------------------------------------------
+  CALL Info( SolverName, '-------------------------------------',Level=1 )
+  CALL Info( SolverName, '  Initializing heat transfer         ',Level=1 )
+  CALL Info( SolverName, '-------------------------------------',Level=1 )
   SolverParams => GetSolverParams()
-  CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP -dofs 1 Xi' )
-  
-  
+  OutputXi = GetLogical(SolverParams, 'Output Xi', Found)
+  IF (.NOT.Found) OutputXi = .FALSE.
+  IF (OutputXi) THEN
+    CALL INFO(SolverName,'Output of IP variable "Xi" ',Level=1)
+    CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP -dofs 1 Xi' )
+    CALL INFO(SolverName,'Added variable Xi',Level=1)
+  ELSE
+    CALL INFO(SolverName,'No output of IP variable "Xi" ',Level=1)
+    CALL ListAddString( SolverParams, NextFreeKeyword('Exported Variable',SolverParams),'-IP -nooutput -dofs 1 Xi' )
+    CALL INFO(SolverName,'Added variable Xi',Level=1)
+  END IF
+  CALL Info( SolverName, ' Done Initializing      ',Level=1 )
 END SUBROUTINE PermafrostHeatTransfer_init
 !------------------------------------------------------------------------------
 SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )

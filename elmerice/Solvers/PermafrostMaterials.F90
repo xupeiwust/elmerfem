@@ -47,7 +47,7 @@ MODULE PermafrostMaterials
   TYPE SolventMaterial_t
      REAL(KIND=dp) :: &
           Mw,rhow0,rhoi0,hw0,hi0,vi0,bccw0,&
-          Ei0, nui0, &
+          Ei0, nui0, betai, &
           kw0th,ki0th,bw,bi, &
           cw0,acw(0:5),bcw(0:5), &
           ci0,aci(0:5),&
@@ -79,7 +79,7 @@ MODULE PermafrostMaterials
      INTEGER :: NumerOfRockRecords
      REAL(KIND=dp), ALLOCATABLE :: ks0th(:),e1(:),bs(:),rhos0(:),&
           Xi0(:),eta0(:),etak(:),hs0(:),Kgwh0(:,:,:),qexp(:),alphaL(:),alphaT(:),RadGen(:),&
-          cs0(:),acs(:,:),as0(:),aas(:,:),ks0(:),cks(:,:),Es0(:),nus0(:)
+          cs0(:),acs(:,:),as0(:),aas(:,:),ks0(:),cks(:,:),Es0(:),nus0(:),betas(:)
      INTEGER, ALLOCATABLE :: acsl(:),aasl(:),cksl(:)
      CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   END TYPE RockMaterial_t
@@ -194,6 +194,7 @@ CONTAINS
       ! elastic properties
       LocalSolventMaterial % Ei0 = 9.33d09
       LocalSolventMaterial % nui0= 0.325_dp
+      LocalSolventMaterial % betai = 0.0_dp  ! CHANGE
 
       CALL INFO(SubroutineName,"-----------------------------------------------------------------",Level=9)
       CALL INFO(SubroutineName,"Solvent related constants",Level=9)
@@ -1638,8 +1639,6 @@ CONTAINS
     Mw = CurrentSolventMaterial % Mw
     e1 = CurrentRockMaterial % e1(RockMaterialID)
 
-    !B =(Mw*deltaG/(GasConstant*Temperature) +&
-    !     (1.0_dp - Xi0Tilde)*e1 - bi(1))/(Xi0Tilde*e1 + delta + bi(2))
     B =(Mw*deltaG/(GasConstant*Temperature) - bi(1) + bi(3))/(delta + bi(2) + bi(4)) 
         
     IF (B .NE. B) THEN
@@ -1795,15 +1794,11 @@ CONTAINS
     aux_sqrt = B*B + 4.0_dp*D
     
     IF (Porosity >= 0.0_dp) THEN
- !     IF (Xi0Tilde < 1.0_dp) THEN
       aux1 = 1.0_dp/(delta + bi(2) + bi(4))
       aux2 = ( 1.0_dp + B/SQRT(aux_sqrt) )*(1.0_dp + B)
       aux3 = 2.0_dp*D*biYc(2)/SQRT(aux_sqrt)
       XiEta = 0.5_dp*aux1*(aux2 + aux3) * (Xi0*eta0/(1.0_dp - eta0))&
            *(1.0_dp/(Porosity**2.0_dp))*Xi*Xi
-!      ELSE
-!        XiEta = 0.0_dp
-!      END IF
     ELSE
       CALL WARN("Permafrost(XiEta)","Porosity out of physical range - returning zero")
       XiEta = 0.0_dp
@@ -1833,7 +1828,6 @@ CONTAINS
     REAL(KIND=dp) :: biAtIP(4),biYcAtIP(2),gwaAtIP,gwaTAtIP,gwapAtIP,&
          giaAtIP,giaTAtIP,giapAtIP,deltaGAtIP,DAtIP,BAtIP
     !---------------------------
-    !PRINT *, "GetXiHartikainen:",p0,PressureAtIP
     biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
          Xi0Tilde,SalinityAtIP,.FALSE.) 
     gwaAtIP = gwa(CurrentSolventMaterial,&
@@ -1847,7 +1841,6 @@ CONTAINS
          p0,T0,rhoiAtIP,TemperatureAtIP)
     giapAtIP = 1.0_dp/rhoiAtIP
     deltaGAtIP = deltaG(gwaAtIP,giaAtIP)
-    ! first shot with b3,b4=0
     DAtIP= D(CurrentRockMaterial,RockMaterialID,deltaInElement,biAtIP)
     BAtIP = GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
        Xi0tilde,deltaInElement,deltaGAtIP,GasConstant,biAtIP,TemperatureAtIP)
@@ -1863,7 +1856,6 @@ CONTAINS
     XiTAtIP = 0.0_dp
     XiYcAtIP = 0.0_dp
     XiPAtIP = 0.0_dp
-    !XiEtaAtIP = 0.0_dp
     IF (ComputeXiT) &
          XiTAtIP= XiT(CurrentSolventMaterial,&
          BAtIP,DAtIP,XiAtIP,biAtIP,p0,&
@@ -1874,9 +1866,6 @@ CONTAINS
          XiPAtIP = XiP(CurrentSolventMaterial,&
          BAtIP,DAtIP,biAtIP,gwapAtIP,giapAtIP,XiAtIP,&
          deltaInElement,GasConstant,TemperatureAtIP)
-    !IF(ComputeXiEta .AND (Xi0Tilde < 1.0_dp)) &
-    !     XiEta(CurrentRockMaterial,RockMaterialID,&
-    !     BAtIP,DAtIP,biAtIP,biYcAtIP,gXiAtIP,PorosityAtIP)
   END SUBROUTINE GetXiHartikainen
   !---------------------------------------------------------------------------------------------
   ! Densities and their derivatives, thermal expansion, isothermal chemical compaction and
@@ -2474,6 +2463,7 @@ CONTAINS
     !-------------------------
     REAL(KIND=dp) :: kappas
     !-------------------------
+    
     kappas = CurrentRockMaterial % ks0(RockMaterialID)
     !kappaG =  CurrentRockMaterial % kG(RockMaterialID)
     Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
@@ -2721,59 +2711,26 @@ CONTAINS
   !---------------------------------------------------------------------------------------------
   ! functions specific to ground deformation
   !---------------------------------------------------------------------------------------------
-  REAL(Kind=dp) FUNCTION EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
+  FUNCTION GetEG(Model,IPNo,PorosityAtIP) RESULT(EGAtIP)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
-    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID
-    EG = (1.0_dp - Porosity)*(CurrentRockMaterial % Es0(RockMaterialID))/(1.0_dp - (CurrentRockMaterial % eta0(RockMaterialID))) &
-         + Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % Ei0)
-  END FUNCTION EG
-  !---------------------------------------------------------------------------------------------
-  REAL(Kind=dp) FUNCTION nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
-    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID
-    !---------
-    nuG = (1.0_dp - Porosity)*(CurrentRockMaterial % nuS0(RockMaterialID))&
-         +  Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % nui0)
-  END FUNCTION nuG
-  !---------------------------------------------------------------------------------------------
-   REAL(Kind=dp) FUNCTION betaG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
-    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
-    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
-    INTEGER, INTENT(IN) :: RockMaterialID
-    !---------
-    betaG = 0.0_dp ! CHANGE later on!!!!!
-    !betaG = (1.0_dp - Porosity)*(CurrentRockMaterial % betas(RockMaterialID)&
-    !    +  Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % betai)
-  END FUNCTION BetaG
-  !---------------------------------------------------------------------------------------------
-  REAL(Kind=dp) FUNCTION kappaG(EG,nuG)
-    IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: EG,nuG
-    !---------
-    kappaG = EG/(3.0_dp*(1.0_dp - 2.0_dp * nuG))
-  END FUNCTION KappaG
-  !---------------------------------------------------------------------------------------------
-  FUNCTION GetRhoG(Model,IPNo,ArgumentsAtIP) RESULT(rhoGAtIP)
     TYPE(Model_t) :: Model
     INTEGER, INTENT(IN) :: IPNo
-    REAL(KIND=dp) :: ArgumentsAtIP(2), rhoGAtIP
-    !--------------
-    REAL(KIND=dp) :: PorosityAtIP, SalinityAtIP
+    REAL(KIND=dp) :: PorosityAtIP, EGAtIP
+    !-----
+    TYPE(Solver_t) :: DummySolver
+    TYPE(ValueList_t), POINTER :: Material
+    TYPE(Element_t),POINTER :: Element
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
     TYPE(Variable_t), POINTER :: XiAtIPVar
     INTEGER, POINTER :: XiAtIPPerm(:)
     REAL(KIND=dp), POINTER :: XiAtIP(:)
-    TYPE(Element_t),POINTER :: Element
-    TYPE(ValueList_t), POINTER :: Material
-    INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
-    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetRhoG)'
+    LOGICAL :: Found,FirstTime = .TRUE., ElementWiseRockMaterial
+    CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetNuG)'
+    !-----------
+    SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,DIM,ElementWiseRockMaterial
     
     Element => Model % CurrentElement
     IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
@@ -2788,12 +2745,274 @@ CONTAINS
     XiAtIPPerm => XiAtIPVar % Perm
     XiAtIp => XiAtIPVar % Values
     IPPerm = XiAtIPPerm(t) + IPNo
+        
+    IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
+      DIM =  CoordinateSystemDimension()
+      
+      ! check, whether we have globally or element-wise defined values of rock-material parameters
+      ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
+      IF (ElementWiseRockMaterial) THEN
+        WRITE (Message,*) 'Found "Element Rock Material File"'
+        CALL INFO(FunctionName,Message,Level=3)
+        CALL INFO(FunctionName,'Using element-wise rock material definition',Level=3)
+      END IF
+      IF (ElementWiseRockMaterial) THEN
+        ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
+        NumberOfRockRecords = &
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,DummySolver,DIM,SkipInit=.TRUE.)
+      ELSE
+        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
+      END IF
+
+      IF (NumberOfRockRecords < 1) THEN
+        CALL FATAL(FunctionName,'No Rock Material specified')
+      ELSE
+        CALL INFO(FunctionName,'Permafrost Rock Material read',Level=3)
+        FirstTime = .FALSE.
+      END IF
+      CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
+    END IF
+
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = t  ! each element has it's own set of parameters
+    ELSE
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
+    END IF
     
-    PorosityAtIP = ArgumentsAtIP(1)
-    SalinityAtIP = ArgumentsAtIP(2)
-    !rhoGAtIP = rhoG(rhos,rhogw,rhoi,Porosity,Salinity,Xi)
-    !!!!!  CONTINUE HERE
-  END FUNCTION GetRhoG
+    EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
+    
+  END FUNCTION GetEG
+  !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    EG = (1.0_dp - Porosity)*(CurrentRockMaterial % Es0(RockMaterialID))&
+         /(1.0_dp - (CurrentRockMaterial % eta0(RockMaterialID))) &
+         + Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % Ei0)
+  END FUNCTION EG
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetNuG(Model,IPNo,PorosityAtIP) RESULT(nuGAtIP)
+    IMPLICIT NONE
+    TYPE(Model_t) :: Model
+    INTEGER, INTENT(IN) :: IPNo
+    REAL(KIND=dp) :: PorosityAtIP, nuGAtIP
+    !-----
+    TYPE(Solver_t) :: DummySolver
+    TYPE(ValueList_t), POINTER :: Material
+    TYPE(Element_t),POINTER :: Element
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
+    TYPE(Variable_t), POINTER :: XiAtIPVar
+    INTEGER, POINTER :: XiAtIPPerm(:)
+    REAL(KIND=dp), POINTER :: XiAtIP(:)
+    LOGICAL :: Found, FirstTime = .TRUE., ElementWiseRockMaterial
+    CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetNuG)'
+    !-----------
+    SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,DIM,ElementWiseRockMaterial
+    
+    Element => Model % CurrentElement
+    IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
+    t = Element % ElementIndex
+    Material => GetMaterial(Element)
+    
+    XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+    IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+      WRITE(Message,*) 'Variable Xi is not associated'
+      CALL FATAL(FunctionName,Message)
+    END IF
+    XiAtIPPerm => XiAtIPVar % Perm
+    XiAtIp => XiAtIPVar % Values
+    IPPerm = XiAtIPPerm(t) + IPNo
+        
+    IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
+      DIM =  CoordinateSystemDimension()
+      
+      ! check, whether we have globally or element-wise defined values of rock-material parameters
+      ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
+      IF (ElementWiseRockMaterial) THEN
+        WRITE (Message,*) 'Found "Element Rock Material File"'
+        CALL INFO(FunctionName,Message,Level=3)
+        CALL INFO(FunctionName,'Using element-wise rock material definition',Level=3)
+      END IF
+      IF (ElementWiseRockMaterial) THEN
+        ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
+        NumberOfRockRecords = &
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,DummySolver,DIM,SkipInit=.TRUE.)
+      ELSE
+        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
+      END IF
+
+      IF (NumberOfRockRecords < 1) THEN
+        CALL FATAL(FunctionName,'No Rock Material specified')
+      ELSE
+        CALL INFO(FunctionName,'Permafrost Rock Material read',Level=3)
+        FirstTime = .FALSE.
+      END IF
+      CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
+    END IF
+
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = t  ! each element has it's own set of parameters
+    ELSE
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
+    END IF
+    
+    nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIp(IPPerm),PorosityAtIP)
+  END FUNCTION GetNuG
+  !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    !---------
+    nuG = (1.0_dp - Porosity)*(CurrentRockMaterial % nuS0(RockMaterialID))&
+         +  Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % nui0)
+  END FUNCTION nuG
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetBetaG(Model,IPNo,PorosityAtIP) RESULT(betaGAtIP)
+    TYPE(Model_t) :: Model
+    INTEGER, INTENT(IN) :: IPNo
+    REAL(KIND=dp) :: PorosityAtIP, betaGAtIP
+    !--------------
+    TYPE(Solver_t) :: DummySolver
+    TYPE(ValueList_t), POINTER :: Material
+    TYPE(Element_t),POINTER :: Element
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
+    REAL(KIND=dp) :: EGAtIP, nuGAtIP
+    TYPE(Variable_t), POINTER :: XiAtIPVar
+    INTEGER, POINTER :: XiAtIPPerm(:)
+    REAL(KIND=dp), POINTER :: XiAtIP(:)
+    LOGICAL :: FirstTime = .TRUE., ElementWiseRockMaterial, Found
+    CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetKGuu)'
+    !-----------
+    SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,DIM,ElementWiseRockMaterial
+
+    Element => Model % CurrentElement
+    IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
+    t = Element % ElementIndex
+    Material => GetMaterial(Element)
+    
+    XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+    IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+      WRITE(Message,*) 'Variable Xi is not associated'
+      CALL FATAL(FunctionName,Message)
+    END IF
+    XiAtIPPerm => XiAtIPVar % Perm
+    XiAtIp => XiAtIPVar % Values
+    IPPerm = XiAtIPPerm(t) + IPNo
+        
+    IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
+      DIM =  CoordinateSystemDimension()
+      
+      ! check, whether we have globally or element-wise defined values of rock-material parameters
+      ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
+      IF (ElementWiseRockMaterial) THEN
+        WRITE (Message,*) 'Found "Element Rock Material File"'
+        CALL INFO(FunctionName,Message,Level=3)
+        CALL INFO(FunctionName,'Using element-wise rock material definition',Level=3)
+      END IF
+      IF (ElementWiseRockMaterial) THEN
+        ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
+        NumberOfRockRecords = &
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,DummySolver,DIM,SkipInit=.TRUE.)
+      ELSE
+        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
+      END IF
+
+      IF (NumberOfRockRecords < 1) THEN
+        CALL FATAL(FunctionName,'No Rock Material specified')
+      ELSE
+        CALL INFO(FunctionName,'Permafrost Rock Material read',Level=3)
+        FirstTime = .FALSE.
+      END IF
+      CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
+    END IF
+
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = t  ! each element has it's own set of parameters
+    ELSE
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found, UnfoundFatal=.TRUE.)
+    END IF
+    
+    betaGAtIP = betaG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIp(IPPerm),PorosityAtIP)
+  END FUNCTION GetBetaG
+  !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION betaG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,Xi,Porosity)
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: Xi,Porosity
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    !---------
+    betaG = (1.0_dp - Porosity)*(CurrentRockMaterial % betas(RockMaterialID)&
+         +  Porosity * (1.0_dp - Xi) * (CurrentSolventMaterial % betai))
+  END FUNCTION BetaG
+  !---------------------------------------------------------------------------------------------
+  FUNCTION GetElasticityForce(Model,IPNo,ArgumentsAtIP) RESULT(EforceAtIP) ! needs arguments Temperature, Pressure, Porosity, Salinity
+    TYPE(Model_t) :: Model
+    INTEGER, INTENT(IN) :: IPNo
+    REAL(KIND=dp) :: ArgumentsAtIP(4), EforceAtIP
+    !--------------
+    REAL(KIND=dp) :: TemperatureAtIP, PressureAtIP, PorosityAtIP, SalinityAtIP,&
+         rhogwAtIP, rhosAtIP, rhowAtIP,rhocAtIP, rhoiAtIP,rhoGAtIP,&
+         GasConstant, N0, DeltaT, T0, p0, eps, Gravity(3)
+    TYPE(Variable_t), POINTER :: XiAtIPVar
+    INTEGER, POINTER :: XiAtIPPerm(:)
+    REAL(KIND=dp), POINTER :: XiAtIP(:)
+    TYPE(Element_t),POINTER :: Element
+    TYPE(ValueList_t), POINTER :: Material
+    INTEGER ::  DIM, t, IPPerm
+    TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
+    TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
+    CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetRhoG)'
+    LOGICAL :: Found,ConstVal=.FALSE., ConstantsRead = .FALSE., ElementWiseRockMaterial
+
+    SAVE ConstantsRead,ElementWiseRockMaterial,GasConstant, DIM, N0, DeltaT, T0, p0, eps, Gravity
+
+    IF (.NOT.ConstantsRead) &
+         ConstantsRead = &
+         ReadPermafrostConstants(Model, FunctionName, DIM, GasConstant, N0, DeltaT, T0, p0, eps, Gravity)
+    
+    Element => Model % CurrentElement
+    t = Element % ElementIndex
+    IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
+    Material => GetMaterial(Element)
+    ConstVal = GetLogical(Material,'Constant Permafrost Properties',Found)
+    CALL ReadPermafrostSoluteMaterial( Material,Model % Constants,CurrentSoluteMaterial )
+    CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
+    
+    XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+    IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+      WRITE(Message,*) 'Variable Xi is not associated'
+      CALL FATAL(FunctionName,Message)
+    END IF
+    XiAtIPPerm => XiAtIPVar % Perm
+    XiAtIp => XiAtIPVar % Values
+    IPPerm = XiAtIPPerm(t) + IPNo
+
+    TemperatureAtIP = ArgumentsAtIP(1)
+    PressureAtIP    = ArgumentsAtIP(2)
+    PorosityAtIP    = ArgumentsAtIP(3)
+    SalinityAtIP    = ArgumentsAtIP(4)
+
+    rhocAtIP =  rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP(IPPerm),TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
+    rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+    rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+    rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP(IPPerm),SalinityAtIP)
+
+    rhoGAtIP = rhoG(rhosAtIP,rhogwAtIP,rhoiAtIP,PorosityAtIP,SalinityAtIP,XiAtIP(IPPerm))
+    EforceAtIP = -rhoGAtIP * SQRT(SUM(Gravity(1:3)*Gravity(1:3)))
+  END FUNCTION GetElasticityForce
   !---------------------------------------------------------------------------------------------
   REAL(Kind=dp) FUNCTION rhoG(rhos,rhogw,rhoi,Porosity,Salinity,Xi)
     IMPLICIT NONE
@@ -2818,13 +3037,13 @@ CONTAINS
     TYPE(Variable_t), POINTER :: XiAtIPVar
     INTEGER, POINTER :: XiAtIPPerm(:)
     REAL(KIND=dp), POINTER :: XiAtIP(:)
-    LOGICAL :: FirstTime = .TRUE., ElementWiseRockMaterial
+    LOGICAL :: FirstTime = .TRUE., ElementWiseRockMaterial, Found
     CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetKGuu)'
     !-----------
-    SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,DIM
+    SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,DIM,ElementWiseRockMaterial
     
-
+    
     Element => Model % CurrentElement
     IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
     t = Element % ElementIndex
@@ -2838,8 +3057,10 @@ CONTAINS
     XiAtIPPerm => XiAtIPVar % Perm
     XiAtIp => XiAtIPVar % Values
     IPPerm = XiAtIPPerm(t) + IPNo
-    
+        
     IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
+      DIM =  CoordinateSystemDimension()
+      
       ! check, whether we have globally or element-wise defined values of rock-material parameters
       ElementRockMaterialName = GetString(Material,'Element Rock Material File',ElementWiseRockMaterial)
       IF (ElementWiseRockMaterial) THEN
@@ -2862,6 +3083,12 @@ CONTAINS
         FirstTime = .FALSE.
       END IF
       CALL SetPermafrostSolventMaterial( CurrentSolventMaterial )
+    END IF
+
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = t  ! each element has it's own set of parameters
+    ELSE
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found, UnfoundFatal=.TRUE.)
     END IF
     
     EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
@@ -2886,5 +3113,12 @@ CONTAINS
       END DO
     END DO
   END FUNCTION KGuu
+  !---------------------------------------------------------------------------------------------
+  REAL(Kind=dp) FUNCTION kappaG(EG,nuG) ! needed directly in Darcy Model
+    IMPLICIT NONE
+    REAL(KIND=dp), INTENT(IN) :: EG,nuG
+    !---------
+    kappaG = EG/(3.0_dp*(1.0_dp - 2.0_dp * nuG))
+  END FUNCTION KappaG
   !---------------------------------------------------------------------------------------------
 END MODULE PermafrostMaterials
