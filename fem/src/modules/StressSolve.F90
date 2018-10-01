@@ -191,8 +191,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      LOGICAL :: Contact = .FALSE.
      LOGICAL :: stat, stat2, stat3, RotateC, MeshDisplacementActive, &
                 ConstantBulkSystem, ConstantBulkMatrix, ConstantBulkMatrixInUse, ConstantSystem, &
-                UpdateSystem, GotHeatExp, Converged, EvaluateAtIP(3) = .FALSE., EvaluateLoadAtIp = .FALSE.
-
+                UpdateSystem, GotHeatExp, Converged,&
+                EvaluateAtIP(3) = .FALSE., EvaluateLoadAtIp = .FALSE., QuasiStationary = .FALSE.
      LOGICAL :: AllocationsDone = .FALSE., NormalTangential, HarmonicAnalysis
      LOGICAL :: StabilityAnalysis = .FALSE., ModelLumping, FixDisplacement
      LOGICAL :: GeometricStiffness = .FALSE., EigenAnalysis=.FALSE., OrigEigenAnalysis, &
@@ -290,7 +290,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
      MeshDisplacementActive = ListGetLogical( SolverParams,  &
                'Displace Mesh', Found )
-
+     QuasiStationary = GetLogical( SolverParams, 'Quasi Stationary',Found)
      IF ( .NOT. Found ) &
        MeshDisplacementActive = .NOT.EigenOrHarmonicAnalysis()
 
@@ -944,7 +944,7 @@ CONTAINS
 !------------------------------------------------------------------------------
     INTEGER :: RelIntegOrder, NoActive 
 
-    LOGICAL :: AnyDamping
+    LOGICAL :: AnyDamping, NeedMass
 
     AnyDamping = ListCheckPresentAnyMaterial( Model,"Damping" ) .OR. &
         ListCheckPrefixAnyMaterial( Model,"Rayleigh" )
@@ -952,7 +952,8 @@ CONTAINS
     RayleighDamping = .FALSE.
 
     
-
+    NeedMass = .NOT.QuasiStationary
+    
      CALL StartAdvanceOutput( 'StressSolve', 'Assembly:')
      body_id = -1
 
@@ -986,8 +987,7 @@ CONTAINS
        EvaluateAtIP(1)= &
             GetLogical( Material, 'Youngs Modulus at IP',Found)
        !IF(EvaluateAtIP(1)) &
-       !     CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
-       
+       !     CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')       
        EvaluateAtIP(2)= &
             GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
        !IF(EvaluateAtIP(2)) &
@@ -996,6 +996,7 @@ CONTAINS
             GetLogical( Material, 'Poisson Ratio at IP',Found)
          !IF(EvaluateAtIP(1)) &
        !     CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+ 
        
        Density(1:n) = GetReal( Material, 'Density', Found )
        
@@ -1176,7 +1177,7 @@ CONTAINS
                LocalTemperature, Element, n, ntot, ElementNodes, RelIntegOrder, StabilityAnalysis  &
                .AND. iter>1, GeometricStiffness .AND. iter>1, NodalDisplacement,    &
                RotateC, TransformMatrix, NodalMeshVelo, Damping, RayleighDamping,            &
-               RayleighAlpha, RayleighBeta,EvaluateAtIP,EvaluateLoadAtIp)
+               RayleighAlpha, RayleighBeta,EvaluateAtIP,EvaluateLoadAtIp,NeedMass)
           END IF
 
        CASE DEFAULT

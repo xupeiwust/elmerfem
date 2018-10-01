@@ -60,7 +60,7 @@ MODULE StressLocal
      NodalPreStress, NodalPreStrain, NodalStressLoad, NodalStrainLoad,           &
      NodalHeatExpansion, NodalTemperature, Element, n, ntot, Nodes, RelIntegOrder, StabilityAnalysis, &
      GeometricStiffness, NodalDisplacement, RotateC, TransformMatrix, NodalMeshVelo, &
-     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP,EvaluateLoadAtIp)
+     NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP, EvaluateLoadAtIp, NeedMass)
      !BetaIP_h, EIP_h, nuIP_h )
 !------------------------------------------------------------------------------
      REAL(KIND=dp) :: STIFF(:,:), MASS(:,:), DAMP(:,:), FORCE(:), LOAD(:,:)
@@ -76,7 +76,7 @@ MODULE StressLocal
      
      LOGICAL :: PlaneStress, Isotropic(2), StabilityAnalysis, GeometricStiffness
      LOGICAL :: RotateC, RayleighDamping
-     LOGICAL  :: EvaluateAtIP(3),EvaluateLoadAtIp
+     LOGICAL  :: EvaluateAtIP(3),EvaluateLoadAtIp,NeedMass
  
 
      TYPE(Nodes_t) :: Nodes
@@ -105,7 +105,7 @@ MODULE StressLocal
 
      REAL(KIND=dp), DIMENSION(:), POINTER :: U_Integ,V_Integ,W_Integ,S_Integ
 
-     LOGICAL :: stat, CSymmetry, NeedMass, NeedHeat, NeedStress, NeedHarmonic, &
+     LOGICAL :: stat, CSymmetry,NeedHeat, NeedStress, NeedHarmonic, &
          NeedPreStress, ActiveGeometricStiffness
      TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h
 
@@ -155,7 +155,8 @@ MODULE StressLocal
      MASS  = 0.0d0
      DAMP  = 0.0d0
 
-     NeedMass = ANY( NodalDensity(1:n) /= 0.0d0 )
+     IF (NeedMass) &
+          NeedMass = ANY( NodalDensity(1:n) /= 0.0d0 )       
      NeedMass = NeedMass .OR. ANY( NodalDamping(1:n) /= 0.0d0 )
 
      NeedHeat = ANY( NodalTemperature(1:n) /= 0.0d0 )
