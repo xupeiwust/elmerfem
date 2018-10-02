@@ -107,13 +107,14 @@ MODULE StressLocal
 
      LOGICAL :: stat, CSymmetry,NeedHeat, NeedStress, NeedHarmonic, &
          NeedPreStress, ActiveGeometricStiffness
-     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h
+     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(3), Load_h_im(3)
 
      TYPE(Mesh_t), POINTER :: Mesh
      INTEGER :: ndim
      LOGICAL :: Found, Incompressible, FirstTime = .TRUE.
      REAL(KIND=dp) :: Pres, Pres0
      REAL(KIND=dp) :: PSOL(4,32), SOL(4,32), ShearModulus, Viscosity, PrevStress(3,3)
+     CHARACTER :: DimensionString
 !------------------------------------------------------------------------------
 
      TYPE(Variable_t), POINTER, SAVE :: ve_stress
@@ -129,7 +130,13 @@ MODULE StressLocal
             CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
        IF(EvaluateAtIP(3)) &
             CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
-        
+       IF(EvaluateLoadAtIP) THEN
+         DO I=1,DIM
+           WRITE(DimensionString,'(I1)') I
+           CALL ListInitElementKeyword( Load_h(I),'Body Force','Stress BodyForce '//TRIM(DimensionString))          
+           CALL ListInitElementKeyword( Load_h_im(I),'Body Force','Stress BodyForce '//TRIM(DimensionString)//' im')
+         END DO
+       END IF
        dim = CoordinateSystemDimension()
        FirstTime = .FALSE.
      END IF
@@ -160,7 +167,7 @@ MODULE StressLocal
      NeedMass = NeedMass .OR. ANY( NodalDamping(1:n) /= 0.0d0 )
 
      NeedHeat = ANY( NodalTemperature(1:n) /= 0.0d0 )
-     NeedHarmonic = ANY( LOAD_im(:,1:n) /= 0.0d0 ) 
+     IF (.NOT.EvaluateLoadAtIP) NeedHarmonic = ANY( LOAD_im(:,1:n) /= 0.0d0 ) 
      NeedPreStress = ANY( NodalPreStrain(1:6,1:n) /= 0.0d0 ) 
      NeedPreStress = NeedPreStress .OR. ANY( NodalPreStress(1:6,1:n) /= 0.0d0 ) 
 
@@ -556,16 +563,24 @@ MODULE StressLocal
          !
          ! The (rest of the) righthand side:
          ! ---------------------------------
-         DO i=1,dim
-           LoadAtIp(i) = LoadAtIp(i) + &
-               SUM( LOAD(i,1:n)*Basis(1:n) ) * Basis(p) + &
-               SUM( LOAD(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
-           IF( NeedHarmonic ) THEN
-             LoadAtIp_im(i) = LoadAtIp_im(i) + &
-                 SUM( LOAD_im(i,1:n)*Basis(1:n) ) * Basis(p) + &
-                 SUM( LOAD_im(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
-           END IF
-         END DO
+         IF (EvaluateLoadAtIP) THEN
+           DO I=1,DIM
+             PRINT *, "Stress:", I,t
+             LoadAtIp(I) = LoadAtIp(I) + ListGetElementReal( Load_h(I), Basis, Element, Found, GaussPoint=t)
+             LoadAtIp_im(i) = LoadAtIp_im(i) + ListGetElementReal( Load_h_im(I), Basis, Element, Found, GaussPoint=t)
+           END DO
+         ELSE
+           DO i=1,dim
+             LoadAtIp(i) = LoadAtIp(i) + &
+                  SUM( LOAD(i,1:n)*Basis(1:n) ) * Basis(p) + &
+                  SUM( LOAD(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
+             IF( NeedHarmonic ) THEN
+               LoadAtIp_im(i) = LoadAtIp_im(i) + &
+                    SUM( LOAD_im(i,1:n)*Basis(1:n) ) * Basis(p) + &
+                    SUM( LOAD_im(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
+             END IF
+           END DO
+         END IF
 
          IF ( NeedHeat ) THEN
            DO i=1,dim
@@ -582,7 +597,8 @@ MODULE StressLocal
              END IF
            END DO
          END IF
-
+         
+         IF (EvaluateLoadAtIP) NeedHarmonic = ANY( LoadAtIp_im(1:DIM) /= 0.0d0 ) 
          DO i=1,dim
            FORCE(ndim*(p-1)+i) = FORCE(ndim*(p-1)+i) + s*LoadAtIp(i)
            IF( NeedHarmonic ) THEN
@@ -918,12 +934,13 @@ CONTAINS
          ! ---------------------------------
          DO i=1,dim
            LoadAtIp(i) = LoadAtIp(i) + &
-               SUM( LOAD(i,1:n)*Basis(1:n) ) * Basis(p) + &
-               SUM( LOAD(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
+                SUM( LOAD(i,1:n)*Basis(1:n) ) * Basis(p) + &
+                SUM( LOAD(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
            LoadAtIp_im(i) = LoadAtIp_im(i) + &
-               SUM( LOAD_im(i,1:n)*Basis(1:n) ) * Basis(p) + &
-               SUM( LOAD_im(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
+                SUM( LOAD_im(i,1:n)*Basis(1:n) ) * Basis(p) + &
+                SUM( LOAD_im(4,1:n)*Basis(1:n) ) * dBasisdx(p,i)
          END DO
+
 
          IF ( NeedHeat ) THEN
            DO i=1,dim
