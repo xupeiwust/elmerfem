@@ -107,7 +107,7 @@ MODULE StressLocal
 
      LOGICAL :: stat, CSymmetry,NeedHeat, NeedStress, NeedHarmonic, &
          NeedPreStress, ActiveGeometricStiffness
-     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(3), Load_h_im(3)
+     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(4), Load_h_im(4)
 
      TYPE(Mesh_t), POINTER :: Mesh
      INTEGER :: ndim
@@ -124,6 +124,7 @@ MODULE StressLocal
      SAVE FirstTime, dim
 
      IF (FirstTime) THEN
+       dim = CoordinateSystemDimension()
        IF(EvaluateAtIP(1)) &
             CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
        IF(EvaluateAtIP(2)) &
@@ -136,8 +137,9 @@ MODULE StressLocal
            CALL ListInitElementKeyword( Load_h(I),'Body Force','Stress BodyForce '//TRIM(DimensionString))          
            CALL ListInitElementKeyword( Load_h_im(I),'Body Force','Stress BodyForce '//TRIM(DimensionString)//' im')
          END DO
+         CALL ListInitElementKeyword( Load_h(4),'Body Force','Stress Pressure')
+         CALL ListInitElementKeyword( Load_h_im(4),'Body Force','Stress Pressure im')
        END IF
-       dim = CoordinateSystemDimension()
        FirstTime = .FALSE.
      END IF
      Incompressible = GetLogical( GetSolverParams(), 'Incompressible', Found )
@@ -557,7 +559,6 @@ MODULE StressLocal
                END IF
              END DO
            END IF
-
          END DO
 
          !
@@ -565,9 +566,12 @@ MODULE StressLocal
          ! ---------------------------------
          IF (EvaluateLoadAtIP) THEN
            DO I=1,DIM
-             PRINT *, "Stress:", I,t
-             LoadAtIp(I) = LoadAtIp(I) + ListGetElementReal( Load_h(I), Basis, Element, Found, GaussPoint=t)
-             LoadAtIp_im(i) = LoadAtIp_im(i) + ListGetElementReal( Load_h_im(I), Basis, Element, Found, GaussPoint=t)
+             LoadAtIp(I) = LoadAtIp(I) &
+                  + ListGetElementReal( Load_h(I), Basis, Element, Found, GaussPoint=t)* Basis(p) &
+                  + ListGetElementReal( Load_h(4), Basis, Element, Found, GaussPoint=t)* dBasisdx(p,i)
+             LoadAtIp_im(i) = LoadAtIp_im(i) &
+                  + ListGetElementReal( Load_h_im(I), Basis, Element, NeedHarmonic, GaussPoint=t)* Basis(p) &
+                  + ListGetElementReal( Load_h_im(4), Basis, Element, Found, GaussPoint=t)* dBasisdx(p,i)
            END DO
          ELSE
            DO i=1,dim

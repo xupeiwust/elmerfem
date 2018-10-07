@@ -78,7 +78,8 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
   INTEGER, POINTER :: Permutation(:), NumberOfVisits(:),&
        SurfacePerm(:), GradSurface1Perm(:),GradSurface2Perm(:)
 
-  REAL(KIND=dp), POINTER :: VariableValues(:), Surface(:), GradSurface1(:),GradSurface2(:)
+  REAL(KIND=dp), POINTER :: VariableValues(:), PrevVariableValues(:,:),Surface(:),&
+       GradSurface1(:),GradSurface2(:)
   REAL(KIND=dp) :: Norm, Gradient,GradSurface(3)
 
   REAL(KIND=dp), ALLOCATABLE :: STIFF(:,:), LOAD(:), FORCE(:)
@@ -91,7 +92,7 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
   PointerToVariable => Solver % Variable
   Permutation  => PointerToVariable % Perm
   VariableValues => PointerToVariable % Values
-
+  PrevVariableValues => PointerToVariable % PrevValues
   !--------------------------------------------------------------
   !Allocate some permanent storage, this is done first time only:
   !--------------------------------------------------------------
@@ -121,13 +122,14 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
   Gradient = GetConstReal( SolverParams, &
                       'Gradient',  Found )
   IF (.NOT. Found) THEN
-     CALL WARN(SolverName, 'No keyword >Gradient< found in section Solver')
-     CALL WARN(SolverName, 'Assuming value of -1')
-     Gradient = -1.0D00
+    CALL WARN(SolverName, 'No keyword >Gradient< found in section Solver')
+    CALL WARN(SolverName, 'Assuming value of -1')
+    Gradient = -1.0D00
   ELSE
-      WRITE(Message,'(A,e12.4,A)') 'Gradient of ',Gradient,' applied'
-     CALL INFO(SolverName, Message,Level=1)
+    WRITE(Message,'(A,e12.4,A)') 'Gradient of ',Gradient,' applied'
+    CALL INFO(SolverName, Message,Level=1)
   END IF
+  
   !----------------------------------------------------------------
   ! Assign Variables for computations fo free surface and gradients
   !----------------------------------------------------------------
@@ -207,7 +209,7 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
   END DO
   
   ! Neumann conditions
-  DO t=1,Solver % Mesh % NUmberOfBoundaryElements
+  DO t=1,Solver % Mesh % NumberOfBoundaryElements
      Element => GetBoundaryElement(t)
      IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
      BC => GetBC(Element)
@@ -236,24 +238,24 @@ SUBROUTINE FlowdepthSolver( Model,Solver,dt,TransientSimulation )
   ! post-processing steps for free surface and its gradient
   !--------------------------------------------------------
   IF (Calcfree) THEN   
-     Surface = 0.0D00
-     GradSurface1 = 0.0D00
-     GradSurface2 = 0.0D00
-     NumberOfVisits = 0
+    Surface = 0.0D00
+    GradSurface1 = 0.0D00
+    GradSurface2 = 0.0D00
+    NumberOfVisits = 0
      DO t=1,Solver % NumberOfActiveElements
-        Element => GetActiveElement(t)
-        n = GetElementNOFNodes()
-        CALL GetSurfaceValue(Model, Surface, GradSurface1, GradSurface2,&
-             VariableValues, Permutation, &
-             SurfacePerm, GradSurface1Perm, GradSurface2Perm, &
-             NumberOfVisits, Element, n, Gradient )
+       Element => GetActiveElement(t)
+       n = GetElementNOFNodes()
+       CALL GetSurfaceValue(Model, Surface, GradSurface1, GradSurface2,&
+            VariableValues, Permutation, &
+            SurfacePerm, GradSurface1Perm, GradSurface2Perm, &
+            NumberOfVisits, Element, n, Gradient )
      END DO
      DO i=1,Model % Mesh % NumberOfNodes
-        GradSurface1(GradSurface1Perm(i)) = GradSurface1(GradSurface1Perm(i))/NumberOfVisits(i)
-        GradSurface2(GradSurface2Perm(i)) = GradSurface2(GradSurface2Perm(i))/NumberOfVisits(i)
+       GradSurface1(GradSurface1Perm(i)) = GradSurface1(GradSurface1Perm(i))/NumberOfVisits(i)
+       GradSurface2(GradSurface2Perm(i)) = GradSurface2(GradSurface2Perm(i))/NumberOfVisits(i)
      END DO
-  END IF
-CONTAINS
+   END IF
+ CONTAINS
 
 !------------------------------------------------------------------------------
   SUBROUTINE GetSurfaceValue(Model, Surface, GradSurface1, GradSurface2, &

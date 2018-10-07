@@ -1811,7 +1811,7 @@ CONTAINS
        Xi0tilde,deltaInElement,rhowAtIP,rhoiAtIP,&
        GasConstant,p0,T0,&
        XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,XiEtaAtIP,&
-       ComputeXiT, ComputeXiYc, ComputeXiP, ComputeXiEta)
+       ComputeXi,ComputeXiT, ComputeXiYc, ComputeXiP, ComputeXiEta)
 
     IMPLICIT NONE
 
@@ -1823,49 +1823,59 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: GasConstant,p0,T0
     REAL(KIND=dp), INTENT(IN) :: TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP
     REAL(KIND=dp), INTENT(OUT) :: XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,XiEtaAtIP
-    LOGICAL, INTENT(IN) :: ComputeXiT, ComputeXiYc, ComputeXiP, ComputeXiEta
+    LOGICAL, INTENT(IN) :: ComputeXi,ComputeXiT, ComputeXiYc, ComputeXiP, ComputeXiEta
     !---------------------------
     REAL(KIND=dp) :: biAtIP(4),biYcAtIP(2),gwaAtIP,gwaTAtIP,gwapAtIP,&
          giaAtIP,giaTAtIP,giapAtIP,deltaGAtIP,DAtIP,BAtIP
     !---------------------------
-    biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
-         Xi0Tilde,SalinityAtIP,.FALSE.) 
-    gwaAtIP = gwa(CurrentSolventMaterial,&
-       p0,T0,rhowAtIP,TemperatureAtIP,PressureAtIP)
-    gwaTAtIP =  gwaT(CurrentSolventMaterial,&
-         p0,T0,rhowAtIP,TemperatureAtIP)!        
-    gwapAtIP = 1.0_dp/rhowAtIP
-    giaAtIP = gia(CurrentSolventMaterial,&
-         p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
-    giaTAtIP = giaT(CurrentSolventMaterial,&
-         p0,T0,rhoiAtIP,TemperatureAtIP)
-    giapAtIP = 1.0_dp/rhoiAtIP
-    deltaGAtIP = deltaG(gwaAtIP,giaAtIP)
-    DAtIP= D(CurrentRockMaterial,RockMaterialID,deltaInElement,biAtIP)
-    BAtIP = GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
-       Xi0tilde,deltaInElement,deltaGAtIP,GasConstant,biAtIP,TemperatureAtIP)
-    XiAtIP = GetXi(BAtIP,DAtIP)
-    ! conditional update
+    IF (ComputeXi .OR. (ComputeXiT .OR. ComputeXiYC .OR. ComputeXiP)) THEN
+      biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
+           Xi0Tilde,SalinityAtIP,.FALSE.) 
+      gwaAtIP = gwa(CurrentSolventMaterial,&
+           p0,T0,rhowAtIP,TemperatureAtIP,PressureAtIP)     
+      giaAtIP = gia(CurrentSolventMaterial,&
+           p0,T0,rhoiAtIP,TemperatureAtIP,PressureAtIP)
+      deltaGAtIP = deltaG(gwaAtIP,giaAtIP)
+      DAtIP= D(CurrentRockMaterial,RockMaterialID,deltaInElement,biAtIP)
+      BAtIP = GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
+           Xi0tilde,deltaInElement,deltaGAtIP,GasConstant,biAtIP,TemperatureAtIP)
+    ELSE
+      CALL WARN("GetXiHartikainen","Nothing to be done - why did you call this routine?")
+    END IF
+    IF (ComputeXi)  THEN
+      XiAtIP = GetXi(BAtIP,DAtIP)
+    END IF
+    
+    ! updates of derivatives
     IF (XiAtIP < Xi0tilde)  THEN
       biAtIP = GetBi(CurrentSoluteMaterial,CurrentRockMaterial,RockMaterialID,&
            Xi0Tilde,SalinityAtIP,.TRUE.)
       XiAtIP = GetXi(BAtIP,DAtIP)
     END IF
     !----------------------------------------------------
-    biYcAtIP = GetBiYc(CurrentSoluteMaterial,SalinityAtIP)
     XiTAtIP = 0.0_dp
     XiYcAtIP = 0.0_dp
     XiPAtIP = 0.0_dp
-    IF (ComputeXiT) &
-         XiTAtIP= XiT(CurrentSolventMaterial,&
-         BAtIP,DAtIP,XiAtIP,biAtIP,p0,&
-         deltaInElement,deltaGAtIP,T0,gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP)
-    IF (ComputeXiYC) &
-         XiYcAtIP = XiYc(BAtIP,DAtIP,biAtIP,biYcAtIP,XiAtIP,deltaInElement)
-    IF (ComputeXiP) &
-         XiPAtIP = XiP(CurrentSolventMaterial,&
-         BAtIP,DAtIP,biAtIP,gwapAtIP,giapAtIP,XiAtIP,&
-         deltaInElement,GasConstant,TemperatureAtIP)
+    IF (ComputeXiT) THEN
+      giaTAtIP = giaT(CurrentSolventMaterial,&
+           p0,T0,rhoiAtIP,TemperatureAtIP)
+      gwaTAtIP =  gwaT(CurrentSolventMaterial,&
+           p0,T0,rhowAtIP,TemperatureAtIP)!   
+      XiTAtIP= XiT(CurrentSolventMaterial,&
+           BAtIP,DAtIP,XiAtIP,biAtIP,p0,&
+           deltaInElement,deltaGAtIP,T0,gwaAtIP,giaAtIP,gwaTAtIP,giaTAtIP,GasConstant,TemperatureAtIP)
+    END IF
+    IF (ComputeXiYC) THEN
+      biYcAtIP = GetBiYc(CurrentSoluteMaterial,SalinityAtIP)
+      XiYcAtIP = XiYc(BAtIP,DAtIP,biAtIP,biYcAtIP,XiAtIP,deltaInElement)
+    END IF
+    IF (ComputeXiP) THEN
+      giapAtIP = 1.0_dp/rhoiAtIP
+      gwapAtIP = 1.0_dp/rhowAtIP
+      XiPAtIP = XiP(CurrentSolventMaterial,&
+           BAtIP,DAtIP,biAtIP,gwapAtIP,giapAtIP,XiAtIP,&
+           deltaInElement,GasConstant,TemperatureAtIP)
+    END IF
   END SUBROUTINE GetXiHartikainen
   !---------------------------------------------------------------------------------------------
   ! Densities and their derivatives, thermal expansion, isothermal chemical compaction and
