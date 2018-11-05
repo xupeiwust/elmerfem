@@ -207,8 +207,6 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        LocalContactPressure(:), PreStress(:,:), PreStrain(:,:), &
        StressLoad(:,:), StrainLoad(:,:), NodalMeshVelo(:,:)
 
-     !TYPE(ValueHandle_t) :: BetaIP_h, EIP_h, nuIP_h
-
      SAVE MASS,DAMP, STIFF,LOAD,LOAD_im,FORCE_im,Beta_im, &
        FORCE,ElementNodes,DampCoeff,SpringCoeff,Beta,Density, Damping, &
        LocalTemperature,AllocationsDone,ReferenceTemperature, &
@@ -664,7 +662,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
          IF( Iter == 1 ) THEN
            CALL ComputeStress( Displacement, NodalStress,  &
                VonMises, DisplPerm, StressPerm, &
-               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle )
+               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
+               EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
            
            CALL InvalidateVariable( Model % Meshes, Mesh, 'Stress' )
            CALL InvalidateVariable( Model % Meshes, Mesh, 'VonMises' )
@@ -699,7 +698,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
            CALL ComputeStress( Displacement, NodalStress,  &
                VonMises, DisplPerm, StressPerm, &
-               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle )
+               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
+               EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
 
            DO j=1,7               
              SELECT CASE ( j )
@@ -788,7 +788,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
             CALL ComputeStress( Displacement, NodalStress,  &
                VonMises, DisplPerm, StressPerm, &
-               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle )
+               NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
+               EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
 
 
            DO j=1,7               
@@ -881,7 +882,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        ELSE
          CALL ComputeStress( Displacement, NodalStress,  &
              VonMises, DisplPerm, StressPerm, &
-             NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle )
+             NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
+             EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
        END IF
 
        CALL InvalidateVariable( Model % Meshes, Mesh, 'Stress' )
@@ -982,20 +984,13 @@ CONTAINS
        
        Material => GetMaterial()
 
-
        ! inquire if material parameters shall be replaced by handles
        EvaluateAtIP(1)= &
             GetLogical( Material, 'Youngs Modulus at IP',Found)
-       !IF(EvaluateAtIP(1)) &
-       !     CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')       
        EvaluateAtIP(2)= &
             GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
-       !IF(EvaluateAtIP(2)) &
-       !     CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
        EvaluateAtIP(3) = &
             GetLogical( Material, 'Poisson Ratio at IP',Found)
-         !IF(EvaluateAtIP(1)) &
-       !     CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
  
        
        Density(1:n) = GetReal( Material, 'Density', Found )
@@ -1032,16 +1027,14 @@ CONTAINS
        IF  (EvaluateAtIP(1)) THEN
          ElasticModulus = 0.0_dp
          Isotropic(1) = .TRUE. ! we assume isotropy for function, at the moment
-         !CALL ListInitElementKeyword(EIP_h,'Material','Youngs Modulus')
        ELSE
          CALL InputTensor( ElasticModulus, Isotropic(1), &
               'Youngs Modulus', Material, n, NodeIndexes )
        END IF
        
        PoissonRatio = 0.0d0
-       IF ( Isotropic(1) )  THEN
-         IF (.NOT.EvaluateAtIP(3)) &
-              PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
+       IF ( Isotropic(1) .AND. (.NOT.EvaluateAtIP(3)) )  THEN
+         PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
        END IF
 
        IF( GotHeatExp ) THEN
@@ -1109,7 +1102,7 @@ CONTAINS
            END IF
          END IF
        END IF
-
+       
        ! Set body forces:
        !-----------------
        BodyForce => GetBodyForce()
@@ -1503,13 +1496,15 @@ CONTAINS
 !------------------------------------------------------------------------------
    SUBROUTINE ComputeStress( Displacement, NodalStress, &
               VonMises, DisplPerm, StressPerm, &
-              NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle)
+              NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle,&
+              EvaluateAtIP,EvaluateLoadAtIp)
 !------------------------------------------------------------------------------
      INTEGER :: DisplPerm(:)
      INTEGER, POINTER :: StressPerm(:)
      REAL(KIND=dp) :: VonMises(:), NodalStress(:), Displacement(:), &
                       NodalStrain(:), PrincipalStress(:), PrincipalStrain(:), &
                       Tresca(:), PrincipalAngle(:)
+     LOGICAL, OPTIONAL  :: EvaluateAtIP(3),EvaluateLoadAtIp
 !------------------------------------------------------------------------------
      TYPE(Nodes_t) :: Nodes
      INTEGER :: n,nd
@@ -1540,7 +1535,6 @@ CONTAINS
      REAL(KIND=dp) :: PriCache(3,3), PriTmp, PriW(3),PriWork(102)
      INTEGER       :: PriN=3, PriLWork=102, PriInfo=0
      REAL(KIND=dp) :: PriAngT1=0, PriAngT2=0, PriAngV(3)=0
-
 !------------------------------------------------------------------------------
 
      dim = CoordinateSystemDimension()
@@ -1664,11 +1658,37 @@ CONTAINS
         ! ------------------------
         Material => GetMaterial()
 
-        CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
-            'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
+        IF  (EvaluateAtIP(2)) THEN
+          HeatExpansionCoeff = 0.0_dp
+          Isotropic(2) = .TRUE. ! we assume isotropy for function, at the moment
+          !CALL ListInitElementKeyword(BetaIP_h,'Material','Heat Expansion Coefficient')
+        ELSE
+          CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
+               'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
+        END IF
 
-        CALL InputTensor( ElasticModulus, Isotropic(1), &
-                'Youngs Modulus', Material, n, Element % NodeIndexes )
+        EvaluateAtIP(1)= &
+             GetLogical( Material, 'Youngs Modulus at IP',Found)
+        IF  (EvaluateAtIP(1)) THEN
+          ElasticModulus = 0.0_dp
+          Isotropic(1) = .TRUE. ! we assume isotropy for function, at the moment
+        ELSE
+          CALL InputTensor( ElasticModulus, Isotropic(1), &
+               'Youngs Modulus', Material, n, Element % NodeIndexes )
+        END IF
+       
+        PoissonRatio = 0.0d0
+        IF ( Isotropic(1) )  THEN
+          IF (.NOT.EvaluateAtIP(3)) &
+               PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
+        END IF
+
+        
+!!$        CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
+!!$            'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
+!!$
+!!$        CALL InputTensor( ElasticModulus, Isotropic(1), &
+!!$                'Youngs Modulus', Material, n, Element % NodeIndexes )
         PlaneStress = ListGetLogical( Equation, 'Plane Stress', stat )
         PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio', Stat )
 

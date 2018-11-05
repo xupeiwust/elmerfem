@@ -61,7 +61,6 @@ MODULE StressLocal
      NodalHeatExpansion, NodalTemperature, Element, n, ntot, Nodes, RelIntegOrder, StabilityAnalysis, &
      GeometricStiffness, NodalDisplacement, RotateC, TransformMatrix, NodalMeshVelo, &
      NodalDamping, RayleighDamping, RayleighAlpha, RayleighBeta, EvaluateAtIP, EvaluateLoadAtIp, NeedMass)
-     !BetaIP_h, EIP_h, nuIP_h )
 !------------------------------------------------------------------------------
      REAL(KIND=dp) :: STIFF(:,:), MASS(:,:), DAMP(:,:), FORCE(:), LOAD(:,:)
      REAL(KIND=dp) :: FORCE_im(:), LOAD_im(:,:)
@@ -259,6 +258,7 @@ MODULE StressLocal
        ELSE
          IF (EvaluateAtIP(1)) THEN
            Young = ListGetElementReal( EIP_h, Basis, Element, Found, GaussPoint=t)
+           !PRINT *,"Stress:", t
          ELSE
            Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
          END IF
@@ -1186,7 +1186,8 @@ CONTAINS
 !------------------------------------------------------------------------------
  SUBROUTINE LocalStress( Stress, Strain, PoissonRatio, ElasticModulus, &
       Heatexpansion, NodalTemp, Isotropic, CSymmetry, PlaneStress,     &
-      NodalDisp, Basis, dBasisdx, Nodes, dim, n, nBasis, ApplyPressure )
+      NodalDisp, Basis, dBasisdx, Nodes, dim, n, nBasis, ApplyPressure,&
+      EvaluateAtIP, EvaluateLoadAtIP)
 !------------------------------------------------------------------------------
      LOGICAL :: Isotropic(2), CSymmetry, PlaneStress  
      LOGICAL, OPTIONAL :: ApplyPressure
@@ -1196,11 +1197,13 @@ CONTAINS
      REAL(KIND=dp) :: Stress(:,:), Strain(:,:), ElasticModulus(:,:,:), &
                       HeatExpansion(:,:,:), NodalTemp(:), Temperature
      REAL(KIND=dp) :: Basis(:), dBasisdx(:,:), PoissonRatio(:), NodalDisp(:,:)
+     LOGICAL, OPTIONAL :: EvaluateAtIP, EvaluateLoadAtIP
 !------------------------------------------------------------------------------
      INTEGER :: i,j,k,p,q,IND(9),ic
      LOGICAL :: Found, Incompressible
      REAL(KIND=dp) :: C(6,6), Young, LGrad(3,3), Poisson, S(6), &
-             Pressure, Radius, HEXP(3,3)
+          Pressure, Radius, HEXP(3,3)
+     TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(4), Load_h_im(4)
 !------------------------------------------------------------------------------
 
      Incompressible = GetLogical( GetSolverParams(), 'Incompressible', Found )

@@ -3266,7 +3266,74 @@ CONTAINS
 END SUBROUTINE PermafrostUnfrozenWaterContent
 
 
+!==============================================================================
+!>  initialization of IP variable to constant value
+!==============================================================================
+SUBROUTINE IPVariableInit(Model, Solver, Timestep, TransientSimulation )
+  !==============================================================================
 
+  USE DefUtils
+  USE PermaFrostMaterials
+  IMPLICIT NONE
+
+  TYPE(Model_t) :: Model
+  TYPE(Solver_t), TARGET :: Solver
+  REAL(KIND=dp) :: Timestep
+  LOGICAL :: TransientSimulation
+  !------------------------------------------------------------------------------
+  ! Local variables
+  !------------------------------------------------------------------------------
+  TYPE(Element_t), POINTER :: CurrentElement
+  TYPE(Variable_t), POINTER :: IPVar
+  REAL(KIND=dp), POINTER :: IPVarValue(:)
+  REAL(KIND=dp) :: InitValue
+  INTEGER :: IPVarDOFs, I, t
+  INTEGER, POINTER :: IPVarPerm(:)
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="IPVariableInit"
+  CHARACTER(LEN=MAX_NAME_LEN) :: IPVariableName
+  TYPE(GaussIntegrationPoints_t), TARGET :: IntegStuff
+  TYPE(ValueList_t), POINTER :: SolverParams
+  TYPE(Element_t), POINTER :: Element
+  LOGICAL :: Visited = .FALSE., Found
+  SAVE Visited
+ ! ????
+  IF (Visited) RETURN
+
+  SolverParams => GetSolverParams()
+
+  IPVariableName = ListGetString(SolverParams, &
+       'IP Variable', Found )
+  IF (.NOT.Found) THEN
+    CALL FATAL(SolverName, ' "IP Variable" not found - you have to provide one')
+  END IF
+  IPVar => VariableGet( Solver % Mesh % Variables, IPVariableName,Found,UnfoundFatal=.TRUE. )
+  
+  IF ( ASSOCIATED( IPVar ) ) THEN
+    IPVarPerm    => IPVar % Perm
+    IPVarValue  => IPVar % Values
+    IPVarDOFs = IPVar % DOFs
+  ELSE
+    CALL FATAL(SolverName, 'Could not find "IPVariable Variable"')
+  END IF
+  
+  WRITE(Message,*) IPVariableName, ' to',  InitValue
+
+  CALL Info(SolverName, '-----------------------------------', Level=1)
+  CALL Info(SolverName, 'Initializing ip variable           ', Level=1)
+  CALL Info(SolverName, Message, Level=1)
+  CALL Info(SolverName, 'levels in material file            ', Level=1)
+  CALL Info(SolverName, '-----------------------------------', Level=1)
+
+  Visited = .TRUE.
+
+  DO i = 1,  Solver % NumberOFActiveElements
+    Element => GetActiveElement(i)
+     IntegStuff = GaussPoints( Element )
+     DO t=1,IntegStuff % n
+       IPVarValue((IPVarPerm(i)*IPVarDOFs) + t*IPVarDOFs) = InitValue
+     END DO
+  END DO
+END SUBROUTINE IPVariableInit
 !==============================================================================
 !>  initialization of Porosity to given reference value in material
 !==============================================================================
@@ -4583,13 +4650,13 @@ FUNCTION GetNuG(Model,IPNo,PorosityAtIP) RESULT(nuGAtIP)
   !PRINT *,"getNuG:", nuGAtIP, XiAtIp(IPPerm),PorosityAtIP
 END FUNCTION GetNuG
 !---------------------------------------------------------------------------------------------
-FUNCTION GetEG(Model,IPNo,PorosityAtIP) RESULT(EGAtIP)
+FUNCTION GetEG(Model,DummyIPNo,ArgumentsAtIP) RESULT(EGAtIP)
   USE DefUtils
   USE PermaFrostMaterials
   IMPLICIT NONE
   TYPE(Model_t) :: Model
-  INTEGER, INTENT(IN) :: IPNo
-  REAL(KIND=dp) :: PorosityAtIP, EGAtIP
+  INTEGER, INTENT(IN) :: DummyIPNo
+  REAL(KIND=dp) :: ArgumentsAtIP(2), EGAtIP
   !-----
   TYPE(Solver_t) :: DummySolver
   TYPE(ValueList_t), POINTER :: Material
@@ -4597,29 +4664,37 @@ FUNCTION GetEG(Model,IPNo,PorosityAtIP) RESULT(EGAtIP)
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
   INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
-  TYPE(Variable_t), POINTER :: XiAtIPVar
-  INTEGER, POINTER :: XiAtIPPerm(:)
-  REAL(KIND=dp), POINTER :: XiAtIP(:)
+!!$  TYPE(Variable_t), POINTER :: XiAtIPVar
+!!$  INTEGER, POINTER :: XiAtIPPerm(:)
+!!$  REAL(KIND=dp), POINTER :: XiAtIP(:)
+  REAL(KIND=dp) :: PorosityAtIP, XiAtIP
   LOGICAL :: Found,FirstTime = .TRUE., ElementWiseRockMaterial
   CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetNuG)'
   !-----------
   SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,CurrentSolventMaterial,DIM,ElementWiseRockMaterial
 
+  PorosityAtIP=ArgumentsAtIP(1)
+  XiAtIP=ArgumentsAtIP(2)
+
+  !PRINT *, "GetEG:", PorosityAtIP, XiAtIP
+  
   Element => Model % CurrentElement
   IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
-  t = Element % ElementIndex
+  !t = Element % ElementIndex
   Material => GetMaterial(Element)
 
-  XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
-  IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
-    WRITE(Message,*) 'Variable Xi is not associated'
-    CALL FATAL(FunctionName,Message)
-  END IF
-  XiAtIPPerm => XiAtIPVar % Perm
-  XiAtIp => XiAtIPVar % Values
-  IPPerm = XiAtIPPerm(t) + IPNo
-
+!!$  XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+!!$  IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+!!$    WRITE(Message,*) 'Variable Xi is not associated'
+!!$    CALL FATAL(FunctionName,Message)
+!!$  END IF
+!!$  XiAtIPPerm => XiAtIPVar % Perm
+!!$  XiAtIp => XiAtIPVar % Values
+!!$  IPPerm = XiAtIPPerm(t) + IPNo
+!!$
+!!$  IF (XiAtIp(IPPerm)>0.9) PRINT *, "XiAtIp(","XiAtIPPerm(",t,")=",XiAtIPPerm(t),"+",IPno,")=",XiAtIp(IPPerm)
+  
   IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
     DIM =  CoordinateSystemDimension()
 
@@ -4652,9 +4727,10 @@ FUNCTION GetEG(Model,IPNo,PorosityAtIP) RESULT(EGAtIP)
   ELSE
     RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
   END IF
-
-  EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
-  !PRINT *,"GetEG",EGAtIP,XiAtIP(IPPerm),PorosityAtIP
+  !EGAtIP = 5.0d06
+  EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP,PorosityAtIP)
+  !EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,1.0_dp,PorosityAtIP)
+  IF ((EGAtIP < 1.0d05) .OR. (EGAtIP > 1.0d07)) PRINT *,"GetEG",EGAtIP,XiAtIP,PorosityAtIP
 END FUNCTION GetEG
 !---------------------------------------------------------------------------------------------
 FUNCTION GetElasticityForce(Model,IPNo,ArgumentsAtIP) RESULT(EforceAtIP) ! needs arguments Temperature, Pressure, Porosity, Salinity
@@ -4663,22 +4739,23 @@ FUNCTION GetElasticityForce(Model,IPNo,ArgumentsAtIP) RESULT(EforceAtIP) ! needs
   IMPLICIT NONE
   TYPE(Model_t) :: Model
   INTEGER, INTENT(IN) :: IPNo
-  REAL(KIND=dp) :: ArgumentsAtIP(4), EforceAtIP
+  REAL(KIND=dp) :: ArgumentsAtIP(5), EforceAtIP
   !--------------
-  REAL(KIND=dp) :: TemperatureAtIP, PressureAtIP, PorosityAtIP, SalinityAtIP,&
+  REAL(KIND=dp) :: TemperatureAtIP, PressureAtIP, PorosityAtIP, SalinityAtIP,XiAtIP,&
        rhogwAtIP, rhosAtIP, rhowAtIP,rhocAtIP, rhoiAtIP,rhoGAtIP,&
        GasConstant, N0, DeltaT, T0, p0, eps, Gravity(3)
-  TYPE(Variable_t), POINTER :: XiAtIPVar
-  INTEGER, POINTER :: XiAtIPPerm(:)
-  REAL(KIND=dp), POINTER :: XiAtIP(:)
+  !TYPE(Variable_t), POINTER :: XiAtIPVar
+  !INTEGER, POINTER :: XiAtIPPerm(:)
+  !REAL(KIND=dp), POINTER :: XiAtIP(:)
+  
   TYPE(Element_t),POINTER :: Element
   TYPE(ValueList_t), POINTER :: Material
-  INTEGER ::  DIM, t, IPPerm, NumberOfRockRecords, RockMaterialID
+  INTEGER ::  DIM, t,NumberOfRockRecords, RockMaterialID
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
   TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   TYPE(Solver_t) :: DummySolver
-  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetRhoG)'
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'Permafrost (GetElasticityForce)'
   CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
   LOGICAL :: Found,FirstTime=.TRUE.,ConstVal=.FALSE., ConstantsRead = .FALSE., ElementWiseRockMaterial
 
@@ -4728,35 +4805,39 @@ FUNCTION GetElasticityForce(Model,IPNo,ArgumentsAtIP) RESULT(EforceAtIP) ! needs
     IF (.NOT.Found) CALL FATAL(FunctionName,"Rock Material ID not found")
   END IF
   
-  XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
-  IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
-    WRITE(Message,*) 'Variable Xi is not associated'
-    CALL FATAL(FunctionName,Message)
-  END IF
-  XiAtIPPerm => XiAtIPVar % Perm
-  XiAtIp => XiAtIPVar % Values
-  IPPerm = XiAtIPPerm(t) + IPNo
+  !XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+  !IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+  !  WRITE(Message,*) 'Variable Xi is not associated'
+  !  CALL FATAL(FunctionName,Message)
+  !END IF
+  !XiAtIPPerm => XiAtIPVar % Perm
+  !XiAtIp => XiAtIPVar % Values
+  !IPPerm = XiAtIPPerm(t) + IPNo
 
   TemperatureAtIP = ArgumentsAtIP(1)
   PressureAtIP    = ArgumentsAtIP(2)
   PorosityAtIP    = ArgumentsAtIP(3)
   SalinityAtIP    = ArgumentsAtIP(4)
-
-  rhocAtIP =  rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP(IPPerm),TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
+  XiAtIP          = ArgumentsAtIP(5)
+  
+  rhocAtIP =  rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
   !IF (rhocAtIP .NE. rhocAtIP) CALL FATAL(FunctionName,'rhocAtIP is NaN')  
   rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
   !IF (rhowAtIP .NE. rhocAtIP) CALL FATAL(FunctionName,'rhowAtIP is NaN') 
   rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
   rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
-  rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP(IPPerm),SalinityAtIP)
+  rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP)
 
   
-  rhoGAtIP = rhoG(rhosAtIP,rhogwAtIP,rhoiAtIP,PorosityAtIP,SalinityAtIP,XiAtIP(IPPerm))
-  IF (rhoGAtIP .NE. rhoGAtIP) CALL FATAL(FunctionName,'rhoGAtIP is NaN') 
+  rhoGAtIP = rhoG(rhosAtIP,rhogwAtIP,rhoiAtIP,PorosityAtIP,SalinityAtIP,XiAtIP)
+  IF (rhoGAtIP .NE. rhoGAtIP) THEN
+    PRINT *,rhosAtIP,rhogwAtIP,rhoiAtIP,PorosityAtIP,SalinityAtIP,XiAtIP
+    CALL FATAL(FunctionName,'rhoGAtIP is NaN')
+  END IF
   
   EforceAtIP = -rhoGAtIP * SQRT(SUM(Gravity(1:3)*Gravity(1:3)))
-  IF (t==100 )PRINT *, "GetElasticityForce: EforceAtIP=", EforceAtIP, rhosAtIP,rhogwAtIP,rhoiAtIP,&
-       PorosityAtIP,SalinityAtIP,XiAtIP(IPPerm),IPPerm, "   *********"  
+  !IF (t==100 )PRINT *, "GetElasticityForce: EforceAtIP=", EforceAtIP, rhosAtIP,rhogwAtIP,rhoiAtIP,&
+  !     PorosityAtIP,SalinityAtIP,XiAtIP, "   *********"  
 END FUNCTION GetElasticityForce
 
 
