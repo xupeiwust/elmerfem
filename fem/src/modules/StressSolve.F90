@@ -663,7 +663,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
            CALL ComputeStress( Displacement, NodalStress,  &
                VonMises, DisplPerm, StressPerm, &
                NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
-               EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
+               EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP )
            
            CALL InvalidateVariable( Model % Meshes, Mesh, 'Stress' )
            CALL InvalidateVariable( Model % Meshes, Mesh, 'VonMises' )
@@ -989,8 +989,8 @@ CONTAINS
             GetLogical( Material, 'Youngs Modulus at IP',Found)
        EvaluateAtIP(2)= &
             GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
-       EvaluateAtIP(3) = &
-            GetLogical( Material, 'Poisson Ratio at IP',Found)
+!       EvaluateAtIP(3) = &
+!            GetLogical( Material, 'Poisson Ratio at IP',Found)
  
        
        Density(1:n) = GetReal( Material, 'Density', Found )
@@ -1678,11 +1678,8 @@ CONTAINS
         END IF
        
         PoissonRatio = 0.0d0
-        IF ( Isotropic(1) )  THEN
-          IF (.NOT.EvaluateAtIP(3)) &
-               PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )
-        END IF
-
+        IF ( Isotropic(1)   .AND. (.NOT.EvaluateAtIP(3))) &
+             PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )          
         
 !!$        CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
 !!$            'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
@@ -1732,7 +1729,8 @@ CONTAINS
           CALL LocalStress( Stress, Strain, PoissonRatio, &
               ElasticModulus, HeatExpansionCoeff, LocalTemperature, &
               Isotropic, CSymmetry, PlaneStress, LocalDisplacement, &
-              Basis, dBasisdx, Nodes, dim, n, nd, .TRUE. )
+              Basis, dBasisdx, Nodes, dim, n, nd, .TRUE.,&
+              EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP,GaussPoint=t )
 
           DO p=1,nd
             DO q=1,nd

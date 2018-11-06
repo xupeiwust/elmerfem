@@ -1187,27 +1187,30 @@ CONTAINS
  SUBROUTINE LocalStress( Stress, Strain, PoissonRatio, ElasticModulus, &
       Heatexpansion, NodalTemp, Isotropic, CSymmetry, PlaneStress,     &
       NodalDisp, Basis, dBasisdx, Nodes, dim, n, nBasis, ApplyPressure,&
-      EvaluateAtIP, EvaluateLoadAtIP)
+      EvaluateAtIP, EvaluateLoadAtIP, GaussPoint)
 !------------------------------------------------------------------------------
      LOGICAL :: Isotropic(2), CSymmetry, PlaneStress  
      LOGICAL, OPTIONAL :: ApplyPressure
      INTEGER :: n,nd,dim
-     INTEGER, OPTIONAL :: nBasis
+     INTEGER, OPTIONAL :: nBasis, GaussPoint
      TYPE(Nodes_t) :: Nodes
      REAL(KIND=dp) :: Stress(:,:), Strain(:,:), ElasticModulus(:,:,:), &
                       HeatExpansion(:,:,:), NodalTemp(:), Temperature
      REAL(KIND=dp) :: Basis(:), dBasisdx(:,:), PoissonRatio(:), NodalDisp(:,:)
-     LOGICAL, OPTIONAL :: EvaluateAtIP, EvaluateLoadAtIP
+     LOGICAL, OPTIONAL :: EvaluateAtIP(3), EvaluateLoadAtIP     
 !------------------------------------------------------------------------------
      INTEGER :: i,j,k,p,q,IND(9),ic
      LOGICAL :: Found, Incompressible
      REAL(KIND=dp) :: C(6,6), Young, LGrad(3,3), Poisson, S(6), &
           Pressure, Radius, HEXP(3,3)
      TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(4), Load_h_im(4)
+     TYPE(Element_t), POINTER :: Element
 !------------------------------------------------------------------------------
 
      Incompressible = GetLogical( GetSolverParams(), 'Incompressible', Found )
 
+     Element => CurrentModel % CurrentElement
+     
      Stress = 0.0d0
      Strain = 0.0d0
 
@@ -1219,11 +1222,21 @@ CONTAINS
 !
 !    Material parameters:
 !    --------------------
-     IF ( Isotropic(1) ) Poisson = SUM( Basis(1:n) * PoissonRatio(1:n) )
+     IF ( Isotropic(1) ) THEN
+       IF (EvaluateAtIP(3)) THEN
+         Poisson =  ListGetElementReal(nuIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
+       ELSE
+         Poisson = SUM( Basis(1:n) * PoissonRatio(1:n) )
+       END IF
+     END IF
 
      C = 0
-     IF ( Isotropic(1) ) THEN 
-       Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
+     IF ( Isotropic(1) ) THEN
+       IF (EvaluateAtIP(1)) THEN
+         Young = ListGetElementReal( EIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
+       ELSE
+         Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
+       END IF
      ELSE
        DO i=1,SIZE(ElasticModulus,1)
          DO j=1,SIZE(ElasticModulus,2)
@@ -1234,9 +1247,13 @@ CONTAINS
 
      HEXP = 0.0_dp
      IF ( Isotropic(2) ) THEN
-        DO i=1,ic
-          HEXP(i,i) = SUM( Basis(1:n) * HeatExpansion(1,1,1:n) )
-        END DO
+       DO i=1,ic
+         IF (EvaluateAtIP(2)) THEN
+           HEXP(i,i)= ListGetElementReal( BetaIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
+         ELSE
+           HEXP(i,i) = SUM( Basis(1:n) * HeatExpansion(1,1,1:n) )
+         END IF
+       END DO
      ELSE
         DO i=1,ic
           DO j=1,ic
