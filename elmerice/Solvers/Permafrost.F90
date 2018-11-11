@@ -4576,13 +4576,14 @@ FUNCTION GetBetaG(Model,IPNo,PorosityAtIP) RESULT(betaGAtIP)
   betaGAtIP = betaG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIp(IPPerm),PorosityAtIP)
 END FUNCTION GetBetaG
   !---------------------------------------------------------------------------------------------
-FUNCTION GetNuG(Model,IPNo,PorosityAtIP) RESULT(nuGAtIP)
+FUNCTION GetNuG(Model,IPNo,ArgumentsAtIP) RESULT(nuGAtIP)
   USE DefUtils
   USE PermaFrostMaterials
   IMPLICIT NONE
   TYPE(Model_t) :: Model
   INTEGER, INTENT(IN) :: IPNo
-  REAL(KIND=dp) :: PorosityAtIP, nuGAtIP
+  REAL(KIND=dp) :: ArgumentsAtIP(2), nuGAtIP
+  
   !-----
   TYPE(Solver_t) :: DummySolver
   TYPE(ValueList_t), POINTER :: Material
@@ -4590,28 +4591,33 @@ FUNCTION GetNuG(Model,IPNo,PorosityAtIP) RESULT(nuGAtIP)
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
   INTEGER :: RockMaterialID, NumberOfRockRecords, DIM, t, i, IPPerm
-  TYPE(Variable_t), POINTER :: XiAtIPVar
-  INTEGER, POINTER :: XiAtIPPerm(:)
-  REAL(KIND=dp), POINTER :: XiAtIP(:)
+  !TYPE(Variable_t), POINTER :: XiAtIPVar
+  !INTEGER, POINTER :: XiAtIPPerm(:)
+  !REAL(KIND=dp), POINTER :: XiAtIP(:)
+  REAL(KIND=dp) :: PorosityAtIP, XiAtIP
   LOGICAL :: Found, FirstTime = .TRUE., ElementWiseRockMaterial
   CHARACTER(LEN=MAX_NAME_LEN) :: ElementRockMaterialName
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: FunctionName = 'PermafrostMaterials (GetNuG)'
   !-----------
   SAVE FirstTime,NumberOfRockRecords,CurrentRockMaterial,CurrentSolventMaterial,DIM,ElementWiseRockMaterial
-
+  
+  IF (FirstTime) CALL INFO("Permafrost(GetNuG)","Initializing",Level=1)
+  PorosityAtIP=ArgumentsAtIP(1)
+  XiAtIP=ArgumentsAtIP(2)
+  !XiAtIP=1.0_dp 
   Element => Model % CurrentElement
   IF (.NOT.ASSOCIATED(Element)) CALL FATAL(FunctionName,'Element not associated')
   t = Element % ElementIndex
   Material => GetMaterial(Element)
 
-  XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
-  IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
-    WRITE(Message,*) 'Variable Xi is not associated'
-    CALL FATAL(FunctionName,Message)
-  END IF
-  XiAtIPPerm => XiAtIPVar % Perm
-  XiAtIp => XiAtIPVar % Values
-  IPPerm = XiAtIPPerm(t) + IPNo
+  !XiAtIPVar => VariableGet( Model % Mesh % Variables, 'Xi')
+  !IF (.NOT.ASSOCIATED(XiAtIPVar)) THEN
+  !  WRITE(Message,*) 'Variable Xi is not associated'
+  !  CALL FATAL(FunctionName,Message)
+  !END IF
+  !XiAtIPPerm => XiAtIPVar % Perm
+  !XiAtIp => XiAtIPVar % Values
+  !IPPerm = XiAtIPPerm(t) + IPNo
 
   IF (FirstTime .OR. (Model % Mesh % Changed)) THEN
     DIM =  CoordinateSystemDimension()
@@ -4646,7 +4652,7 @@ FUNCTION GetNuG(Model,IPNo,PorosityAtIP) RESULT(nuGAtIP)
     RockMaterialID = ListGetInteger(Material,'Rock Material ID', Found,UnfoundFatal=.TRUE.)
   END IF
 
-  nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIp(IPPerm),PorosityAtIP)
+  nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP,PorosityAtIP)
   !PRINT *,"getNuG:", nuGAtIP, XiAtIp(IPPerm),PorosityAtIP
 END FUNCTION GetNuG
 !---------------------------------------------------------------------------------------------
@@ -4676,7 +4682,7 @@ FUNCTION GetEG(Model,DummyIPNo,ArgumentsAtIP) RESULT(EGAtIP)
 
   PorosityAtIP=ArgumentsAtIP(1)
   XiAtIP=ArgumentsAtIP(2)
-
+  !XiAtIP=1.0_dp 
   !PRINT *, "GetEG:", PorosityAtIP, XiAtIP
   
   Element => Model % CurrentElement

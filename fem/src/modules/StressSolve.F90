@@ -989,8 +989,8 @@ CONTAINS
             GetLogical( Material, 'Youngs Modulus at IP',Found)
        EvaluateAtIP(2)= &
             GetLogical( Material, 'Heat Expansion Coefficient IP',Found)
-!       EvaluateAtIP(3) = &
-!            GetLogical( Material, 'Poisson Ratio at IP',Found)
+       EvaluateAtIP(3) = &
+            GetLogical( Material, 'Poisson Ratio at IP',Found)
  
        
        Density(1:n) = GetReal( Material, 'Density', Found )
@@ -1541,7 +1541,7 @@ CONTAINS
 
      CALL Info('StressSolver','------------------------------------------',Level=5)
      CALL Info('StressSolver','Starting Stress Computation',Level=5)
-
+PRINT *,"StressSolve(ComputeStress)", "EvaluateAtIP", EvaluateAtIP
      ! Temporarily remove application of limiters as they are not needed
      ! for stress computation. 
      !-------------------------------------------------------------------
@@ -1667,8 +1667,8 @@ CONTAINS
                'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
         END IF
 
-        EvaluateAtIP(1)= &
-             GetLogical( Material, 'Youngs Modulus at IP',Found)
+        !EvaluateAtIP(1)= &
+        !     GetLogical( Material, 'Youngs Modulus at IP',Found)
         IF  (EvaluateAtIP(1)) THEN
           ElasticModulus = 0.0_dp
           Isotropic(1) = .TRUE. ! we assume isotropy for function, at the moment
@@ -1680,14 +1680,14 @@ CONTAINS
         PoissonRatio = 0.0d0
         IF ( Isotropic(1)   .AND. (.NOT.EvaluateAtIP(3))) &
              PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio' )          
-        
+
 !!$        CALL InputTensor( HeatExpansionCoeff, Isotropic(2),  &
 !!$            'Heat Expansion Coefficient', Material, n, Element % NodeIndexes, GotHeatExp )
 !!$
 !!$        CALL InputTensor( ElasticModulus, Isotropic(1), &
 !!$                'Youngs Modulus', Material, n, Element % NodeIndexes )
         PlaneStress = ListGetLogical( Equation, 'Plane Stress', stat )
-        PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio', Stat )
+        !PoissonRatio(1:n) = GetReal( Material, 'Poisson Ratio', Stat )
 
         ! Element nodal points:
         ! ---------------------

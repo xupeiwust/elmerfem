@@ -1200,16 +1200,38 @@ CONTAINS
      LOGICAL, OPTIONAL :: EvaluateAtIP(3), EvaluateLoadAtIP     
 !------------------------------------------------------------------------------
      INTEGER :: i,j,k,p,q,IND(9),ic
-     LOGICAL :: Found, Incompressible
+     LOGICAL :: Found, Incompressible, FirstTime=.TRUE.
      REAL(KIND=dp) :: C(6,6), Young, LGrad(3,3), Poisson, S(6), &
           Pressure, Radius, HEXP(3,3)
      TYPE(ValueHandle_t), SAVE :: BetaIP_h, EIP_h, nuIP_h, Load_h(4), Load_h_im(4)
      TYPE(Element_t), POINTER :: Element
+     CHARACTER :: DimensionString
 !------------------------------------------------------------------------------
 
+     SAVE FirstTime
+     
      Incompressible = GetLogical( GetSolverParams(), 'Incompressible', Found )
 
      Element => CurrentModel % CurrentElement
+     IF (FirstTime) THEN
+       dim = CoordinateSystemDimension()
+       IF(EvaluateAtIP(1)) &
+            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+       IF(EvaluateAtIP(2)) &
+            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+       IF(EvaluateAtIP(3)) &
+            CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       IF(EvaluateLoadAtIP) THEN
+         DO I=1,DIM
+           WRITE(DimensionString,'(I1)') I
+           CALL ListInitElementKeyword( Load_h(I),'Body Force','Stress BodyForce '//TRIM(DimensionString))          
+           CALL ListInitElementKeyword( Load_h_im(I),'Body Force','Stress BodyForce '//TRIM(DimensionString)//' im')
+         END DO
+         CALL ListInitElementKeyword( Load_h(4),'Body Force','Stress Pressure')
+         CALL ListInitElementKeyword( Load_h_im(4),'Body Force','Stress Pressure im')
+       END IF
+       FirstTime = .FALSE.
+     END IF
      
      Stress = 0.0d0
      Strain = 0.0d0
