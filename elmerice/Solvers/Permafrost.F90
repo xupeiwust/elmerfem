@@ -77,7 +77,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   TYPE(ValueList_t), POINTER :: Params, Material
   TYPE(Variable_t), POINTER :: TemperatureVar,PressureVar,PorosityVar,SalinityVar,&
        TemperatureDtVar, DummyDtVar,SalinityDtVar,&
-       DummyGWfluxVar,StressInvVar, StressInvDtVar
+       DummyGWfluxVar,StressInvVar
   TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
   TYPE(SoluteMaterial_t), POINTER :: CurrentSoluteMaterial
   TYPE(SolventMaterial_t), POINTER :: CurrentSolventMaterial
@@ -85,11 +85,11 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   INTEGER,PARAMETER :: io=22
   INTEGER,POINTER :: PressurePerm(:), TemperaturePerm(:),PorosityPerm(:),SalinityPerm(:),&
        TemperatureDtPerm(:), DummyDtPerm(:),SalinityDtPerm(:),&
-       StressInvPerm(:),StressInvDtPerm(:),DummyGWfluxPerm(:)
+       StressInvPerm(:),DummyGWfluxPerm(:)
   REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Pressure(:), Temperature(:), Porosity(:), Salinity(:),&
        TemperatureDt(:), DummyDt(:),SalinityDt(:),&
-       DummyGWflux(:),StressInv(:), StressInvDt(:)
+       DummyGWflux(:),StressInv(:)
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalTemperature(:), NodalSalinity(:),&
        NodalPressure(:), DummyNodalGWflux(:,:), NodalStressInv(:),&
        NodalStressInvDt(:),NodalTemperatureDt(:), NodalSalinityDt(:),&
@@ -97,7 +97,8 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
        ConstantPorosity=.FALSE., NoSalinity=.FALSE.,GivenGWFlux,ElementWiseRockMaterial, DummyLog=.FALSE.,&
        InitializeSteadyState, ActiveMassMatrix, ComputeDeformation=.FALSE.,&
-       StressInvAllocationsDone=.FALSE.,HydroGeo=.FALSE.,ComputeDt=.FALSE.,&
+       StressInvAllocationsDone=.FALSE.,StressInvDtAllocationsDone=.FALSE.,&
+       HydroGeo=.FALSE.,ComputeDt=.FALSE.,&
        TemperatureTimeDerExists=.FALSE.,SalinityTimeDerExists=.FALSE., FluxOutput=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundWaterFlow'
@@ -106,8 +107,9 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
 
   SAVE DIM,FirstTime,AllocationsDone,CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,&
        NodalPorosity,NodalTemperature,NodalSalinity,NodalPressure,NodalStressInv, &
-       NodalTemperatureDt,NodalDummyDt,NodalSalinityDt,DummyNodalGWflux, &
-       ElementWiseRockMaterial, ComputeDeformation, StressInvAllocationsDone
+       NodalStressInvDt,NodalTemperatureDt,NodalDummyDt,NodalSalinityDt, &
+       DummyNodalGWflux, ElementWiseRockMaterial, ComputeDeformation, &
+       StressInvAllocationsDone, StressInvDtAllocationsDone
   !------------------------------------------------------------------------------
   CALL DefaultStart()
 
@@ -153,17 +155,24 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   PressurePerm => Solver % Variable % Perm
   VarName = Solver % Variable % Name
 
-  StressInvName =  ListGetString(params,'Rock Stress Invariant Variable Name',ComputeDeformation)
+  StressInvName =  ListGetString(params,'Ground Stress Invariant Variable Name',ComputeDeformation)
 
+  PRINT *,"ComputeDeformation", ComputeDeformation, "StressInvName: ", TRIM(StressInvName)
+  
   IF (ComputeDeformation) THEN
-    CALL AssignSingleVar(Solver,Model,NodalStressInv,StressInvVar,StressInvName,StressInvDOFs,ComputeDeformation)
+    CALL AssignSingleVar(Solver,Model,NodalStressInv,StressInvVar,&
+         StressInvName,StressInvDOFs,StressInvAllocationsDone)
+    PRINT *,"ComputeDeformation", ComputeDeformation
     IF (.NOT.ComputeDeformation) THEN
-      WRITE (Message,*) '"Rock Stress Invariant Variable Name" assigned as ',TRIM(StressInvName),&
+      WRITE (Message,*) '"Ground Stress Invariant Variable Name" assigned as ',TRIM(StressInvName),&
            ', but variable not found - no stress used'
-      CALL WARN(SolverName,Message)      
+      CALL WARN(SolverName,Message)
     ELSE
-      CALL AssignSingleVar(Solver,Model,NodalStressInvDt,StressInvDtVar,StressInvName//' Velocity',StressInvDOFs,ComputeDeformation)
-      
+      StressInvPerm => StressInvVar % Perm
+      StressInv => StressInvVar % Values
+      WRITE (Message,*) '"Ground Stress Invariant Variable Name" ',TRIM(StressInvName),&
+           ' assigned'
+      CALL INFO(SolverName,Message,Level=1)
     END IF
   END IF
 
@@ -179,6 +188,20 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
       ! cycle halo elements
       !-------------------
       IF (ParEnv % myPe .NE. Element % partIndex) CYCLE
+
+      IF (ComputeDeformation) THEN
+        CALL AssignSingleVarTimeDer(Solver,Model,Element,NodalStressInvDt,&
+             StressInvVar,StressInvDtAllocationsDone,dt)
+        ComputeDeformation = StressInvDtAllocationsDone
+        
+        IF (.NOT.ComputeDeformation) THEN
+          WRITE (Message,*) 'Failed to compute time derivative of', StressInvName
+          CALL WARN(SolverName,Message)
+        !ELSE
+        !  StressInvDtPerm => StressInvVar % Perm
+        END IF
+      END IF
+      
       Material => GetMaterial(Element)
 
       ! inquire what components have to computed/omitted
@@ -242,7 +265,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
 
       IF (ComputeDeformation) THEN
         CALL ReadSingleVar(N,Element,StressInvPerm,NodalStressInv,StressInv,1)
-        CALL ReadSingleVar(N,Element,StressInvDtPerm,NodalStressInvDt,StressInvDt,1)
+        !CALL ReadSingleVar(N,Element,StressInvDtPerm,NodalStressInvDt,StressInvDt,1)
       END IF
 
       IF(ComputeDt) CALL ReadVarsDt(N,Element,Model,Material,&
@@ -322,7 +345,7 @@ CONTAINS
     REAL(KIND=dp) :: EGAtIP,nuGAtIP,kappaGAtIP ! bedrock deformation
     REAL(KIND=dp) :: GasConstant, N0, DeltaT, T0, p0,eps,Gravity(3)! real constants read only once
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP,&
-         rhowTAtIP,rhowPAtIP,rhowYcAtIP,&
+         rhospAtIP,rhowTAtIP,rhowPAtIP,rhowYcAtIP,&
          rhoiPAtIP,rhoiTAtIP,&
          rhocPAtIP,rhocTAtIP,rhocYcAtIP,&
          rhogwPAtIP,rhogwTAtIP,rhogwYcAtIP
@@ -444,6 +467,7 @@ CONTAINS
 
       !Materialproperties needed at IP for Xi computation (anything else thereafter)
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
+      rhospAtIP =rhosp(CurrentRockMaterial,RockMaterialID,rhosAtIP,p0,PressureAtIP)
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)      
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
       Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
@@ -483,6 +507,10 @@ CONTAINS
 
       ! on Xi (directly or indirectly) dependent material parameters (incl. updates) at IP
       rhowAtIP  = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP(IPPerm),SalinityAtIP,ConstVal) ! update
+      IF ((rhowAtIP < 980.0_dp) .OR. (rhogwAtIP > 1250.0_dp)) THEN
+        PRINT *,"rhowAtIP:",rhowAtIP,XiAtIP(IPPerm),SalinityAtIP
+        STOP
+      END IF
       rhowPAtIP = rhowP(CurrentSolventMaterial,rhowAtIP,p0,PressureAtIP) ! update with new rhowAtIP
       rhowTAtIP = rhowT(CurrentSolventMaterial,rhowAtIP,T0,TemperatureAtIP)
       rhoiPAtIP = rhoiP(CurrentSolventMaterial,rhoiAtIP,p0,PressureAtIP)
@@ -505,9 +533,10 @@ CONTAINS
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwpAtIP = rhogwP(rhowPAtIP,rhocPAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwTAtIP = rhogwT(rhowTAtIP,rhocTAtIP,XiAtIP(IPPerm),SalinityAtIP)
-      !IF ((rhogwAtIP < 980.0_dp) .OR. (rhogwpAtIP > 1250.0_dp)) THEN
-      !  PRINT *,"rhogwAtIP:",rhogwAtIP, rhowAtIP,rhocAtIP,XiAtIP,SalinityAtIP
-      !END IF
+      IF ((rhogwAtIP < 980.0_dp) .OR. (rhogwpAtIP > 1250.0_dp)) THEN
+        PRINT *,"rhogwAtIP:",rhogwAtIP, rhowAtIP,rhocAtIP,SalinityAtIP
+        STOP
+      END IF
 
       ! conductivities at IP
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
@@ -533,10 +562,11 @@ CONTAINS
       EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
       nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
       kappaGAtIP = kappaG(EGAtIP,nuGAtIP)
+  
       IF (HydroGeo) THEN   ! Simplifications: Xip=0 Xi=1 kappas=0
         CgwppAtIP = PorosityAtIP * rhogwPAtIP + rhogwAtIP * kappaGAtIP
       ELSE     
-        CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,kappaGAtIP,&
+        CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,rhosPAtIP,&
              XiAtIP(IPPerm),XiPAtIP,CurrentRockMaterial,RockMaterialID,PorosityAtIP)
       END IF
       CgwpTAtIP = GetCgwpT(rhogwAtIP,rhoiAtIP,rhogwTAtIP,rhoiTAtIP,XiAtIP(IPPerm),XiTAtIP,PorosityAtIP)
@@ -545,6 +575,11 @@ CONTAINS
       END IF
       IF (ComputeDeformation) THEN
         CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,kappaGAtIP,XiAtIP(IPPerm),CurrentRockMaterial,RockMaterialID)
+        IF (CgwpI1AtIP > 1.0d03) THEN
+          PRINT *,"CgwpI1AtIP", CgwpI1AtIP,&
+             XiAtIP(IPPerm),rhogwAtIP,rhoiAtIP,kappaGAtIP, EGAtIP, nuGAtIP
+          STOP
+        END IF
       END IF
 
 
@@ -612,15 +647,24 @@ CONTAINS
       END DO
       ! body forces
       DO p=1,nd     
-        FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
+        FORCE(p) = FORCE(p) + Weight * rhogwAtIP *  SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
         IF (CryogenicSuction) &
              FORCE(p) = FORCE(p) + Weight * rhogwAtIP * SUM(fluxTAtIP(1:DIM)*dBasisdx(p,1:DIM))
         IF (ComputeDt) THEN
-          FORCE(p) = FORCE(p) + Weight * CgwpTAtIP * TemperatureDtAtIP !dT/dt + v* grad T
-          FORCE(p) = FORCE(p) + Weight * CgwpYcAtIP * SalinityDtAtIP ! dyc/dt + v* grad yc
+          FORCE(p) = FORCE(p) + Weight * CgwpTAtIP * Basis(p)* TemperatureDtAtIP !dT/dt + v* grad T
+          FORCE(p) = FORCE(p) + Weight * CgwpYcAtIP * Basis(p) * SalinityDtAtIP ! dyc/dt + v* grad yc
         END IF
-        !FORCE(p) = FORCE(p) + &
-        !     Weight * PorosityAtIP * (rhocAtIP - rhowAtIP)* SUM(JcFAtIP(1:DIM)*dBasisdx(p,1:DIM))
+        IF (ComputeDeformation)  THEN
+          FORCE(p) = FORCE(p) &
+               - Weight*CgwpI1AtIP*SUM(NodalStressInvDt(1:N)*Basis(1:N))
+          IF ((ABS(SUM(NodalStressInvDt(1:N)*Basis(1:N))) > 1.0d03) .OR. (CgwpI1AtIP>500.0))&
+               PRINT *,"Invariant",CgwpI1AtIP,SUM(NodalStressInvDt(1:N)*Basis(1:N))
+          !IF (CgwpI1AtIP>350.0) &
+          !     PRINT *,"Invariant",CgwpI1AtIP,
+        END IF
+        FORCE(p) = FORCE(p) - &
+             Weight * CurrentRockMaterial % etak(RockMaterialID) *&
+             (rhocAtIP - rhowAtIP)* SUM(JcFAtIP(1:DIM)*dBasisdx(p,1:DIM))
       END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
     END DO
@@ -773,7 +817,7 @@ SUBROUTINE PermafrostGroundwaterFlux_Init( Model,Solver,dt,Transient )
   END IF
 
   FluxName = TRIM(VarName)//' Flux'
-  CALL Info('PermafrostGroundwaterFlux_init','Saving flux to: '//TRIM(FluxName), Level=3) 
+  CALL Info('PermafrostGroundwaterFlux_init','Saving flux to: '//TRIM(FluxName), Level=1) 
   IF(dim == 2) THEN
     FluxVariableName=TRIM(FluxName)//'['//TRIM(FluxName)//':2]'
     CALL ListAddString( SolverParams,&
@@ -1225,7 +1269,119 @@ CONTAINS
 END SUBROUTINE PermafrostGroundwaterFlux
 !------------------------------------------------------------------------------
 
+!-----------------------------------------------------------------------------
+!  Compute invariant of stress tensor and its time-derivative
+!-----------------------------------------------------------------------------
 
+SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
+  USE DefUtils
+  IMPLICIT NONE
+  !------------------------------------------------------------------------------
+  TYPE(Model_t)  :: Model
+  TYPE(Solver_t) :: Solver
+  REAL(KIND=dp) :: dt
+  LOGICAL :: TransientSimulation
+  !------------------------------------------------------------------------------
+  TYPE(ValueList_t), POINTER :: SolverParams
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundStress'
+  CHARACTER(LEN=MAX_NAME_LEN) :: VariableName, StressVariableName, PressureName
+  LOGICAL :: Found, FirstTime=.FALSE., NoPressure, UpdatePrev=.FALSE.
+  TYPE(Variable_t), POINTER :: InvariantVar, StressVariableVar, PressureVar
+  INTEGER, POINTER :: InvariantPerm(:), StressVariablePerm(:), PressurePerm(:)
+  INTEGER :: I, DIM, StressVariableDOFs, CurrentTime
+  REAL (KIND=dp), POINTER :: Invariant(:), StressVariable(:), InvariantPrev(:,:), Pressure(:)
+  !------------------------------------------------------------------------------
+  SAVE FirstTime, CurrentTime, NoPressure, PressureVar, Pressure, PressurePerm,&
+       StressVariableVar, StressVariable, StressVariablePerm, StressVariableDOFs
+  
+  CALL Info( SolverName, '-----------------------------------------',Level=1 )
+  CALL Info( SolverName, ' Computing  Permafrost Stress Invariant',Level=1 )
+  CALL Info( SolverName, '-----------------------------------------',Level=1 )
+
+  DIM = CoordinateSystemDimension()
+  SolverParams => GetSolverParams()
+
+
+  IF (FirstTime) THEN
+    CurrentTime=GetTimeStep()
+    UpdatePrev = .FALSE.
+  ELSE
+    IF (CurrentTime .NE. GetTimeStep()) THEN
+      UpdatePrev = .TRUE.
+      CurrentTime=GetTimeStep()
+    END IF
+  END IF
+
+!  IF (FirstTime .OR. Model % Mesh % Changed) THEN
+!!$    PressureName = ListGetString(Params, &
+!!$       'Pressure Variable', Found )
+!!$    IF (.NOT.Found) THEN
+!!$      CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
+!!$      WRITE(PressureName,'(A)') 'Pressure'
+!!$    ELSE
+!!$      WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
+!!$      CALL INFO(SolverName,Message,Level=9)
+!!$    END IF
+!!$    PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
+!!$    IF (.NOT.ASSOCIATED(PressureVar)) THEN
+!!$      NULLIFY(Pressure)
+!!$      NoPressure = .TRUE.
+!!$      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " not associated"
+!!$      CALL WARN(SolverName,Message)
+!!$    ELSE
+!!$      Pressure => PressureVar % Values
+!!$      PressurePerm => PressureVar % Perm
+!!$      NoPressure = .FALSE.
+!!$      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " associated"
+!!$      CALL INFO(SolverName,Message,Level=9)
+!!$    END IF
+  
+    StressVariableName = ListGetString(SolverParams,'Stress Variable Name',Found)
+    IF (.NOT.Found) CALL FATAL(SolverName,' "Stress Variable Name" not found')
+    StressVariableVar => VariableGet( Solver % Mesh % Variables, StressVariableName )
+    IF ( ASSOCIATED(StressVariableVar)) THEN
+      StressVariablePerm => StressVariableVar % Perm
+      StressVariable => StressVariableVar % Values
+      StressVariableDOFs = StressVariableVar % DOFs
+    ELSE
+      CALL FATAL(SolverName, TRIM(StressVariableName)//' not found')
+    END IF
+ ! END IF
+
+    
+  InvariantVar =>  Solver % Variable
+  VariableName = InvariantVar % Name
+  Invariant => Solver % Variable % Values
+  InvariantPerm => Solver % Variable % Perm
+  InvariantPrev => Solver % Variable % PrevValues
+
+  DO I = 1,Solver % Mesh % Nodes % NumberOfNodes
+    IF (UpdatePrev) &
+         InvariantPrev(InvariantPerm(I),1) =  Invariant(InvariantPerm(I))
+    Invariant(InvariantPerm(I)) = &
+         GetFirstInvariant(StressVariable,(StressVariablePerm(I)-1)*StressVariableDOFs,DIM)
+    !IF (NoPressure)! add - 3 * gwpressure
+    IF (FirstTime) THEN 
+      InvariantPrev(InvariantPerm(I),1) = Invariant(InvariantPerm(I))
+    END IF
+  END DO
+  FirstTime = .FALSE.
+  CONTAINS
+    FUNCTION GetFirstInvariant(Stress,Position,DIM) RESULT(FirstInvariant)
+      REAL (KIND=dp) ::  FirstInvariant
+      REAL (KIND=dp), POINTER :: Stress(:)
+      INTEGER :: DIM, Position
+      !--------
+      INTEGER :: I
+      
+      FirstInvariant = 0.0_dp
+      DO I=1,DIM
+        FirstInvariant = FirstInvariant + Stress(Position+I)
+      END DO
+      
+    END FUNCTION GetFirstInvariant  
+END SUBROUTINE PermafrostStressInvariant
+  
 !-----------------------------------------------------------------------------
 !> heat transfer equation for enhanced permafrost model
 !-----------------------------------------------------------------------------
@@ -1342,7 +1498,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
        NodalPressureDt(:)
   LOGICAL :: Found, FirstTime=.TRUE., AllocationsDone=.FALSE.,&
        ConstantPorosity=.TRUE., NoSalinity=.TRUE., NoPressure=.TRUE.,GivenGWFlux=.FALSE.,&
-       ComputeDt=.FALSE.,ElementWiseRockMaterial, DepthExists
+       ComputeDt=.FALSE.,ElementWiseRockMaterial, DepthExists=.FALSE.
   CHARACTER(LEN=MAX_NAME_LEN), ALLOCATABLE :: VariableBaseName(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostHeatEquation'
   CHARACTER(LEN=MAX_NAME_LEN) :: PressureName, PorosityName, SalinityName, GWfluxName, PhaseChangeModel,&
@@ -1458,7 +1614,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
            GWfluxPerm1, GWfluxPerm2,GWfluxPerm3, &
            NoSalinity,NoPressure,ConstantPorosity,GivenGWFlux,&
            PorosityName,SolverName,DIM)
-
+ 
       IF (DepthExists) CALL ReadSingleVar(N,Element,DepthVar % Perm,NodalDepth,DepthVar % Values,DepthVar % DOFs)
       ! IF (DepthExists) &
       !      NodalDepth(1:N) = DepthVar % Values(DepthVar % Perm(Element % NodeIndexes(1:N)))

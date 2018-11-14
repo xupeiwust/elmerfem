@@ -845,7 +845,8 @@ CONTAINS
   END FUNCTION ReadPermafrostConstants
   !---------------------------------------------------------------------------------------------
   ! assign single modal variable
-  SUBROUTINE AssignSingleVar(Solver,Model,NodalVariable,VariableVar,VariableName,VariableDOFS,VariableExists)
+  SUBROUTINE AssignSingleVar(Solver,Model,NodalVariable,VariableVar,&
+       VariableName,VariableDOFS,VariableExists)
     IMPLICIT NONE
     
     TYPE(Solver_t) :: Solver
@@ -856,31 +857,30 @@ CONTAINS
     TYPE(Variable_t), POINTER :: VariableVar
     INTEGER :: VariableDOFS
     ! ----
-    LOGICAL :: AllocationsDone=.FALSE.
     INTEGER :: N, istat
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='AssignSingleVar'
     
-    SAVE AllocationsDone
     
-    VariableVar => VariableGet(Solver % Mesh % Variables,VariableName)
+    !IF (.NOT.ASSOCIATED(VariableVar)) &
+         VariableVar => VariableGet(Solver % Mesh % Variables,VariableName)
     IF (.NOT.ASSOCIATED(VariableVar)) THEN
       VariableExists = .FALSE.
       RETURN
-    ELSE
-      VariableExists = .TRUE.
     END IF
 
     VariableDOFS = VariableVar % DOFs
+
+
     
-    IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
+    IF ((.NOT.VariableExists) .OR. (Model % Mesh % Changed)) THEN
       N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
-      IF (AllocationsDone) &
+      IF (VariableExists) &
            DEALLOCATE(NodalVariable)
       ALLOCATE(NodalVariable(N*VariableDOFS),STAT=istat )
       IF ( istat /= 0 ) THEN
         CALL FATAL(SolverName,"Allocation error")
       ELSE
-        AllocationsDone = .TRUE.
+        VariableExists = .TRUE.
 	WRITE(Message,*) "Allocations done for nodal variable of ",TRIM(VariableName)
         CALL INFO(SolverName,Message,Level=1)
       END IF
@@ -902,30 +902,32 @@ CONTAINS
     TYPE(Variable_t), POINTER :: VariableVar
     ! ----
     INTEGER :: VariableDOFS
-    LOGICAL :: AllocationsDone=.FALSE.
-    INTEGER :: N, I, J, istat,CurrentvariableNodeIndex
+    !LOGICAL :: AllocationsDone=.FALSE.
+    INTEGER :: MaxNodes, I, J, istat,CurrentvariableNodeIndex
     INTEGER, POINTER :: VariablePerm(:)
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='AssignSingleVarTimeDer'
     REAL(KIND=dp), POINTER :: Variable(:),VariablePrev(:,:)
     
-    SAVE AllocationsDone
+    SAVE MaxNodes
 
     IF (dt <= 0.0_dp) CALL FATAL(SolverName, "Negative or zero timestep")
     
-    IF ((.NOT.AllocationsDone) .OR. (Model % Mesh % Changed)) THEN
-      N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
-      IF (AllocationsDone) &
-           DEALLOCATE(NodalVariableTimeDer)
-      ALLOCATE(NodalVariableTimeDer(N*VariableDOFS),STAT=istat )
+    IF ((.NOT.VariableTimeDerExists) .OR. (Model % Mesh % Changed)) THEN
+      MaxNodes = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
+      IF (VariableTimeDerExists) THEN
+        CALL INFO(SolverName,"Deallocation of nodal time derivtive")
+        DEALLOCATE(NodalVariableTimeDer)
+      END IF
+      ALLOCATE(NodalVariableTimeDer(MaxNodes*VariableDOFS),STAT=istat )
       IF ( istat /= 0 ) THEN
         CALL FATAL(SolverName,"Allocation error")
       ELSE
-        AllocationsDone = .TRUE.
+        VariableTimeDerExists = .TRUE.
         CALL INFO(SolverName,"Allocations Done",Level=1)
       END IF
     END IF
     
-    NodalVariableTimeDer(1:N*VariableDOFS) = 0.0_dp
+    NodalVariableTimeDer(1:maxNodes*VariableDOFS) = 0.0_dp
     VariableDOFS = VariableVar % DOFs
     VariablePrev => VariableVar % PrevValues
     
@@ -936,6 +938,7 @@ CONTAINS
       VariableDOFS = VariableVar % DOFs
       Variable => VariableVar % Values
       VariableTimeDerExists = .TRUE.
+      IF (MaxNodes < GetElementNOFNodes(Element)) CALL FATAL(SolverName,"Number of Nodes exceeds allocation")
       DO I=1,GetElementNOFNodes(Element)
         CurrentVariableNodeIndex = VariablePerm(Element % NodeIndexes(I))
         DO J=1,VariableDOFS
@@ -1192,7 +1195,7 @@ CONTAINS
     REAL(KIND=dp),POINTER :: NodalVariable(:),Variable(:)    
     !-----------------------
     INTEGER :: I,J
-    
+
     DO I=1,N
       DO J=1,VariableDOFs            
         NodalVariable((VariableDOFs*I - 1) + J) =&
@@ -1920,6 +1923,18 @@ CONTAINS
          CurrentRockMaterial % aasl(RockMaterialID))
     rhosT = rhos * alphaS
   END FUNCTION rhosT
+!---------------------------------------------------------------------------------------------
+  REAL(KIND=dp) FUNCTION rhosp(CurrentRockMaterial,RockMaterialID,rhos,p0,Pressure)
+    IMPLICIT NONE
+    TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
+    INTEGER, INTENT(IN) :: RockMaterialID
+    REAL(KIND=dp), INTENT(IN) :: rhos,p0,Pressure
+    !--------------------
+    REAL(KIND=dp) ::  kappas
+    !--------------------
+    kappas = ( CurrentRockMaterial % ks0(RockMaterialID))
+    rhosP = rhos * kappas
+  END FUNCTION rhosp
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION rhow(CurrentSolventMaterial,T0,p0,Temperature,Pressure,ConstVal)
     IMPLICIT NONE
@@ -2464,20 +2479,21 @@ CONTAINS
     CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
   END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,kappaG,Xi,Xip,CurrentRockMaterial,RockMaterialID,Porosity)RESULT(Cgwpp)
+  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,rhosp,Xi,Xip,CurrentRockMaterial,RockMaterialID,Porosity)RESULT(Cgwpp)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,kappaG,Xi,Xip,Porosity
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,rhosp,Xi,Xip,Porosity
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     INTEGER, INTENT(IN) :: RockMaterialID
     REAL(KIND=dp) :: Cgwpp
     !-------------------------
-    REAL(KIND=dp) :: kappas
+    !REAL(KIND=dp) :: kappas
     !-------------------------
     
-    kappas = CurrentRockMaterial % ks0(RockMaterialID)
+    !kappas = CurrentRockMaterial % ks0(RockMaterialID)
     !kappaG =  CurrentRockMaterial % kG(RockMaterialID)
     Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
-         + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
+         + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(rhosp)
+         !+ (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
   END FUNCTION GetCgwpp
   !---------------------------------------------------------------------------------------------
   FUNCTION GetCgwpT(rhogw,rhoi,rhogwT,rhoiT,Xi,XiT,Porosity)RESULT(CgwpT)
@@ -2785,7 +2801,7 @@ CONTAINS
     IMPLICIT NONE
     REAL(KIND=dp), INTENT(IN) :: EG,nuG
     !---------
-    kappaG = EG/(3.0_dp*(1.0_dp - 2.0_dp * nuG))
+    kappaG = (3.0_dp*(1.0_dp - 2.0_dp * nuG))/EG
   END FUNCTION KappaG
   !---------------------------------------------------------------------------------------------
 END MODULE PermafrostMaterials
