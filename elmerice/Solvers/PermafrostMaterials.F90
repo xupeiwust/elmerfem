@@ -2522,7 +2522,7 @@ CONTAINS
     REAL(KIND=dp) :: kappas
     !-------------------------
     kappas = CurrentRockMaterial % ks0(RockMaterialID)
-    CgwpI1 = (Xi * rhogw + (1.0_dp - Xi) * rhoi)*(kappaG - kappas)/3.0_dp
+    CgwpI1 = (Xi * rhogw + (1.0_dp - Xi) * rhoi)*(kappaG)/3.0_dp
   END FUNCTION GetCgwpI1
   !---------------------------------------------------------------------------------------------
   REAL (KIND=dp) FUNCTION mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&

@@ -235,6 +235,8 @@ MODULE StressLocal
            ELSE
               DO j=1,3
                 HeatExpansion(i,j) = SUM( NodalHeatExpansion(i,j,1:n)*Basis(1:n) )
+                !HeatExpansion(i,i) = ListGetElementReal( BetaIP_h, Basis, Element, Found,&
+                !    Rdim = Rdim, Rtensor = NewVal, GaussPoint=t)
               END DO
            END IF
          END DO

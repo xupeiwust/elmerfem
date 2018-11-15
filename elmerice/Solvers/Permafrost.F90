@@ -467,7 +467,11 @@ CONTAINS
 
       !Materialproperties needed at IP for Xi computation (anything else thereafter)
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
-      rhospAtIP =rhosp(CurrentRockMaterial,RockMaterialID,rhosAtIP,p0,PressureAtIP)
+      IF (.NOT.ConstVal) THEN
+        rhospAtIP =rhosp(CurrentRockMaterial,RockMaterialID,rhosAtIP,p0,PressureAtIP)
+      ELSE
+        rhospAtIP = 0.0_dp
+      END IF
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)      
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
       Xi0Tilde = GetXi0Tilde(CurrentRockMaterial,RockMaterialID,PorosityAtIP)
@@ -511,10 +515,17 @@ CONTAINS
         PRINT *,"rhowAtIP:",rhowAtIP,XiAtIP(IPPerm),SalinityAtIP
         STOP
       END IF
-      rhowPAtIP = rhowP(CurrentSolventMaterial,rhowAtIP,p0,PressureAtIP) ! update with new rhowAtIP
-      rhowTAtIP = rhowT(CurrentSolventMaterial,rhowAtIP,T0,TemperatureAtIP)
-      rhoiPAtIP = rhoiP(CurrentSolventMaterial,rhoiAtIP,p0,PressureAtIP)
-      rhoiTAtIP = rhoiT(CurrentSolventMaterial,rhoiAtIP,T0,TemperatureAtIP)
+      IF (ConstVal) THEN
+        rhowPAtIP = 0.0_dp
+        rhowTAtIP = 0.0_dp
+        rhoiPAtIP = 0.0_dp
+        rhoiTAtIP = 0.0_dp    
+      ELSE
+        rhowPAtIP = rhowP(CurrentSolventMaterial,rhowAtIP,p0,PressureAtIP) ! update with new rhowAtIP
+        rhowTAtIP = rhowT(CurrentSolventMaterial,rhowAtIP,T0,TemperatureAtIP)
+        rhoiPAtIP = rhoiP(CurrentSolventMaterial,rhoiAtIP,p0,PressureAtIP)
+        rhoiTAtIP = rhoiT(CurrentSolventMaterial,rhoiAtIP,T0,TemperatureAtIP)
+      END IF
       IF (.NOT.NoSalinity) THEN
         rhocAtIP    = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP(IPPerm),TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
         rhocPAtIP   = rhocP(CurrentSoluteMaterial,rhocAtIP,ConstVal)
@@ -559,8 +570,8 @@ CONTAINS
  
 
       ! capacities at IP
-      EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
-      nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiTAtIP,PorosityAtIP)
+      EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
+      nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
       kappaGAtIP = kappaG(EGAtIP,nuGAtIP)
   
       IF (HydroGeo) THEN   ! Simplifications: Xip=0 Xi=1 kappas=0
@@ -574,10 +585,10 @@ CONTAINS
         CgwpYcAtIP = GetCgwpYc(rhogwAtIP,rhoiAtIP,rhogwYcAtIP,XiAtIP(IPPerm),XiYcAtIP,PorosityAtIP)        
       END IF
       IF (ComputeDeformation) THEN
-        CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,kappaGAtIP,XiAtIP(IPPerm),CurrentRockMaterial,RockMaterialID)
-        IF (CgwpI1AtIP > 1.0d03) THEN
+        CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,XiAtIP(IPPerm),kappaGAtIP,CurrentRockMaterial,RockMaterialID)
+        IF (CgwpI1AtIP > 1.0d-04) THEN
           PRINT *,"CgwpI1AtIP", CgwpI1AtIP,&
-             XiAtIP(IPPerm),rhogwAtIP,rhoiAtIP,kappaGAtIP, EGAtIP, nuGAtIP
+               XiAtIP(IPPerm),rhogwAtIP,rhoiAtIP,kappaGAtIP, EGAtIP, nuGAtIP
           STOP
         END IF
       END IF
@@ -656,14 +667,14 @@ CONTAINS
         END IF
         IF (ComputeDeformation)  THEN
           FORCE(p) = FORCE(p) &
-               - Weight*CgwpI1AtIP*SUM(NodalStressInvDt(1:N)*Basis(1:N))
-          IF ((ABS(SUM(NodalStressInvDt(1:N)*Basis(1:N))) > 1.0d03) .OR. (CgwpI1AtIP>500.0))&
-               PRINT *,"Invariant",CgwpI1AtIP,SUM(NodalStressInvDt(1:N)*Basis(1:N))
+               - Weight*CgwpI1AtIP* Basis(p)* SUM(NodalStressInvDt(1:N)*Basis(1:N))
+          !IF ((ABS(SUM(NodalStressInvDt(1:N)*Basis(1:N))) > 1.0d03) .OR. (CgwpI1AtIP>500.0))&
+          !     PRINT *,"Invariant",CgwpI1AtIP,SUM(NodalStressInvDt(1:N)*Basis(1:N))
           !IF (CgwpI1AtIP>350.0) &
           !     PRINT *,"Invariant",CgwpI1AtIP,
         END IF
         FORCE(p) = FORCE(p) - &
-             Weight * CurrentRockMaterial % etak(RockMaterialID) *&
+             Weight * Basis(p) * CurrentRockMaterial % etak(RockMaterialID) *&
              (rhocAtIP - rhowAtIP)* SUM(JcFAtIP(1:DIM)*dBasisdx(p,1:DIM))
       END DO
       FORCE(1:nd) = FORCE(1:nd) + Weight * LoadAtIP * Basis(1:nd)
