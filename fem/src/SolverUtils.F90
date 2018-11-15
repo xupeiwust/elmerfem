@@ -6067,7 +6067,7 @@ CONTAINS
     INTEGER, TARGET :: Perm(:)    !< The node reordering info, this has been generated at the
                                   !< beginning of the simulation for bandwidth optimization
 !------------------------------------------------------------------------------
-    INTEGER :: i,t,u,j,k,k2,l,l2,n,bc_id,nlen,NormalInd
+    INTEGER :: i,t,u,j,k,k2,l,l2,n,bc_id,nlen,NormalInd,Ncomplex
     LOGICAL :: Found
     TYPE(ValueList_t), POINTER :: BC
     TYPE(Mesh_t), POINTER :: Mesh
@@ -6120,9 +6120,14 @@ CONTAINS
           'Constraint Modes Analysis requested but no constrained BCs given!')
     END IF
 
-    Var % NumberOfConstraintModes = NDOFS * j 
+    IF( LIstGetLogical( Solver % Values,'Linear System Complex',Found) ) THEN
+      Ncomplex = 2
+    ELSE
+      Ncomplex = 1
+    END IF
     
-    
+    Var % NumberOfConstraintModes = NDOFS * j  / Ncomplex
+        
     DO t = Mesh % NumberOfBulkElements+1, &
         Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
       Element => Mesh % Elements(t)
@@ -12097,10 +12102,13 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
     LOGICAL :: ScaleSystem
 !------------------------------------------------------------------------------
     TYPE(Variable_t), POINTER :: Var
-    INTEGER :: i,j,k,n,m
-    LOGICAL :: PrecRecompute, Stat, Found, ComputeFluxes, Symmetric
+    INTEGER :: i,j,k,n,m,Nmode,Mmode
+    LOGICAL :: PrecRecompute, Stat, Found, ComputeFluxes, Symmetric, IsComplex
     REAL(KIND=dp), POINTER CONTIG :: PValues(:)
     REAL(KIND=dp), ALLOCATABLE :: Fluxes(:), FluxesMatrix(:,:)
+    REAL(KIND=dp) :: flux
+    COMPLEX(KIND=dp), ALLOCATABLE :: CFluxesMatrix(:,:)
+    COMPLEX(KIND=dp) :: cflux
     CHARACTER(LEN=MAX_NAME_LEN) :: MatrixFile
     !------------------------------------------------------------------------------
     n = StiffMatrix % NumberOfRows
@@ -12110,20 +12118,26 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
       CALL Fatal('SolveConstraintModesSystem','Conflicting sizes for matrix and variable!')
     END IF
 
-    m = Var % NumberOfConstraintModes
+    m = Var % NumberOfConstraintModes 
     IF( m == 0 ) THEN
       CALL Fatal('SolveConstraintModesSystem','No constraint modes?!')
     END IF
 
+    IsComplex = ListGetLogical( Solver % Values,'Linear System Complex',Found)
+    
     ComputeFluxes = ListGetLogical( Solver % Values,'Constraint Modes Fluxes',Found) 
     IF( ComputeFluxes ) THEN
       CALL Info('SolveConstraintModesSystem','Allocating for lumped fluxes',Level=10)
       ALLOCATE( Fluxes( n ) )
-      ALLOCATE( FluxesMatrix( m, m ) )
-      FluxesMatrix = 0.0_dp
+      IF( IsComplex ) THEN        
+        ALLOCATE( CFluxesMatrix( m, m ) )
+        CFluxesMatrix = 0.0_dp
+      ELSE
+        ALLOCATE( FluxesMatrix( m, m ) )
+        FluxesMatrix = 0.0_dp
+      END IF
     END IF
     
-
     DO i=1,m
       CALL Info('SolveConstraintModesSystem','Solving for mode: '//TRIM(I2S(i)))
 
@@ -12131,23 +12145,33 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
         CALL ListAddLogical( Solver % Values,'No Precondition Recompute',.TRUE.)
       END IF
 
+      IF( IsComplex ) THEN
+        Nmode = 2*i-1
+      ELSE
+        Nmode = i
+      END IF
+      
       ! The matrix has been manipulated already before. This ensures
       ! that the system has values 1 at the constraint mode i.
-      WHERE( Var % ConstraintModesIndeces == i ) &
+      WHERE( Var % ConstraintModesIndeces == Nmode ) &
           StiffMatrix % Rhs = StiffMatrix % Values( StiffMatrix % Diag )
-        
+      
       CALL SolveSystem( StiffMatrix,ParMatrix,StiffMatrix % rhs,&
           Var % Values,Var % Norm,Var % DOFs,Solver )
 
-      
-      WHERE( Var % ConstraintModesIndeces == i ) StiffMatrix % Rhs = 0.0_dp            
+      WHERE( Var % ConstraintModesIndeces == Nmode ) StiffMatrix % Rhs = 0.0_dp            
 
       Var % ConstraintModes(i,:) = Var % Values
 
       IF( ComputeFluxes ) THEN
         CALL Info('SolveConstraintModesSystem','Computing lumped fluxes',Level=8)
         PValues => StiffMatrix % Values
+
         StiffMatrix % Values => StiffMatrix % BulkValues
+        IF( .NOT. ASSOCIATED( StiffMatrix % values ) ) THEN
+          CALL Fatal('SolveConstraintModesSystem','BulkValues not associated!')
+        END IF
+
         Fluxes = 0.0_dp
         CALL MatrixVectorMultiply( StiffMatrix, Var % Values, Fluxes ) 
         StiffMatrix % Values => PValues
@@ -12155,10 +12179,25 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
         DO j=1,n
           k = Var % ConstraintModesIndeces(j)
           IF( k > 0 ) THEN
-            IF( i /= k ) THEN
-              FluxesMatrix(i,k) = FluxesMatrix(i,k) - Fluxes(j)
+            IF( IsComplex ) THEN
+              Mmode = (k+1)/2
+              IF( MOD(k,2) == 1 ) THEN                
+                cflux = CMPLX( Fluxes(j), 0.0_dp, KIND=dp )
+              ELSE
+                cflux = CMPLX( 0.0_dp, Fluxes(j), KIND=dp )               
+              END IF
+              IF( Nmode /= Mmode ) THEN
+                CFluxesMatrix(Nmode,Mmode) = CFluxesMatrix(Nmode,Mmode) - cflux
+              END IF
+              CFluxesMatrix(Nmode,Nmode) = CFluxesMatrix(Nmode,Nmode) + cflux
+            ELSE
+              Mmode = k 
+              flux = Fluxes(j) 
+              IF( Nmode /= Mmode ) THEN
+                FluxesMatrix(Nmode,Mmode) = FluxesMatrix(NMode,Mmode) - flux
+              END IF
+              FluxesMatrix(Nmode,Nmode) = FluxesMatrix(Nmode,Nmode) + flux
             END IF
-            FluxesMatrix(i,i) = FluxesMatrix(i,i) + Fluxes(j)
           END IF
         END DO
       END IF
@@ -12169,14 +12208,22 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
       Symmetric = ListGetLogical( Solver % Values,&
           'Constraint Modes Fluxes Symmetric', Found ) 
       IF( Symmetric ) THEN
-        FluxesMatrix = 0.5_dp * ( FluxesMatrix + TRANSPOSE( FluxesMatrix ) )
+        IF( IsComplex ) THEN
+          CFluxesMatrix = 0.5_dp * ( CFluxesMatrix + TRANSPOSE( CFluxesMatrix ) )
+        ELSE
+          FluxesMatrix = 0.5_dp * ( FluxesMatrix + TRANSPOSE( FluxesMatrix ) )
+        END IF
       END IF
-      
+        
       CALL Info( 'SolveConstraintModesSystem','Constraint Modes Fluxes', Level=5 )
       DO i=1,m
         DO j=1,m
           IF( Symmetric .AND. j < i ) CYCLE
-          WRITE( Message, '(I3,I3,ES15.5)' ) i,j,FluxesMatrix(i,j)
+          IF( IsComplex ) THEN
+            WRITE( Message, '(I3,I3,2ES15.5)' ) i,j,CFluxesMatrix(i,j)
+          ELSE
+            WRITE( Message, '(I3,I3,ES15.5)' ) i,j,FluxesMatrix(i,j)
+          END IF
           CALL Info( 'SolveConstraintModesSystem', Message, Level=5 )
         END DO
       END DO
@@ -12184,20 +12231,28 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
       MatrixFile = ListGetString(Solver % Values,'Constraint Modes Fluxes Filename',Found )
       IF( Found ) THEN
         OPEN (10, FILE=MatrixFile)
+        IF( IsComplex ) OPEN( 11, FILE=TRIM(MatrixFile)//'_im')
         DO i=1,m
           DO j=1,m
-            WRITE (10,'(ES17.9)',advance='no') FluxesMatrix(i,j)
+            IF( IsComplex ) THEN
+              WRITE (10,'(ES17.9)',advance='no') REAL( CFluxesMatrix(i,j) ) 
+              WRITE (11,'(ES17.9)',advance='no') AIMAG( CFluxesMatrix(i,j) ) 
+            ELSE
+              WRITE (10,'(ES17.9)',advance='no') FluxesMatrix(i,j)
+            END IF
           END DO
           WRITE(10,'(A)') ' '
+          IF( IsComplex ) WRITE(11,'(A)') ' ' 
         END DO
-        CLOSE(10)     
+        CLOSE(10)
+        IF( IsComplex ) CLOSE(11)
         CALL Info( 'SolveConstraintModesSystem',&
             'Constraint modes fluxes was saved to file '//TRIM(MatrixFile),Level=5)
       END IF
-      
+
       DEALLOCATE( Fluxes )
     END IF
-
+    
     CALL ListAddLogical( Solver % Values,'No Precondition Recompute',.FALSE.)
     
 !------------------------------------------------------------------------------
