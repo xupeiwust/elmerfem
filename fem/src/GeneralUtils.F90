@@ -1487,6 +1487,44 @@ END FUNCTION ComponentNameVar
    END FUNCTION SearchInterval
 !------------------------------------------------------------------------------
 
+!------------------------------------------------------------------------------
+!> As SearchInterval, but doesn't assume we'll find the value in the interval
+   !------------------------------------------------------------------------------
+   PURE FUNCTION SearchIntPosition( tval, t ) RESULT(i)
+     !------------------------------------------------------------------------------
+     INTEGER :: i
+     INTEGER, INTENT(in) :: tval(:), t
+     !------------------------------------------------------------------------------
+     INTEGER :: n,n0,n1
+     !------------------------------------------------------------------------------
+
+     n = SIZE(tval)
+
+     IF (t < tval(1)) THEN
+       i = 0
+     ELSE IF (t>=tval(n)) THEN
+       i = n
+     ELSE
+       n0 = 1
+       n1 = n
+       i = (n0+n1)/2
+       DO WHILE(.TRUE.)
+         IF  ( tval(i) <= t .AND. tval(i+1)>t ) EXIT
+
+         IF ( tval(i) >  t ) THEN
+           n1 = i-1 
+         ELSE
+           n0 = i+1
+         END IF
+         i = (n0+n1)/2
+       END DO
+     END IF
+     IF(i>n) i=n
+
+   !------------------------------------------------------------------------------
+   END FUNCTION SearchIntPosition
+   !------------------------------------------------------------------------------
+
 
 !------------------------------------------------------------------------------
 !> Interpolate values in a curve given by linear table or splines.
@@ -2570,7 +2608,7 @@ CONTAINS
   !---------------------------------------------------------------
   SUBROUTINE AscBinWriteFree()
 
-    CALL Info('AscBinWriteInit','Terminating buffered ascii/binary writing',Level=10)
+    CALL Info('AscBinWriteFree','Terminating buffered ascii/binary writing',Level=10)
 
     IF( AsciiOutput ) RETURN
 
@@ -2583,7 +2621,7 @@ CONTAINS
 
     BufferSize = 0
     VtuUnit = 0
-
+    
   END SUBROUTINE AscBinWriteFree
 
 
@@ -2640,11 +2678,9 @@ CONTAINS
       IF( NoVals == 0 ) THEN
         RETURN
       ELSE IF( SinglePrec ) THEN
-!        PRINT *,'writing floats:',NoVals
         WRITE( VtuUnit ) Fvals(1:NoVals)
       ELSE
         WRITE( VtuUnit ) DVals(1:NoVals) 
-!        PRINT *,'writing doubles:',NoVals
       END IF
       NoVals = 0
       IF( Empty ) RETURN 
@@ -2657,8 +2693,6 @@ CONTAINS
     ELSE
       DVals(NoVals) = val
     END IF
-
-!    PRINT *,'val:',NoVals,val
 
 
   END SUBROUTINE AscBinRealWrite
@@ -2696,7 +2730,6 @@ CONTAINS
         RETURN
       ELSE 
         WRITE( VtuUnit ) Ivals(1:INoVals)
-!        PRINT *,'writing integers:',INoVals
       END IF
       INoVals = 0
       IF( Empty ) RETURN 
@@ -2704,8 +2737,6 @@ CONTAINS
 
     INoVals = INoVals + 1
     Ivals(INoVals) = ival
-
- !   PRINT *,'ival:',iNoVals,ival
         
   END SUBROUTINE AscBinIntegerWrite
   

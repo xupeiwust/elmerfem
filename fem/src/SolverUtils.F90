@@ -64,9 +64,13 @@ MODULE SolverUtils
    USE ParallelEigenSolve
    USE ListMatrix
    USE CRSMatrix
-
+   
    IMPLICIT NONE
 
+   INTERFACE CondensateP
+     MODULE PROCEDURE CondensatePR, CondensatePC
+   END INTERFACE CondensateP
+   
    CHARACTER(LEN=MAX_NAME_LEN), PRIVATE :: NormalTangentialName
    INTEGER, PRIVATE :: NormalTangentialNOFNodes
    INTEGER, POINTER, PRIVATE :: NTelement(:,:)
@@ -336,36 +340,24 @@ CONTAINS
 !> Moves a row and and sumes it with the values of a second one, optionally 
 !> multiplying with a constant.
 !------------------------------------------------------------------------------
-   SUBROUTINE MoveRow( A, n1, n2, Coeff )
+   SUBROUTINE MoveRow( A, n1, n2, Coeff, StayCoeff )
 !------------------------------------------------------------------------------
      TYPE(Matrix_t) :: A
      INTEGER :: n1, n2
-     REAL(KIND=dp), OPTIONAL :: Coeff
+     REAL(KIND=dp), OPTIONAL :: Coeff, StayCoeff
 !------------------------------------------------------------------------------
 
      SELECT CASE( A % FORMAT )
        CASE( MATRIX_CRS )
-         IF( PRESENT( Coeff ) ) THEN
-           CALL CRS_MoveRow( A,n1,n2,Coeff )
-         ELSE
-           CALL CRS_MoveRow( A,n1,n2 )  
-         END IF
+         CALL CRS_MoveRow( A,n1,n2,Coeff,StayCoeff )
 
          ! If entries are not found the format is changed on-the-fly
          IF( A % FORMAT == MATRIX_LIST ) THEN
-           IF( PRESENT( Coeff ) ) THEN
-             CALL CRS_MoveRow( A,n1,n2,Coeff )
-           ELSE
-             CALL CRS_MoveRow( A,n1,n2 )  
+           CALL CRS_MoveRow( A,n1,n2,Coeff,StayCoeff ) ! does this make sense?
          END IF
-       END IF
-
+         
        CASE( MATRIX_LIST )
-         IF( PRESENT( Coeff ) ) THEN
-           CALL List_MoveRow( A % ListMatrix,n1,n2,Coeff )
-         ELSE
-           CALL List_MoveRow( A % ListMatrix,n1,n2 )
-         END IF
+         CALL List_MoveRow( A % ListMatrix,n1,n2,Coeff,StayCoeff )
 
        CASE DEFAULT
          CALL Warn('MoveRow','Not implemented for this type')
@@ -478,11 +470,11 @@ CONTAINS
 
 !> Create a copy of the linear system (Values,Rhs) to (BulkValues,BulkRhs).
 !------------------------------------------------------------------------------
-   SUBROUTINE CopyBulkMatrix( A, BulkMass )
+   SUBROUTINE CopyBulkMatrix( A, BulkMass, BulkDamp )
 !------------------------------------------------------------------------------
      TYPE(Matrix_t) :: A
      INTEGER :: i,n
-     LOGICAL, OPTIONAL :: BulkMass
+     LOGICAL, OPTIONAL :: BulkMass, BulkDamp
      
      n = SIZE( A % Rhs )
      IF( ASSOCIATED( A % BulkRhs ) ) THEN
@@ -509,10 +501,7 @@ CONTAINS
        ALLOCATE( A % BulkValues( n ) )
      END IF
 
-     DO i=1,n
-       A % BulkValues(i) = A % Values(i)
-     END DO
-
+     A % BulkValues(1:n) = A % Values(1:n)
 
      IF( PRESENT( BulkMass ) .AND. ASSOCIATED( A % MassValues) ) THEN
        IF( BulkMass ) THEN
@@ -526,15 +515,28 @@ CONTAINS
          IF ( .NOT. ASSOCIATED( A % BulkMassValues ) ) THEN
            ALLOCATE( A % BulkMassValues( n ) )
          END IF
-         
-         DO i=1,n
-           A % BulkMassValues(i) = A % MassValues(i)
-         END DO         
+
+         A % BulkMassValues(1:n) = A % MassValues(1:n)
+       END IF
+     END IF
+
+     IF( PRESENT( BulkDamp ) .AND. ASSOCIATED( A % DampValues) ) THEN
+       IF( BulkDamp ) THEN
+         n = SIZE( A % DampValues )
+         IF( ASSOCIATED( A % BulkDampValues ) ) THEN
+           IF( SIZE( A % BulkDampValues ) /= n ) THEN
+             DEALLOCATE( A % BulkDampValues ) 
+             A % BulkDampValues => NULL()
+           END IF
+         END IF
+         IF ( .NOT. ASSOCIATED( A % BulkDampValues ) ) THEN
+           ALLOCATE( A % BulkDampValues( n ) )
+         END IF
+
+         A % BulkDampValues(1:n) = A % DampValues(1:n)
        END IF
      END IF
      
-
-
    END SUBROUTINE CopyBulkMatrix
 !------------------------------------------------------------------------------
 
@@ -4100,7 +4102,77 @@ CONTAINS
   END SUBROUTINE ReleaseDirichletDof
 !------------------------------------------------------------------------------
 
-   
+
+  
+!> Release the range or min/max values of Dirichlet values.
+!------------------------------------------------------------------------------
+  FUNCTION DirichletDofsRange( Solver, Oper ) RESULT ( val ) 
+!------------------------------------------------------------------------------
+    TYPE(Solver_t), OPTIONAL :: Solver
+    CHARACTER(LEN=*), OPTIONAL :: Oper 
+    REAL(KIND=dp) :: val
+    
+    TYPE(Matrix_t), POINTER :: A
+    REAL(KIND=dp) :: minv,maxv
+    LOGICAL :: FindMin, FindMax
+    INTEGER :: i,OperNo
+    
+    IF( PRESENT( Solver ) ) THEN
+      A => Solver % Matrix
+    ELSE
+      A => CurrentModel % Solver % Matrix
+    END IF
+    
+    val = 0.0_dp
+    
+    ! Defaulting to range
+    OperNo = 0
+
+    IF( PRESENT( Oper ) ) THEN
+      IF( Oper == 'range' ) THEN
+        OperNo = 0
+      ELSE IF( Oper == 'min' ) THEN
+        OperNo = 1 
+      ELSE IF( Oper == 'max' ) THEN
+        OperNo = 2
+      ELSE
+        CALL Fatal('DirichletDofRange','Unknown operator: '//TRIM(Oper))
+      END IF
+    END IF
+          
+    IF(.NOT. ALLOCATED(A % ConstrainedDOF)) THEN
+      RETURN
+    END IF
+  
+    IF( OperNo == 0 .OR. OperNo == 1 ) THEN
+      minv = HUGE( minv ) 
+      DO i=1,SIZE( A % ConstrainedDOF )
+        IF( A % ConstrainedDOF(i) ) minv = MIN( A % DValues(i), minv ) 
+      END DO
+      minv = ParallelReduction( minv, 1 ) 
+    END IF
+
+    IF( OperNo == 0 .OR. OperNo == 2 ) THEN
+      maxv = -HUGE( maxv ) 
+      DO i=1,SIZE( A % ConstrainedDOF )
+        IF( A % ConstrainedDOF(i) ) maxv = MAX( A % DValues(i), maxv ) 
+      END DO
+      maxv = ParallelReduction( maxv, 2 ) 
+    END IF
+    
+    IF( OperNo == 0 ) THEN    
+      val = maxv - minv
+    ELSE IF( OperNo == 1 ) THEN
+      val = minv
+    ELSE
+      val = maxv
+    END IF
+      
+  END FUNCTION DirichletDofsRange
+!------------------------------------------------------------------------------
+
+
+  
 
 !------------------------------------------------------------------------------
 !> Set dirichlet boundary condition for given dof. The conditions are
@@ -4128,7 +4200,7 @@ CONTAINS
     TYPE(Element_t), POINTER :: Element
     INTEGER, POINTER :: NodeIndexes(:), IndNodes(:), BCOrder(:)
     INTEGER, ALLOCATABLE :: Indexes(:), PassPerm(:)
-    INTEGER :: BC,i,j,j2,k,l,m,n,t,k1,k2,OffSet
+    INTEGER :: BC,i,j,j2,k,l,m,n,nd,p,t,k1,k2,OffSet
     LOGICAL :: GotIt, periodic, OrderByBCNumbering, ReorderBCs
     REAL(KIND=dp), POINTER :: MinDist(:)
     REAL(KIND=dp), POINTER :: WorkA(:,:,:) => NULL()
@@ -4150,6 +4222,8 @@ CONTAINS
     LOGICAL :: NodesFound, Passive, OffDiagonal, ApplyLimiter
     LOGICAL, POINTER :: LimitActive(:)
     TYPE(Variable_t), POINTER :: Var
+
+    TYPE(Element_t), POINTER :: Parent
 
     INTEGER :: ind, ElemFirst, ElemLast, bf, BCstr, BCend, BCinc
     REAL(KIND=dp) :: SingleVal
@@ -4297,7 +4371,18 @@ CONTAINS
 
             IF ( ActivePart(BC) ) THEN
               n = Element % TYPE % NumberOfNodes
-              Indexes(1:n) = Element % NodeIndexes
+              IF ( Model % Solver % DG ) THEN
+                 Parent => Element % BoundaryInfo % Left
+                 DO p=1,Parent % Type % NumberOfNodes
+                   DO j=1,n
+                      IF (Parent % NodeIndexes(p) == Element % NodeIndexes(j) ) THEN
+                        Indexes(j) = Parent % DGIndexes(p); EXIT
+                      END IF
+                   END DO
+                 END DO
+              ELSE
+                Indexes(1:n) = Element % NodeIndexes
+              END IF
             ELSE
               n = SgetElementDOFs( Indexes )
             END IF
@@ -4318,7 +4403,18 @@ CONTAINS
             Model % CurrentElement => Element
             IF ( ActivePart(BC) ) THEN
               n = Element % TYPE % NumberOfNodes
-              Indexes(1:n) = Element % NodeIndexes
+              IF ( Model % Solver % DG ) THEN
+                 Parent => Element % BoundaryInfo % Left
+                 DO p=1,Parent % Type % NumberOfNodes
+                   DO j=1,n
+                      IF (Parent % NodeIndexes(p) == Element % NodeIndexes(j) ) THEN
+                        Indexes(j) = Parent % DGIndexes(p); EXIT
+                      END IF
+                   END DO
+                 END DO
+              ELSE
+                Indexes(1:n) = Element % NodeIndexes
+              END IF
             ELSE
               n = SgetElementDOFs( Indexes )
             END IF
@@ -4359,7 +4455,18 @@ CONTAINS
             Model % CurrentElement => Element
             IF ( ActivePart(BC) ) THEN
               n = Element % TYPE % NumberOfNodes
-              Indexes(1:n) = Element % NodeIndexes
+              IF ( Model % Solver % DG ) THEN
+                 Parent => Element % BoundaryInfo % Left
+                 DO p=1,Parent % Type % NumberOfNodes
+                   DO j=1,n
+                      IF (Parent % NodeIndexes(p) == Element % NodeIndexes(j) ) THEN
+                        Indexes(j) = Parent % DGIndexes(p); EXIT
+                      END IF
+                   END DO
+                 END DO
+              ELSE
+                Indexes(1:n) = Element % NodeIndexes
+              END IF
             ELSE
               n = SgetElementDOFs( Indexes )
             END IF
@@ -4380,7 +4487,18 @@ CONTAINS
             Model % CurrentElement => Element
             IF ( ActivePart(BC) ) THEN
               n = Element % TYPE % NumberOfNodes
-              Indexes(1:n) = Element % NodeIndexes
+              IF ( Model % Solver % DG ) THEN
+                 Parent => Element % BoundaryInfo % Left
+                 DO p=1,Parent % Type % NumberOfNodes
+                   DO j=1,n
+                      IF (Parent % NodeIndexes(p)  == Element % NodeIndexes(j) ) THEN
+                        Indexes(j) = Parent % DGIndexes(p); EXIT
+                      END IF
+                   END DO
+                 END DO
+              ELSE
+                Indexes(1:n) = Element % NodeIndexes
+              END IF
             ELSE
               n = SgetElementDOFs( Indexes )
             END IF
@@ -4977,7 +5095,11 @@ CONTAINS
       dim = CoordinateSystemDimension()
 
       IF ( DOF > 0 ) THEN
-        Work(1:n)  = ListGetReal( ValueList, Name, n, Indexes, gotIt )
+        IF (Model % Solver % DG) THEN
+          Work(1:n)  = ListGetReal( ValueList, Name, n, Element % NodeIndexes, gotIt )
+        ELSE
+          Work(1:n)  = ListGetReal( ValueList, Name, n, Indexes, gotIt )
+        END IF
         IF ( .NOT. GotIt ) THEN
           Work(1:n)  = ListGetReal( ValueList, Name(1:nlen) // ' DOFs', n, Indexes, gotIt )
         END IF
@@ -4987,7 +5109,11 @@ CONTAINS
       
       IF ( gotIt ) THEN
         IF ( Conditional ) THEN
-          Condition(1:n) = ListGetReal( ValueList, CondName, n, Indexes, gotIt )
+          IF (Model % Solver % DG) THEN
+            Condition(1:n) = ListGetReal( ValueList, CondName, n, Element % NodeIndexes, gotIt )
+          ELSE
+            Condition(1:n) = ListGetReal( ValueList, CondName, n, Indexes, gotIt )
+          END IF
           Conditional = Conditional .AND. GotIt
         END IF
 
@@ -5967,12 +6093,6 @@ CONTAINS
     CALL Info('SetConstraintModesBoundaries','Setting constraint modes boundaries for variable: '&
         //TRIM(Name),Level=7)
 
-    IF( .NOT. ListGetLogicalAnyBC( Model,'Constraint Modes ' // Name(1:nlen)) ) THEN
-      CALL Warn('SetConstraintModesBoundaries',&
-          'Constraint Modes Analysis requested but no constrained BCs given!')
-      RETURN
-    END IF
-
     ! Allocate the indeces for the constraint modes
     ALLOCATE( Var % ConstraintModesIndeces( A % NumberOfRows ) )
     Var % ConstraintModesIndeces = 0
@@ -5983,15 +6103,25 @@ CONTAINS
     j = 0 
     DO bc_id = 1,Model % NumberOfBCs
       BC => Model % BCs(bc_id) % Values        
-      IF( ListGetLogical( BC,& 
+      k = ListGetInteger( BC,&
+          'Constraint Mode '// Name(1:nlen), Found )
+      IF( Found ) THEN
+        IF( k == 0 ) k = -1  ! Ground gets negative value
+        BCPerm(bc_id) = k        
+      ELSE IF( ListGetLogical( BC,& 
           'Constraint Modes ' // Name(1:nlen), Found ) ) THEN
         j = j + 1
         BCPerm(bc_id) = j
       END IF
     END DO
+    
+    j = MAXVAL( BCPerm ) 
     CALL Info('SetConstraintModesBoundaries','Number of active constraint modes boundaries: '&
         //TRIM(I2S(j)),Level=7)
-
+    IF( j == 0 ) THEN
+      CALL Fatal('SetConstraintModesBoundaries',&
+          'Constraint Modes Analysis requested but no constrained BCs given!')
+    END IF
 
     Var % NumberOfConstraintModes = NDOFS * j 
     
@@ -6035,9 +6165,6 @@ CONTAINS
       IF( Var % ConstraintModesIndeces(k) == 0 ) CYCLE
       A % ConstrainedDOF(k) = .TRUE.
       A % DValues(k) = 0.0_dp
-      !b(k) = 0.0_dp
-      !CALL ZeroRow(A,k)
-      !CALL SetMatrixElement( A,k,k,1._dp )
     END DO
     
     ALLOCATE( Var % ConstraintModes( Var % NumberOfConstraintModes, A % NumberOfRows ) )
@@ -6491,7 +6618,7 @@ CONTAINS
          CALL MPI_RECV( r_e,n,MPI_INTEGER,j-1,111,ELMER_COMM_WORLD,status,ierr )
          CALL MPI_RECV( g_e,n,MPI_DOUBLE_PRECISION,j-1,112,ELMER_COMM_WORLD, status,ierr )
          DO j=1,n
-           k = SearchNode( A % ParallelInfo, r_e(j), Order= A % Perm )
+           k = SearchNode( A % ParallelInfo, r_e(j), Order=A % ParallelInfo % Gorder )
            IF ( k>0 ) THEN
              IF(.NOT. A % ConstrainedDOF(k)) THEN
                CALL ZeroRow(A, k )
@@ -8702,6 +8829,97 @@ END FUNCTION SearchNodeL
     
 
 
+
+!------------------------------------------------------------------------------
+!> Adaptive version for getting gaussian integration points
+!----------------------------------------------------------------------------------------------
+
+  FUNCTION GaussPointsAdapt( Element, Solver, PReferenceElement ) RESULT(IntegStuff)
+
+    IMPLICIT NONE
+    TYPE(Element_t) :: Element
+    TYPE(Solver_t), OPTIONAL, TARGET :: Solver
+    LOGICAL, OPTIONAL :: PReferenceElement           !< For switching to the p-version reference element
+    TYPE( GaussIntegrationPoints_t ) :: IntegStuff   !< Structure holding the integration points
+
+    CHARACTER(LEN=MAX_NAME_LEN) :: VarName
+    TYPE(Solver_t), POINTER :: pSolver, prevSolver => NULL()
+    TYPE(Variable_t), POINTER :: IntegVar
+    INTEGER :: AdaptOrder, AdaptNp, Np, RelOrder
+    REAL(KIND=dp) :: MinLim, MaxLim, MinV, MaxV, V
+    LOGICAL :: UseAdapt, Found
+    INTEGER :: i,n
+    LOGICAL :: Debug
+
+    
+    SAVE prevSolver, UseAdapt, MinLim, MaxLim, IntegVar, AdaptOrder, AdaptNp, RelOrder, Np
+
+    IF( PRESENT( Solver ) ) THEN
+      pSolver => Solver
+    ELSE
+      pSolver => CurrentModel % Solver
+    END IF
+
+    Debug = ( Element % ElementIndex == 0)
+    
+    IF( .NOT. ASSOCIATED( pSolver, prevSolver ) ) THEN
+      RelOrder = ListGetInteger( pSolver % Values,'Relative Integration Order',Found )
+      AdaptNp = 0
+      Np = 0
+      
+      VarName = ListGetString( pSolver % Values,'Adaptive Integration Variable',UseAdapt )
+      IF( UseAdapt ) THEN
+        CALL Info('GaussPointsAdapt','Using adaptive gaussian integration rules')
+        IntegVar => VariableGet( pSolver % Mesh % Variables, VarName )
+        IF( .NOT. ASSOCIATED( IntegVar ) ) THEN
+          CALL Fatal('GaussPointsAdapt','> Adaptive Integration Variable < does not exist')
+        END IF
+        IF( IntegVar % TYPE /= Variable_on_nodes ) THEN
+          CALL Fatal('GaussPointsAdapt','Wrong type of integration variable!')
+        END IF
+        MinLim = ListGetCReal( pSolver % Values,'Adaptive Integration Lower Limit' )
+        MaxLim = ListGetCReal( pSolver % Values,'Adaptive Integration Upper Limit' )
+        AdaptNp = ListGetInteger( pSolver % Values,'Adaptive Integration Points',Found )
+        IF(.NOT. Found ) THEN
+          AdaptOrder = ListGetInteger( pSolver % Values,'Adaptive Integration Order',Found )        
+        END IF
+        IF(.NOT. Found ) AdaptOrder = 1
+
+        PRINT *,'Adaptive Integration Strategy:',MinV,MaxV,AdaptOrder,AdaptNp
+      END IF
+
+      prevSolver => pSolver      
+    END IF
+
+    IF( UseAdapt ) THEN
+      RelOrder = 0
+      Np = 0
+
+      n = Element % TYPE % NumberOfNodes        
+      MinV = MINVAL( IntegVar % Values( IntegVar % Perm( Element % NodeIndexes(1:n) ) ) )
+      MaxV = MAXVAL( IntegVar % Values( IntegVar % Perm( Element % NodeIndexes(1:n) ) ) )
+      
+      IF( .NOT. ( MaxV < MinLim .OR. MinV > MaxLim ) ) THEN
+        RelOrder = AdaptOrder
+        Np = AdaptNp
+      END IF
+    END IF
+      
+    IF( Debug ) PRINT *,'Adapt',UseAdapt,Element % ElementIndex, n,MaxV,MinV,MaxLim,MinLim,Np,RelOrder
+
+    IF( Np > 0 ) THEN
+      IntegStuff = GaussPoints( Element, Np = Np, PReferenceElement = PReferenceElement ) 
+    ELSE IF( RelOrder /= 0 ) THEN
+      IntegStuff = GaussPoints( Element, RelOrder = RelOrder, PReferenceElement = PReferenceElement ) 
+    ELSE      
+      IntegStuff = GaussPoints( Element, PReferenceElement = PReferenceElement ) 
+    END IF
+
+    IF( Debug ) PRINT *,'Adapt real nodes',IntegStuff % n
+      
+  END FUNCTION GaussPointsAdapt
+  
+
 !------------------------------------------------------------------------------
 !> Checks stepsize of a linear system so that the error has decreased.
 !> Various indicatators and search algorithms have been implemented,
@@ -9896,7 +10114,7 @@ END FUNCTION SearchNodeL
     INTEGER :: n,i,j
     REAL(KIND=dp) :: bnorm,s
     COMPLEX(KIND=dp) :: DiagC
-    LOGICAL :: ComplexMatrix, DoRHS, DoCM
+    LOGICAL :: ComplexMatrix, DoRHS, DoCM, Found
     REAL(KIND=dp), POINTER  :: Diag(:)
 
     TYPE(Matrix_t), POINTER :: CM
@@ -9917,7 +10135,11 @@ END FUNCTION SearchNodeL
       Diag = 0._dp
     
       ComplexMatrix = Solver % Matrix % COMPLEX
-            
+
+      IF( ListGetLogical( Solver % Values,'Linear System Pseudo Complex',Found ) ) THEN
+        ComplexMatrix = .TRUE.
+      END IF
+      
       IF ( ComplexMatrix ) THEN
         CALL Info('ScaleLinearSystem','Assuming complex matrix while scaling',Level=20)
 
@@ -11370,7 +11592,8 @@ END FUNCTION SearchNodeL
     END IF
 
     IF ( ParEnv % PEs <= 1 ) THEN
-
+      CALL Info('SolveSystem','Serial linear System Solver: '//TRIM(Method),Level=8)
+      
       SELECT CASE(Method)
       CASE('multigrid')
         CALL MultiGridSolve( A, x, b, &
@@ -11383,10 +11606,12 @@ END FUNCTION SearchNodeL
       CASE('block')
         CALL BlockSolveExt( A, x, b, Solver )
       CASE DEFAULT
-        CALL DirectSolver( A, x, b, Solver )
+        CALL DirectSolver( A, x, b, Solver )        
       END SELECT
     ELSE
-      SELECT CASE(Method)
+      CALL Info('SolveSystem','Parallel linear System Solver: '//TRIM(Method),Level=8)
+
+    SELECT CASE(Method)
       CASE('multigrid')
         CALL MultiGridSolve( A, x, b, &
             DOFs, Solver, Solver % MultiGridLevel )
@@ -11879,6 +12104,7 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
     LOGICAL :: PrecRecompute, Stat, Found, ComputeFluxes, Symmetric
     REAL(KIND=dp), POINTER CONTIG :: PValues(:)
     REAL(KIND=dp), ALLOCATABLE :: Fluxes(:), FluxesMatrix(:,:)
+    CHARACTER(LEN=MAX_NAME_LEN) :: MatrixFile
     !------------------------------------------------------------------------------
     n = StiffMatrix % NumberOfRows
     
@@ -11932,14 +12158,10 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
         DO j=1,n
           k = Var % ConstraintModesIndeces(j)
           IF( k > 0 ) THEN
-            IF(.FALSE.) THEN
-              FluxesMatrix(i,k) = FluxesMatrix(i,k) + Fluxes(j)
-            ELSE
-              IF( i /= k ) THEN
-                FluxesMatrix(i,k) = FluxesMatrix(i,k) - Fluxes(j)
-              END IF
-              FluxesMatrix(i,i) = FluxesMatrix(i,i) + Fluxes(j)
+            IF( i /= k ) THEN
+              FluxesMatrix(i,k) = FluxesMatrix(i,k) - Fluxes(j)
             END IF
+            FluxesMatrix(i,i) = FluxesMatrix(i,i) + Fluxes(j)
           END IF
         END DO
       END IF
@@ -11952,16 +12174,32 @@ SUBROUTINE SolveConstraintModesSystem( StiffMatrix, Solver )
       IF( Symmetric ) THEN
         FluxesMatrix = 0.5_dp * ( FluxesMatrix + TRANSPOSE( FluxesMatrix ) )
       END IF
+      
+      CALL Info( 'SolveConstraintModesSystem','Constraint Modes Fluxes', Level=5 )
       DO i=1,m
         DO j=1,m
           IF( Symmetric .AND. j < i ) CYCLE
           WRITE( Message, '(I3,I3,ES15.5)' ) i,j,FluxesMatrix(i,j)
-          CALL Info( 'SolveConstraintModesSystem', Message, Level=4 )
+          CALL Info( 'SolveConstraintModesSystem', Message, Level=5 )
         END DO
       END DO
+      
+      MatrixFile = ListGetString(Solver % Values,'Constraint Modes Fluxes Filename',Found )
+      IF( Found ) THEN
+        OPEN (10, FILE=MatrixFile)
+        DO i=1,m
+          DO j=1,m
+            WRITE (10,'(ES17.9)',advance='no') FluxesMatrix(i,j)
+          END DO
+          WRITE(10,'(A)') ' '
+        END DO
+        CLOSE(10)     
+        CALL Info( 'SolveConstraintModesSystem',&
+            'Constraint modes fluxes was saved to file '//TRIM(MatrixFile),Level=5)
+      END IF
+      
       DEALLOCATE( Fluxes )
     END IF
-
 
     CALL ListAddLogical( Solver % Values,'No Precondition Recompute',.FALSE.)
     
@@ -12035,15 +12273,145 @@ SUBROUTINE VariableNameParser(var_name, NoOutput, Global, Dofs, IpVariable, Elem
 END SUBROUTINE VariableNameParser
 
 
+   !> Create permutation for fields on integration points, optionally with mask.
+   !> The non-masked version is saved to Solver structure for reuse while the
+   !> masked version may be unique to every variable. 
+   !-----------------------------------------------------------------------------------
+   SUBROUTINE CreateIpPerm( Solver, MaskPerm, MaskName, SecName, UpdateOnly )
+
+     TYPE(Solver_t), POINTER :: Solver
+     INTEGER, POINTER, OPTIONAL :: MaskPerm(:)
+     CHARACTER(LEN=MAX_NAME_LEN), OPTIONAL :: MaskName, SecName      
+     LOGICAL, OPTIONAL :: UpdateOnly
+     
+     TYPE(Mesh_t), POINTER :: Mesh
+     TYPE(GaussIntegrationPoints_t) :: IP
+     TYPE(Element_t), POINTER :: Element
+     INTEGER :: t, n, IpCount , RelOrder, nIp
+     CHARACTER(LEN=MAX_NAME_LEN) :: EquationName
+     LOGICAL :: Found, ActiveElem, ActiveElem2
+     INTEGER, POINTER :: IpOffset(:) 
+     TYPE(ValueList_t), POINTER :: BF
+     LOGICAL :: UpdatePerm
+     
+     n = 0
+     IF( PRESENT( MaskPerm ) ) n = n + 1
+     IF( PRESENT( MaskName ) ) n = n + 1
+     IF( PRESENT( SecName ) ) n = n + 1
+     IF( PRESENT( UpdateOnly ) ) n = n + 1
+     
+     ! Currently a lazy check
+     IF( n /= 0 .AND. n /= 3 .AND. n /= 2) THEN
+       CALL Fatal('CreateIpPerm','Only some optional parameter combinations are possible')
+     END IF
+
+     UpdatePerm = .FALSE.
+     IF( PRESENT( UpdateOnly ) ) UpdatePerm = UpdateOnly
+
+     IF( UpdatePerm ) THEN
+       CALL Info('CreateIpPerm','Updating IP permutation table',Level=8)       
+     ELSE IF( PRESENT( MaskPerm ) ) THEN
+       CALL Info('CreateIpPerm','Creating masked permutation for integration points',Level=8)
+     ELSE       
+       IF( ASSOCIATED( Solver % IpTable ) ) THEN
+         CALL Info('CreateIpPerm','IpTable already allocated, returning')
+       END IF
+       CALL Info('CreateIpPerm','Creating permuation for integration points',Level=8)       
+     END IF
+       
+     EquationName = ListGetString( Solver % Values, 'Equation', Found)
+     IF( .NOT. Found ) THEN
+       CALL Fatal('CreateIpPerm','Equation not present!')
+     END IF     
+     
+     Mesh => Solver % Mesh
+     NULLIFY( IpOffset ) 
+
+     n = Mesh % NumberOfBulkElements + Mesh % NumberOFBoundaryElements
+
+     IF( UpdatePerm ) THEN
+       IpOffset => MaskPerm
+       ActiveElem = (IpOffset(2)-IpOffset(1) > 0 )
+       IF( n >= 2 ) ActiveElem2 = (IpOffset(3)-IpOffset(2) > 0 )
+     ELSE
+       ALLOCATE( IpOffset( n + 1) )     
+       IpOffset = 0
+       IF( PRESENT( MaskPerm ) ) MaskPerm => IpOffset
+     END IF
+     IpCount = 0
+
+     nIp = ListGetInteger( Solver % Values,'Gauss Points on Ip Variables', Found ) 
+     
+     DO t=1,Mesh % NumberOfBulkElements + Mesh % NumberOFBoundaryElements
+       Element => Mesh % Elements(t)
+            
+       IF( .NOT. UpdatePerm ) THEN
+         ActiveElem = .FALSE.
+         IF( Element % PartIndex == ParEnv % myPE ) THEN
+           IF ( CheckElementEquation( CurrentModel, Element, EquationName ) ) THEN             
+             IF( PRESENT( MaskName ) ) THEN
+               BF => ListGetSection( Element, SecName )
+               ActiveElem = ListGetLogicalGen( BF, MaskName )
+             ELSE
+               ActiveElem = .TRUE.
+             END IF
+           END IF
+         END IF
+       END IF
+         
+       IF( ActiveElem ) THEN
+         IF( nIp > 0 ) THEN
+           IpCount = IpCount + nIp
+         ELSE
+           IP = GaussPointsAdapt( Element )
+           IpCount = IpCount + Ip % n
+         END IF
+       END IF
+
+       ! We are reusing the permutation table hence we must be one step ahead 
+       IF( UpdatePerm .AND. n >= t+1) THEN
+         ActiveElem = ActiveElem2
+         ActiveElem2 = (IpOffset(t+2)-IpOffset(t+1) > 0 )
+       END IF
+         
+       IpOffset(t+1) = IpCount
+     END DO
+
+     IF( .NOT. PRESENT( MaskPerm ) ) THEN
+       ALLOCATE( Solver % IpTable ) 
+       Solver % IpTable % IpOffset => IpOffset
+       Solver % IpTable % IpCount = IpCount
+     END IF
+
+     IF( UpdatePerm ) THEN
+       CALL Info('CreateIpPerm','Updated permutation for IP points: '//TRIM(I2S(IpCount)),Level=8)  
+     ELSE       
+       CALL Info('CreateIpPerm','Created permutation for IP points: '//TRIM(I2S(IpCount)),Level=8)  
+     END IF
+       
+   END SUBROUTINE CreateIpPerm
+
+   
+   SUBROUTINE UpdateIpPerm( Solver, Perm )
+
+     TYPE(Solver_t), POINTER :: Solver
+     INTEGER, POINTER :: Perm(:)
+
+     CALL CreateIpPerm( Solver, Perm, UpdateOnly = .TRUE.)
+
+   END SUBROUTINE UpdateIpPerm
+
+
+
 !------------------------------------------------------------------------------
 !> Updates values for exported variables which are typically auxiliary variables derived
 !> from the solution.
 !------------------------------------------------------------------------------
   SUBROUTINE UpdateExportedVariables( Solver )  
 !------------------------------------------------------------------------------
-  TYPE(Solver_t) :: Solver
+  TYPE(Solver_t), TARGET :: Solver
   
-  INTEGER :: i,j,k,l,n,m,t,bf_id,dofs,nsize,i1,i2
+  INTEGER :: i,j,k,l,n,m,t,bf_id,dofs,nsize,i1,i2,NoGauss
   CHARACTER(LEN=MAX_NAME_LEN) :: str, var_name,tmpname,condname
   REAL(KIND=dp), POINTER :: Values(:), Solution(:), LocalSol(:), LocalCond(:)
   INTEGER, POINTER :: Indexes(:), VarIndexes(:), Perm(:)
@@ -12058,6 +12426,8 @@ END SUBROUTINE VariableNameParser
   REAL(KIND=dp) :: detJ
   TYPE(ValueHandle_t) :: LocalSol_h
   TYPE(Mesh_t), POINTER :: Mesh
+  TYPE(Solver_t), POINTER :: pSolver
+
   
   SAVE LocalSol_h
 
@@ -12166,7 +12536,7 @@ END SUBROUTINE VariableNameParser
         CALL ListInitElementKeyword( LocalSol_h,'Body Force',TmpName )
       END IF
 
-      DO t = 1, Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
+100   DO t = 1, Mesh % NumberOfBulkElements + Mesh % NumberOfBoundaryElements
 
         Element => Mesh % Elements(t) 
         IF( Element % BodyId <= 0 ) CYCLE
@@ -12183,32 +12553,47 @@ END SUBROUTINE VariableNameParser
         ValueList => CurrentModel % BodyForces(bf_id) % Values
 
         IF( ExpVariable % TYPE == Variable_on_gauss_points ) THEN 
-
+    
           i1 = Perm( Element % ElementIndex )
           i2 = Perm( Element % ElementIndex + 1 )
+          NoGauss = i2 - i1
           
-          IF( i2 - i1 > 0 ) THEN            
-            Nodes % x(1:m) = Mesh % Nodes % x(Indexes)
-            Nodes % y(1:m) = Mesh % Nodes % y(Indexes)
-            Nodes % z(1:m) = Mesh % Nodes % z(Indexes)
+          ! This is not active here
+          IF( NoGauss == 0 ) CYCLE
+          
+          IP = GaussPointsAdapt( Element, Solver )
 
-                       
-            IP = GaussPoints( Element )
-            IF( i2 - i1 /= Ip % n ) THEN
-              CALL Warn('UpdateExportedVariables','Incompatible number of Gauss points, skipping')
-            ELSE
-              IF( Conditional ) THEN
-                CALL Warn('UpdateExportedVariable','Elemental variables not conditional!')
-              END IF
-                            
-              
-              DO k=1,IP % n
-                stat = ElementInfo( Element, Nodes, IP % U(k), IP % V(k), &
-                    IP % W(k), detJ, Basis )
-                Solution(i1+k) = ListGetElementReal( LocalSol_h,Basis,Element,Found,GaussPoint=k) 
-              END DO
+          IF( NoGauss /= IP % n ) THEN
+            
+            CALL Info('UpdateExportedVariables','Number of Gauss points has changed, redoing permutations!',Level=8)
+
+            pSolver => Solver
+            CALL UpdateIpPerm( pSolver, Perm )
+            m = MAXVAL( Perm )
+
+            CALL Info('UpdateExportedVariables','Total number of new IP dofs: '//TRIM(I2S(m)))
+
+            IF( SIZE( ExpVariable % Values ) / ExpVariable % Dofs == m ) THEN
+              DEALLOCATE( ExpVariable % Values )
+              ALLOCATE( ExpVariable % Values( m * ExpVariable % Dofs ) )
             END IF
+            ExpVariable % Values = 0.0_dp
+            GOTO 100 
           END IF
+          
+          Nodes % x(1:m) = Mesh % Nodes % x(Indexes)
+          Nodes % y(1:m) = Mesh % Nodes % y(Indexes)
+          Nodes % z(1:m) = Mesh % Nodes % z(Indexes)
+
+          IF( Conditional ) THEN
+            CALL Warn('UpdateExportedVariable','Elemental variable cannot be conditional!')
+          END IF
+
+          DO k=1,IP % n
+            stat = ElementInfo( Element, Nodes, IP % U(k), IP % V(k), &
+                IP % W(k), detJ, Basis )
+            Solution(i1+k) = ListGetElementReal( LocalSol_h,Basis,Element,Found,GaussPoint=k) 
+          END DO
           
         ELSE IF( ExpVariable % TYPE == Variable_on_elements ) THEN
           IF( Conditional ) THEN
@@ -12266,8 +12651,11 @@ SUBROUTINE NSCondensate( N, Nb, dim, K, F, F1 )
 !------------------------------------------------------------------------------
     USE LinearAlgebra
     INTEGER :: N, Nb, dim
-    REAL(KIND=dp) :: K(:,:),F(:),F1(:), Kbb(nb*dim,nb*dim), &
-      Kbl(nb*dim,n*(dim+1)),Klb(n*(dim+1),nb*dim),Fb(nb*dim)
+    REAL(KIND=dp) :: K(:,:), F(:)
+    REAL(KIND=dp), OPTIONAL :: F1(:)
+
+    REAL(KIND=dp) :: Kbb(nb*dim,nb*dim)
+    REAL(KIND=dp) :: Kbl(nb*dim,n*(dim+1)), Klb(n*(dim+1),nb*dim), Fb(nb*dim)
 
     INTEGER :: m, i, j, l, p, Cdofs((dim+1)*n), Bdofs(dim*nb)
 
@@ -12298,12 +12686,19 @@ SUBROUTINE NSCondensate( N, Nb, dim, K, F, F1 )
     K(1:(dim+1)*n,1:(dim+1)*n) = &
     K(1:(dim+1)*n,1:(dim+1)*n) - MATMUL( Klb, MATMUL( Kbb,Kbl ) )
 
-    Fb  = F1(Bdofs)
-    F1(1:(dim+1)*n) = F1(1:(dim+1)*n) - MATMUL( Klb, MATMUL( Kbb, Fb ) )
+    IF (PRESENT(F1)) THEN
+      Fb  = F1(Bdofs)
+      F1(1:(dim+1)*n) = F1(1:(dim+1)*n) - MATMUL( Klb, MATMUL( Kbb, Fb ) )
+    END IF
 !------------------------------------------------------------------------------
 END SUBROUTINE NSCondensate
 !------------------------------------------------------------------------------
 
+!------------------------------------------------------------------------------
+!> Subroutine for the static condensation of element bubbles when there are
+!> as many bubbles as DOFs left in the matrix (historically this convention
+!> was used; now the count of elementwise bubble functions can be chosen
+!> flexibly and then the subroutine CondensateP should be called instead).
 !------------------------------------------------------------------------------
 SUBROUTINE Condensate( N, K, F, F1 )
 !------------------------------------------------------------------------------
@@ -12312,36 +12707,20 @@ SUBROUTINE Condensate( N, K, F, F1 )
     REAL(KIND=dp) :: K(:,:),F(:)
     REAL(KIND=dp), OPTIONAL :: F1(:)
 !------------------------------------------------------------------------------    
-    REAL(KIND=dp) :: Kbb(N,N), &
-        Kbl(N,N),Klb(N,N),Fb(N)
-    INTEGER :: m, i, j, l, p, Ldofs(N), Bdofs(N)
-
-    Ldofs = (/ (i, i=1,n) /)
-    Bdofs = Ldofs + n
-
-    Kbb = K(Bdofs,Bdofs)
-    Kbl = K(Bdofs,Ldofs)
-    Klb = K(Ldofs,Bdofs)
-    Fb  = F(Bdofs)
-
-    CALL InvertMatrix( Kbb,n )
-
-    F(1:n) = F(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
-    K(1:n,1:n) = K(1:n,1:n) - MATMUL( Klb, MATMUL( Kbb, Kbl ) )
-
-    IF( PRESENT( F1 ) ) THEN
-      Fb  = F1(Bdofs)
-      F1(1:n) = F1(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
+    IF ( PRESENT(F1) ) THEN
+      CALL CondensateP( N, N, K, F, F1 )
+    ELSE
+      CALL CondensateP( N, N, K, F )
     END IF
 !------------------------------------------------------------------------------
 END SUBROUTINE Condensate
 !------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------
-!>     Subroutine for condensation of p element bubbles from linear problem.
-!>     Modifies given stiffness matrix and force vector(s) 
+!> Subroutine for condensation of p element bubbles from linear problem.
+!> Modifies given stiffness matrix and force vector(s) 
 !------------------------------------------------------------------------------
-SUBROUTINE CondensateP( N, Nb, K, F, F1 )
+SUBROUTINE CondensatePR( N, Nb, K, F, F1 )
 !------------------------------------------------------------------------------
     USE LinearAlgebra
     INTEGER :: N               !< Sum of nodal, edge and face degrees of freedom.
@@ -12350,9 +12729,10 @@ SUBROUTINE CondensateP( N, Nb, K, F, F1 )
     REAL(KIND=dp) :: F(:)      !< Local force vector.
     REAL(KIND=dp), OPTIONAL :: F1(:)  !< Local second force vector.
 !------------------------------------------------------------------------------
-    REAL(KIND=dp) :: Kbb(Nb,Nb), &
-    Kbl(Nb,N), Klb(N,Nb), Fb(Nb)
-    INTEGER :: m, i, j, l, p, Ldofs(N), Bdofs(Nb)
+    REAL(KIND=dp) :: Kbb(Nb,Nb), Kbl(Nb,N), Klb(N,Nb), Fb(Nb)
+    INTEGER :: i, Ldofs(N), Bdofs(Nb)
+
+    IF ( nb <= 0 ) RETURN
 
     Ldofs = (/ (i, i=1,n) /)
     Bdofs = (/ (i, i=n+1,n+nb) /)
@@ -12366,14 +12746,53 @@ SUBROUTINE CondensateP( N, Nb, K, F, F1 )
 
     F(1:n) = F(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
     IF (PRESENT(F1)) THEN
+      Fb  = F1(Bdofs)
       F1(1:n) = F1(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
     END IF
 
     K(1:n,1:n) = K(1:n,1:n) - MATMUL( Klb, MATMUL( Kbb, Kbl ) )
 !------------------------------------------------------------------------------
-END SUBROUTINE CondensateP
+END SUBROUTINE CondensatePR
 !------------------------------------------------------------------------------
 
+!------------------------------------------------------------------------------
+!> Subroutine for condensation of p element bubbles from complex-valued linear 
+!> problem. Modifies given stiffness matrix and force vector(s) 
+!------------------------------------------------------------------------------
+SUBROUTINE CondensatePC( N, Nb, K, F, F1 )
+!------------------------------------------------------------------------------
+    USE LinearAlgebra
+    INTEGER :: N               !< Sum of nodal, edge and face degrees of freedom.
+    INTEGER :: Nb              !< Sum of internal (bubble) degrees of freedom.
+    COMPLEX(KIND=dp) :: K(:,:)    !< Local stiffness matrix.
+    COMPLEX(KIND=dp) :: F(:)      !< Local force vector.
+    COMPLEX(KIND=dp), OPTIONAL :: F1(:)  !< Local second force vector.
+!------------------------------------------------------------------------------
+    COMPLEX(KIND=dp) :: Kbb(Nb,Nb), Kbl(Nb,N), Klb(N,Nb), Fb(Nb)
+    INTEGER :: i, Ldofs(N), Bdofs(Nb)
+
+    IF ( nb <= 0 ) RETURN
+
+    Ldofs = (/ (i, i=1,n) /)
+    Bdofs = (/ (i, i=n+1,n+nb) /)
+
+    Kbb = K(Bdofs,Bdofs)
+    Kbl = K(Bdofs,Ldofs)
+    Klb = K(Ldofs,Bdofs)
+    Fb  = F(Bdofs)
+
+    CALL ComplexInvertMatrix( Kbb,nb )
+
+    F(1:n) = F(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
+    IF (PRESENT(F1)) THEN
+      Fb  = F1(Bdofs)
+      F1(1:n) = F1(1:n) - MATMUL( Klb, MATMUL( Kbb, Fb  ) )
+    END IF
+
+    K(1:n,1:n) = K(1:n,1:n) - MATMUL( Klb, MATMUL( Kbb, Kbl ) )
+!------------------------------------------------------------------------------
+  END SUBROUTINE CondensatePC
+!------------------------------------------------------------------------------
 
 !------------------------------------------------------------------------------
 !> Solves a harmonic system.
@@ -13893,9 +14312,9 @@ CONTAINS
               proc, 7004, ELMER_COMM_WORLD, status, ierr )
 
            DO j=1,rcnt
-             l = SearchNode(A % ParallelInfo,rcol(j),Order=A % Perm)
+             l = SearchNode(A % ParallelInfo,rcol(j),Order=A % ParallelInfo % Gorder )
              IF ( l>0 ) THEN
-               k = SearchNode(A % ParallelInfo,rrow(j),Order=A % Perm)
+               k = SearchNode(A % ParallelInfo,rrow(j),Order=A % ParallelInfo % Gorder )
                IF ( k>0 ) THEN
                  IF ( l>=k ) THEN
                    DO m=Diag(k),Rows(k+1)-1
@@ -13939,8 +14358,9 @@ CONTAINS
     TYPE(ValueList_t), POINTER :: Params
     CHARACTER(LEN=MAX_NAME_LEN) :: dumpfile, dumpprefix
     INTEGER, POINTER :: Perm(:)
+    REAL(KIND=dp), POINTER :: Sol(:)
     INTEGER :: i
-    LOGICAL :: SaveMass, SaveDamp, SavePerm, Found , Parallel, CNumbering
+    LOGICAL :: SaveMass, SaveDamp, SavePerm, SaveSol, Found , Parallel, CNumbering
 !------------------------------------------------------------------------------
 
     CALL Info('SaveLinearSystem','Saving linear system',Level=4)
@@ -14002,6 +14422,26 @@ CONTAINS
         CLOSE( 1 ) 
       END IF
     END IF
+
+
+    SaveSol = ListGetLogical( Params,'Linear System Save Solution',Found)
+    IF( SaveSol ) THEN
+      Sol => Solver % Variable % Values
+      IF( .NOT. ASSOCIATED( Sol ) ) THEN
+        CALL Warn('SaveLinearSystem','Solution not associated!')
+        SaveSol = .FALSE.
+      ELSE
+        dumpfile = TRIM(dumpprefix)//'_sol.dat'
+        IF(Parallel) dumpfile = TRIM(dumpfile)//'.'//TRIM(I2S(ParEnv % myPE))
+        CALL Info('SaveLinearSystem','Saving solution to: '//TRIM(dumpfile))
+        OPEN(1,FILE=dumpfile, STATUS='Unknown')
+        DO i=1,SIZE(Sol)
+          WRITE(1,'(I0,ES15.6)') i,Sol(i)
+        END DO
+        CLOSE( 1 ) 
+      END IF
+    END IF
+    
     
     dumpfile = TRIM(dumpprefix)//'_sizes.dat'
     IF(Parallel) dumpfile = TRIM(dumpfile)//'.'//TRIM(I2S(ParEnv % myPE))
@@ -14009,7 +14449,7 @@ CONTAINS
     OPEN(1,FILE=dumpfile, STATUS='Unknown')
     WRITE(1,*) A % NumberOfRows
     WRITE(1,*) SIZE(A % Values)
-    IF( SavePerm ) WRITE(1,*) SIZE( Perm )
+    IF( SavePerm ) WRITE(1,*) SIZE( Perm )    
     CLOSE(1)
 
     IF(Parallel) THEN

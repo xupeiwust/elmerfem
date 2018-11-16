@@ -34,7 +34,8 @@ SET(solverlib_SOURCES AddrFunc.F90 NavierStokes.F90 NavierStokesGeneral.F90
   SParIterPrecond.F90 SParIterSolver.F90 Messages.F90 Multigrid.F90
   Smoothers.F90 ClusteringMethods.F90 ParallelUtils.F90
   ParallelEigenSolve.F90 solve_cmplx.F90 solve_real.F90 MGPrec.F90
-  DefUtils.F90 LUDecomposition.F90 RadiationFactors.F90 f_stubs.c
+  DefUtils.F90 MeshPartition.F90 MeshRemeshing.F90 LUDecomposition.F90 
+  RadiationFactors.F90 f_stubs.c
   ExchangeCorrelations.F90 SolveHypre.c SolverActivate_x.F90
   SolveTrilinos.cxx SolveSuperLU.c iso_varying_string.F90
   umf4_f77wrapper.c VankaCreate.F90 ParticleUtils.F90 Feti.F90
@@ -144,6 +145,24 @@ SET_TARGET_PROPERTIES(mpi_stubs
 SET_TARGET_PROPERTIES(elmersolver
                       PROPERTIES LINKER_LANGUAGE Fortran)
 
+#We want MMG & Zoltan in the RPATH (if found), but given how many other 
+#components use ELMERSOLVER_RPATH_STRING, it seemed best to make
+#a local copy just for ElmerSolver and libelmersolver
+SET(ELMERSOLVER_RPATH_STRING_MOD ${ELMERSOLVER_RPATH_STRING})
+IF(HAVE_MMG)
+  TARGET_LINK_LIBRARIES(elmersolver ${MMG_LIBRARY})
+  SET(ELMERSOLVER_RPATH_STRING_MOD "${ELMERSOLVER_RPATH_STRING_MOD}:${MMG_LIBDIR}")
+  SET(ELMERLIB_RPATH_STRING "${ELMERLIB_RPATH_STRING}:${MMG_LIBDIR}")
+  #TODO - add to RPath
+ENDIF()
+
+IF(HAVE_ZOLTAN)
+  TARGET_LINK_LIBRARIES(elmersolver ${ZOLTAN_LIBRARY})
+  SET(ELMERSOLVER_RPATH_STRING_MOD "${ELMERSOLVER_RPATH_STRING_MOD}/:${ZOLTAN_LIBDIR}")
+  SET(ELMERLIB_RPATH_STRING "${ELMERLIB_RPATH_STRING}/:${ZOLTAN_LIBDIR}")
+
+ENDIF()
+
 # ElmerSolver libraries 
 SET(ELMERSOLVER_LIBRARIES matc umfpack 
                           amd fhuti binio arpack
@@ -159,7 +178,10 @@ ADD_EXECUTABLE(Solver_TGT Solver.F90)
 SET_TARGET_PROPERTIES(Solver_TGT PROPERTIES OUTPUT_NAME ${ELMERSOLVER_OUTPUT_NAME})
 
 IF(NOT(WIN32))
-   SET_TARGET_PROPERTIES(Solver_TGT PROPERTIES INSTALL_RPATH ${ELMERSOLVER_RPATH_STRING})
+  MESSAGE(STATUS " ELMERSOLVER_RPATH_STRING_MOD " ${ELMERSOLVER_RPATH_STRING_MOD})
+  MESSAGE(STATUS " ELMERLIB_RPATH_STRING " ${ELMERLIB_RPATH_STRING})
+
+   SET_TARGET_PROPERTIES(Solver_TGT PROPERTIES INSTALL_RPATH ${ELMERSOLVER_RPATH_STRING_MOD})
    SET_TARGET_PROPERTIES(elmersolver PROPERTIES INSTALL_RPATH ${ELMERLIB_RPATH_STRING})
 ENDIF()
 

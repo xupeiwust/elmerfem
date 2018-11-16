@@ -43,6 +43,8 @@ SET(WITH_CONTRIB FALSE CACHE BOOL "Include contributed solvers")
 
 SET(WITH_LUA FALSE CACHE BOOL "Include LUA extensions.")
 
+SET(WITH_Zoltan FALSE CACHE BOOL "Link in Zoltan mesh repartitioning library.")
+
 MARK_AS_ADVANCED(WITH_ELMERPOST)
 
 if("${CMAKE_VERSION}" VERSION_GREATER 2.8.12)
@@ -189,6 +191,66 @@ IF(WITH_Trilinos)
     ADD_DEFINITIONS(-DHAVE_TRILINOS)
   ENDIF()
 ENDIF()
+
+IF(WITH_Zoltan)
+  # ZOLTAN Remeshing
+  MESSAGE(STATUS "------------------------------------------------")
+  MESSAGE(STATUS "Mesh (re)partitioning looking for [Zoltan] tools ")
+
+  FIND_PACKAGE(Zoltan)
+
+  IF(ZOLTAN_FOUND)
+
+    SET(HAVE_ZOLTAN TRUE CACHE BOOL "Has Zoltan tools for mesh (re)partitioning" )
+    GET_FILENAME_COMPONENT(ZOLTAN_LIBDIR ${ZOLTAN_LIBRARY} DIRECTORY)
+
+    MARK_AS_ADVANCED(HAVE_ZOLTAN)
+    MESSAGE(STATUS "  Zoltan:           " "${ZOLTAN_FOUND}")
+    MESSAGE(STATUS "  Zoltan_INC:       " "${ZOLTAN_INCLUDE_DIR}")
+    MESSAGE(STATUS "  Zoltan_LIB:      " "${ZOLTAN_LIBRARY}")
+    MESSAGE(STATUS "  Zoltan_LIBDIR:      " "${ZOLTAN_LIBDIR}")
+    ADD_DEFINITIONS(-DHAVE_ZOLTAN)
+
+    INCLUDE_DIRECTORIES(${ZOLTAN_INCLUDE_DIR})
+    MESSAGE(STATUS "------------------------------------------------")
+
+  ELSE()
+    MESSAGE(STATUS "  Library not found: >ZOLTAN_FOUND< ")
+    MESSAGE(STATUS "    Missing: >ZOLTAN_INCLUDE_DIR< , >ZOLTAN_LIBRARY< for mesh (re)partitioning")
+  ENDIF(ZOLTAN_FOUND)
+
+  MESSAGE(STATUS "------------------------------------------------")
+ENDIF(WITH_Zoltan)
+
+# MMG Remeshing
+MESSAGE(STATUS "------------------------------------------------")
+MESSAGE(STATUS "Mesh adaptation 2D/3D looking for [Mmg] tools ")
+
+FIND_PACKAGE(MMG)
+
+IF(MMG_FOUND)
+
+  SET(HAVE_MMG TRUE CACHE BOOL "Has Mmg tools for Elmer/Ice Mesh adaptation" )
+  GET_FILENAME_COMPONENT(MMG_LIBDIR ${MMG_LIBRARY} DIRECTORY)
+
+  MARK_AS_ADVANCED(HAVE_MMG)
+  MESSAGE(STATUS "  Mmg:           " "${MMG_FOUND}")
+  MESSAGE(STATUS "  Mmg_INC:       " "${MMG_INCLUDE_DIR}")
+  MESSAGE(STATUS "  Mmg_LIB:      " "${MMG_LIBRARY}")
+  MESSAGE(STATUS "  Mmg_LIBDIR:      " "${MMG_LIBDIR}")
+  MESSAGE(STATUS "Compile MMG2DSolver/MMG3DSolver")
+  ADD_DEFINITIONS(-DHAVE_MMG)
+
+  INCLUDE_DIRECTORIES(${MMG_INCLUDE_DIR})
+  MESSAGE(STATUS "------------------------------------------------")
+
+ELSE()
+  MESSAGE(STATUS "  Library not found: >MMG_FOUND< ")
+  MESSAGE(STATUS "    Missing: >MMG_INCLUDE_DIR< , >MMG_LIBRARY<, to compile MMG3DSolver")
+ENDIF(MMG_FOUND)
+
+MESSAGE(STATUS "------------------------------------------------")
+
 
 # MPI and LAPACK
 FIND_PACKAGE(BLAS REQUIRED)

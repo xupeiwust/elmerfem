@@ -2038,36 +2038,33 @@ CONTAINS
 !------------------------------------------------------------------------------
      TYPE(Model_t), POINTER :: Model
 !------------------------------------------------------------------------------
-     LOGICAL :: Found, C(3)
+     LOGICAL :: Found
      TYPE(Mesh_t), POINTER :: Mesh
      REAL(KIND=dp) :: x,y,z
      CHARACTER(LEN=MAX_NAME_LEN) :: csys
-
+     INTEGER :: Mesh_dim, Model_dim
+     
      csys = ListGetString( Model % Simulation, 'Coordinate System', Found )
      IF ( .NOT. Found ) Csys = 'cartesian'
 
      IF ( csys=='cartesian' .OR. csys=='polar' ) THEN
         Mesh => Model % Meshes
 
-        c = .FALSE.
-        x = Mesh % Nodes % x(1)
-        y = Mesh % Nodes % y(1)
-        z = Mesh % Nodes % z(1)
-
-        DO WHILE( ASSOCIATED( Mesh ) )
-           IF( ASSOCIATED(Mesh % Nodes % x) ) THEN
-             c(1) = c(1) .OR. ANY( Mesh % Nodes % x /= x )
-             c(2) = c(2) .OR. ANY( Mesh % Nodes % y /= y )
-             c(3) = c(3) .OR. ANY( Mesh % Nodes % z /= z )
-           END IF
-           Mesh => Mesh % Next
+        ! Inherit the maximum dimension from the mesh in case
+        ! it is not given.
+        Model_dim = 0
+        DO WHILE( ASSOCIATED( Mesh ) )          
+          Mesh_dim = Mesh % MaxDim
+          IF( Mesh_dim == 0 ) THEN
+            CALL SetMeshDimension( Mesh )
+            Mesh_dim = Mesh % MaxDim
+          END IF
+          Model_dim = MAX( Model_dim, Mesh_dim )
+          IF( Model_dim == 3 ) EXIT
+          Mesh => Mesh % Next
         END DO
 
-        ! This may be too conservative
-        ! Model % DIMENSION = COUNT( c ) 
-        IF( C(1) ) Model % Dimension = 1
-        IF( C(2) ) Model % Dimension = 2 
-        IF( C(3) ) Model % Dimension = 3
+        Model % Dimension = Model_dim
      END IF
 
      SELECT CASE ( csys )
@@ -2107,13 +2104,15 @@ CONTAINS
    END SUBROUTINE SetCoordinateSystem
 !------------------------------------------------------------------------------
 
-
+   
 !------------------------------------------------------------------------------
 !> Function to read the complete Elmer model: sif file and mesh files.
 !------------------------------------------------------------------------------
   FUNCTION LoadModel( ModelName,BoundariesOnly,numprocs,mype,MeshIndex) RESULT( Model )
 !------------------------------------------------------------------------------
+    USE MeshPartition
     USE SParIterGlobals
+
     IMPLICIT NONE
 
     CHARACTER(LEN=*) :: ModelName
@@ -2124,7 +2123,7 @@ CONTAINS
     TYPE(Model_t), POINTER :: Model
 
 !------------------------------------------------------------------------------
-    TYPE(Mesh_t), POINTER :: Mesh,Mesh1,NewMesh,OldMesh
+    TYPE(Mesh_t), POINTER :: Mesh,Mesh1,NewMesh,OldMesh,SerialMesh
     INTEGER :: i,j,k,l,s,nlen,eqn,MeshKeep,MeshLevels,nprocs
     LOGICAL :: GotIt,GotMesh,found,OneMeshName, OpenFile, Transient
     LOGICAL :: stat, single, MeshGrading
@@ -2161,7 +2160,12 @@ CONTAINS
       INTEGER :: lstat, ompthread
       CHARACTER(LEN=256) :: txcmd
 
-      !$OMP PARALLEL Shared(parenv, ModelName) Private(txcmd, ompthread, lstat) Default(none)
+#if USE_ISO_C_BINDINGS
+      character(len=256) :: elmer_home_env
+      CALL getenv("ELMER_HOME", elmer_home_env)
+#endif
+
+      !$OMP PARALLEL Shared(parenv, ModelName, elmer_home_env) Private(txcmd, ompthread, lstat) Default(none)
       !$OMP CRITICAL
       LuaState = lua_init()
       IF(.NOT. LuaState % Initialized) THEN
@@ -2179,8 +2183,24 @@ CONTAINS
       lstat = lua_dostring(LuaState, txcmd // c_null_char)
       
       WRITE(txcmd,'(A,I0, A)') 'tx = array.new(', MAX_FNC, ')'
-      lstat = lua_dostring(LuaState, &
-          'loadfile(os.getenv("ELMER_HOME") .. "/share/elmersolver/lua-scripts/defaults.lua")()'//c_null_char)
+
+      ! TODO: (2018-09-17) Nowadays ISO_C_BINDINGS are pretty much mandatory to compile elmer
+#if USE_ISO_C_BINDINGS
+      ! Call defaults.lua using 1) ELMER_HOME environment variable or 2) ELMER_SOLVER_HOME preprocessor macro
+      ! TODO: (2018-09-18) ELMER_SOLVER_HOME might be too long
+
+      if (trim(elmer_home_env) == "") then
+        lstat = lua_dostring(LuaState, &
+            'loadfile("' // &
+ELMER_SOLVER_HOME &
+                    // '" .. "/lua-scripts/defaults.lua")()'//c_null_char)
+      else
+#endif
+        lstat = lua_dostring(LuaState, &
+            'loadfile(os.getenv("ELMER_HOME") .. "/share/elmersolver/lua-scripts/defaults.lua")()'//c_null_char)
+#if USE_ISO_C_BINDINGS
+      end if
+#endif
 
       ! Execute lua parts 
       lstat = lua_dostring(LuaState, 'loadstring(readsif("'//trim(ModelName)//'"))()' // c_null_char)
@@ -2314,11 +2334,31 @@ CONTAINS
 
     NULLIFY( Model % Meshes )
     IF ( MeshDir(1:1) /= ' ' ) THEN
-      ! @TODO: Don't forget funny define
+
       CALL ResetTimer('LoadMesh') 
 
-      Model % Meshes => LoadMesh2( Model, MeshDir, MeshName, &
-          BoundariesOnly, numprocs, mype, Def_Dofs )
+      Single = ListGetLogical( Model % Simulation,'Partition Mesh', GotIt ) 
+      IF ( Single ) THEN
+        IF( ParEnv % PEs == 1 ) THEN
+          CALL Warn('LoadMesh','Why perform partitioning in serial case?')
+        END IF
+        IF( ParEnv % MyPe == 0 ) THEN
+          SerialMesh => LoadMesh2( Model,MeshDir,MeshName,BoundariesOnly,&
+              1,0,def_dofs,LoadOnly = .TRUE. )
+          CALL PartitionMeshSerial( Model, SerialMesh, Model % Simulation )
+        ELSE
+          SerialMesh => AllocateMesh()
+        END IF
+
+        Model % Meshes => ReDistributeMesh( Model, SerialMesh, .FALSE., .TRUE. )
+        CALL PrepareMesh( Model, Model % Meshes, ParEnv % PEs > 1, Def_Dofs )
+
+      ELSE
+        Model % Meshes => LoadMesh2( Model, MeshDir, MeshName, &
+            BoundariesOnly, numprocs, mype, Def_Dofs )
+      END IF
+      
+
       IF(.NOT.ASSOCIATED(Model % Meshes)) THEN
         CALL FreeModel(Model)
         Model => NULL()
@@ -2388,7 +2428,6 @@ CONTAINS
          i = 0
       ELSE
          i = LEN_TRIM(MeshName)
-         ! DO WHILE( i>0 .AND. MeshName(i:i) /= '/')
          DO WHILE( i>0 )
            IF (MeshName(i:i) == '/') EXIT 
            i = i-1
