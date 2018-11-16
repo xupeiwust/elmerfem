@@ -124,12 +124,14 @@ MODULE StressLocal
 
      IF (FirstTime) THEN
        dim = CoordinateSystemDimension()
-       IF(EvaluateAtIP(1)) &
-            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
-       IF(EvaluateAtIP(2)) &
-            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
-       IF(EvaluateAtIP(3)) &
-            CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       !IF PRESENT(EvaluateAtIP) THEN
+         IF(EvaluateAtIP(1)) &
+              CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+         IF(EvaluateAtIP(2)) &
+              CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+         IF(EvaluateAtIP(3)) &
+              CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       !END IF
        IF(EvaluateLoadAtIP) THEN
          DO I=1,DIM
            WRITE(DimensionString,'(I1)') I
@@ -1225,13 +1227,15 @@ CONTAINS
      Element => CurrentModel % CurrentElement
      IF (FirstTime) THEN
        dim = CoordinateSystemDimension()
-       IF(EvaluateAtIP(1)) &
-            CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
-       IF(EvaluateAtIP(2)) &
-            CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
-       IF(EvaluateAtIP(3)) &
-            CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
-       IF(EvaluateLoadAtIP) THEN
+       IF (PRESENT(EvaluateAtIP)) THEN
+         IF(EvaluateAtIP(1)) &
+              CALL ListInitElementKeyword( EIP_h,'Material','Youngs Modulus')
+         IF(EvaluateAtIP(2)) &
+              CALL ListInitElementKeyword( BetaIP_h,'Material','Heat Expansion Coefficient')
+         IF(EvaluateAtIP(3)) &
+              CALL ListInitElementKeyword( nuIP_h,'Material','Poisson Ratio')
+       END IF
+       IF(PRESENT(EvaluateLoadAtIP) .AND. EvaluateLoadAtIP) THEN
          DO I=1,DIM
            WRITE(DimensionString,'(I1)') I
            CALL ListInitElementKeyword( Load_h(I),'Body Force','Stress BodyForce '//TRIM(DimensionString))          
@@ -1255,7 +1259,7 @@ CONTAINS
 !    Material parameters:
 !    --------------------
      IF ( Isotropic(1) ) THEN
-       IF (EvaluateAtIP(3)) THEN
+       IF (PRESENT(EvaluateAtIP) .AND. EvaluateAtIP(3)) THEN
          Poisson =  ListGetElementReal(nuIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
        ELSE
          Poisson = SUM( Basis(1:n) * PoissonRatio(1:n) )
@@ -1264,7 +1268,7 @@ CONTAINS
 
      C = 0
      IF ( Isotropic(1) ) THEN
-       IF (EvaluateAtIP(1)) THEN
+       IF (PRESENT(EvaluateAtIP) .AND. EvaluateAtIP(1)) THEN
          Young = ListGetElementReal( EIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
        ELSE
          Young = SUM( Basis(1:n) * ElasticModulus(1,1,1:n) )
@@ -1280,7 +1284,7 @@ CONTAINS
      HEXP = 0.0_dp
      IF ( Isotropic(2) ) THEN
        DO i=1,ic
-         IF (EvaluateAtIP(2)) THEN
+         IF (PRESENT(EvaluateAtIP) .AND. EvaluateAtIP(2)) THEN
            HEXP(i,i)= ListGetElementReal( BetaIP_h, Basis, Element, Found, GaussPoint=GaussPoint)
          ELSE
            HEXP(i,i) = SUM( Basis(1:n) * HeatExpansion(1,1,1:n) )
