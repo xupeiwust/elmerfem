@@ -196,7 +196,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      LOGICAL :: AllocationsDone = .FALSE., NormalTangential, HarmonicAnalysis
      LOGICAL :: StabilityAnalysis = .FALSE., ModelLumping, FixDisplacement
      LOGICAL :: GeometricStiffness = .FALSE., EigenAnalysis=.FALSE., OrigEigenAnalysis, &
-           Refactorize = .TRUE., Incompressible
+           Refactorize = .TRUE., Incompr
 
      REAL(KIND=dp),ALLOCATABLE:: MASS(:,:),STIFF(:,:),&
        DAMP(:,:), LOAD(:,:),LOAD_im(:,:),FORCE(:),FORCE_im(:), &
@@ -286,7 +286,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
            //I2S(STDOFs)//' vs. '//I2S(Mesh % MeshDim))
      END IF
 
-     Incompressible = GetLogical( SolverParams, 'Incompressible', Found )
+     Incompr = GetLogical( SolverParams, 'Incompressible', Found )
 
      MeshDisplacementActive = ListGetLogical( SolverParams,  &
                'Displace Mesh', Found )
@@ -295,7 +295,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        MeshDisplacementActive = .NOT.EigenOrHarmonicAnalysis()
 
      IF ( AllocationsDone .AND. MeshDisplacementActive ) THEN
-        IF(Incompressible ) THEN
+        IF(Incompr ) THEN
           CALL DisplaceMesh( Mesh, Displacement, -1, DisplPerm, STDOFs, UpdateDirs=STDOFs-1 )
         ELSE
           CALL DisplaceMesh( Mesh, Displacement, -1, DisplPerm, STDOFs )
@@ -914,7 +914,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      END IF
  
      IF ( MeshDisplacementActive ) THEN
-       IF (Incompressible ) THEN
+       IF (Incompr ) THEN
          CALL DisplaceMesh(Model % Mesh, Displacement, 1, &
              DisplPerm, STDOFs, .FALSE., STDOFs-1 )
        ELSE
