@@ -54,7 +54,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
     INTEGER :: dim,i
     TYPE(ValueList_t), POINTER :: SolverParams
     LOGICAL :: Found, CalculateStrains, CalcPrincipalAngle, CalcPrincipalAll, &
-        CalcStressAll
+         CalcStressAll, CalcVelocities
+    CHARACTER :: DimensionString
 !------------------------------------------------------------------------------
 
     SolverParams => GetSolverParams()
@@ -77,6 +78,13 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
     IF(CalcPrincipalAngle) CalcPrincipalAll = .TRUE. ! can't calculate angle without principal
     IF(CalcPrincipalAll)   CalcStressAll = .TRUE. ! can't calculate principal without components
     IF(CalculateStrains)   CalcStressAll = .TRUE. ! can't calculate principal without components
+
+    IF (Transient) THEN
+      CalcVelocities = GetLogical(SolverParams, 'Caclulate Velocities', Found)
+      IF (.NOT.Found) CalcVelocities = .FALSE.
+    ELSE
+      CalcVelocities = .FALSE.
+    END IF
     
     ! If stress computation is requested somewhere then enforce it 
     IF( .NOT. ( CalcStressAll .OR. CalculateStrains) ) THEN
@@ -119,6 +127,14 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
       END IF
     END IF
 
+    IF (CalcVelocities) THEN
+      WRITE (Message,'(A,I1,A)') '-dofs ',DIM, ' Displacement Velocity'
+      
+      CALL ListAddString( SolverParams,&
+            NextFreeKeyword('Exported Variable ',SolverParams), &
+            Message )
+    END IF
+
     CALL ListAddLogical( SolverParams, 'stress: Linear System Save', .FALSE. )
 
 !------------------------------------------------------------------------------
@@ -157,7 +173,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
      TYPE(Element_t),POINTER :: Element
      TYPE(Mesh_t),POINTER :: Mesh
 
-     TYPE(Variable_t), POINTER :: ReferenceSol
+     TYPE(Variable_t), POINTER :: ReferenceSol,DisplacementVelVar
      REAL(KIND=dp), POINTER :: DispValues(:)
      REAL(KIND=dp), ALLOCATABLE :: UpdateRef(:), Ref_rhs(:), NodalRefD(:)
      INTEGER :: RefDofs, indx
@@ -165,7 +181,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
      REAL(KIND=dp) :: UNorm,s, UzawaParameter
 
-     INTEGER ::  MaxIter, MinIter, NoModes, Nsize, Dofs
+     INTEGER ::  MaxIter, MinIter, NoModes, Nsize, Dofs, DisplacementVelDOFs
      TYPE(Variable_t), POINTER :: StressSol, iVar, Var, TimeVar
 
      CHARACTER(LEN=MAX_NAME_LEN) :: VarName, TemperatureName
@@ -176,18 +192,19 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        PrincipalAngle(:), PrincipalAngleComp(:), &            ! needed for principal angle calculation
        PrincipalStressComp(:), PrincipalStrainComp(:), &
        NormalDisplacement(:), TransformMatrix(:,:), UWrk(:,:), &
-       RayleighAlpha(:), RayleighBeta(:)
+       RayleighAlpha(:), RayleighBeta(:), DisplacementVel(:)
      REAL(KIND=dp), POINTER CONTIG :: SaveRHS(:)
 
      REAL(KIND=dp), POINTER :: Displacement(:)
 
      REAL(KIND=dp) :: UnitNorm, Prevdt=-1, PrevTime=-1
 
-     INTEGER, POINTER :: TempPerm(:),DisplPerm(:),StressPerm(:),NodeIndexes(:)
+     INTEGER, POINTER :: TempPerm(:),DisplPerm(:),StressPerm(:),&
+          DisplacementVelPerm(:), NodeIndexes(:)
 
      LOGICAL :: GotForceBC,Found,RayleighDamping, NormalSpring
      LOGICAL :: PlaneStress, CalcStress, CalcStressAll, &
-        CalcPrincipalAll, CalcPrincipalAngle, CalculateStrains, Isotropic(2) = .TRUE.
+        CalcPrincipalAll, CalcPrincipalAngle, CalculateStrains, CalcVelocities, Isotropic(2) = .TRUE.
      LOGICAL :: Contact = .FALSE.
      LOGICAL :: stat, stat2, stat3, RotateC, MeshDisplacementActive, &
                 ConstantBulkSystem, ConstantBulkMatrix, ConstantBulkMatrixInUse, ConstantSystem, &
@@ -211,7 +228,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        FORCE,ElementNodes,DampCoeff,SpringCoeff,Beta,Density, Damping, &
        LocalTemperature,AllocationsDone,ReferenceTemperature, &
        ElasticModulus, PoissonRatio,HeatExpansionCoeff, VonMises, NodalStress, &
-       CalcStress, CalcStressAll, NodalDisplacement, Contact, ContactPressure, &
+       CalcStress, CalcStressAll, CalcVelocities, NodalDisplacement, Contact, ContactPressure, &
        NormalDisplacement, ContactLimit, LocalNormalDisplacement, &
        LocalContactPressure, PreStress, PreStrain, StressLoad, StrainLoad, Work, &
        RotateC, TransformMatrix, body_id, NodalMeshVelo, PrevTime, &
@@ -219,7 +236,9 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        RayleighAlpha, RayleighBeta, RayleighDamping, &
        NodalStrain, PrincipalStress, PrincipalStrain, Tresca, &
        PrincipalAngle, PrincipalAngleComp, CalcPrincipalAngle, &
-       CalcPrincipalAll, CalculateStrains, TemperatureName
+       CalcPrincipalAll, CalculateStrains, TemperatureName,&
+       DisplacementVel, DisplacementVelPerm, DisplacementVelVar,&
+       DisplacementVelDOFs
 !------------------------------------------------------------------------------
      INTEGER :: dim
 #ifdef USE_ISO_C_BINDINGS
@@ -311,7 +330,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        IF ( AllocationsDone ) THEN
          DEALLOCATE( Density,                &
                      Damping,                &
-                   RayleighAlpha,          &
+                     RayleighAlpha,          &
                      RayleighBeta,           &
                      DampCoeff,              &
                      SpringCoeff,            &
@@ -367,7 +386,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
 
        IF ( istat /= 0 ) THEN
           CALL Fatal( 'StressSolve', 'Memory allocation error.' )
-       END IF
+        END IF
 
        NULLIFY( Work )
        TransformMatrix = 0.0d0
@@ -379,6 +398,25 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        IF(CalcPrincipalAngle) CalcPrincipalAll = .TRUE. ! can't calculate angle without principal
        IF(CalcPrincipalAll)   CalcStressAll = .TRUE. ! can't calculate principal without components
        IF(CalculateStrains)   CalcStressAll = .TRUE. ! can't calculate principal without components
+
+       IF (Transient) THEN
+         CalcVelocities = GetLogical(SolverParams, 'Caclulate Velocities', Found)
+         IF (.NOT.Found) THEN
+           CalcVelocities = .FALSE.
+         ELSE
+           DisplacementVelVar => VariableGet( Mesh % Variables, 'Displacement Velocity' )
+           IF (ASSOCIATED(DisplacementVelVar)) THEN
+             DisplacementVel => DisplacementVelVar % Values
+             DisplacementVelPerm => DisplacementVelVar % Perm
+             DisplacementVelDOFs = DisplacementVelVar % DOFs
+           ELSE
+             CALL FATAL('StressSolver',&
+                  ' "Caclulate Velocities" set but variable "Displacement Velocity" not found')
+           END IF
+         END IF
+       ELSE
+         CalcVelocities = .FALSE.
+       END IF
        
        Contact = GetLogical( SolverParams, 'Contact', Found )
        IF( Contact ) THEN
@@ -884,12 +922,17 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
            END DO
            END DO
          END DO
-
        ELSE
          CALL ComputeStress( Displacement, NodalStress,  &
              VonMises, DisplPerm, StressPerm, &
              NodalStrain, PrincipalStress, PrincipalStrain, Tresca, PrincipalAngle, &
              EvaluateAtIP=EvaluateAtIP, EvaluateLoadAtIP=EvaluateLoadAtIP)
+         IF (CalcVelocities) THEN
+           IF (DisplacementVelDOFs .NE. StressSol % DOFs) &
+                CALL FATAL('StressSolve',"Non matching DOFs for Displacement and DisplacementVelocity")
+           CALL ComputeDisplacementVelocity(Displacement,StressSol % PrevValues,DisplPerm,&
+                     DisplacementVel,DisplacementVelPerm,DisplacementVelDOFs,dt)
+         END IF
        END IF
 
        CALL InvalidateVariable( Model % Meshes, Mesh, 'Stress' )
@@ -900,6 +943,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        CALL InvalidateVariable( Model % Meshes, Mesh, 'Tresca' )
        CALL InvalidateVariable( Model % Meshes, Mesh, 'Principal Angle' )
      END IF
+
+
 
      IF ( GetLogical( SolverParams, 'Adaptive Mesh Refinement', Found) ) THEN
        CALL RefineMesh( Model, Solver, Displacement, DisplPerm, &
@@ -1502,8 +1547,29 @@ CONTAINS
 !------------------------------------------------------------------------------
   END SUBROUTINE ComputeNormalDisplacement
 !------------------------------------------------------------------------------
+  SUBROUTINE ComputeDisplacementVelocity(Displ,PrevDispl,DisplPerm,&
+       DisplVelo,DisplVeloPerm,DIM,dt)
 
-
+    USE DefUtils
+    
+    IMPLICIT NONE
+    
+    REAL(KIND=dp), POINTER :: Displ(:),PrevDispl(:,:),DisplVelo(:)
+    REAL(KIND=dp) :: dt
+    INTEGER, POINTER :: DisplPerm(:),DisplVeloPerm(:)
+    INTEGER :: DIM
+    !---------------------------------
+    INTEGER :: I, J, Cnt=0, CurrIndx
+    DO I=1,SIZE( DisplPerm )
+      IF ( DisplPerm(I) <= 0 ) CYCLE
+      Cnt = Cnt + 1
+      DisplVeloPerm(I) = DisplPerm(I)
+      DO J=1,DIM
+        CurrIndx = DIM*(DisplPerm(I)-1)+J
+        DisplVelo(CurrIndx) = (Displ(CurrIndx) - PrevDispl(CurrIndx,1))/dt
+      END DO
+    END DO
+  END SUBROUTINE ComputeDisplacementVelocity
 !------------------------------------------------------------------------------
    SUBROUTINE ComputeStress( Displacement, NodalStress, &
               VonMises, DisplPerm, StressPerm, &

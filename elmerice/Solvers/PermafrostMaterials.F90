@@ -2479,29 +2479,26 @@ CONTAINS
     CgwTT = (1.0_dp - xc)*rhow*cw + xc*rhoc*cc
   END FUNCTION GetCgwTT
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,rhosp,Xi,Xip,CurrentRockMaterial,RockMaterialID,Porosity)RESULT(Cgwpp)
+  FUNCTION GetCgwpp(rhogw,rhoi,rhogwp,rhoip,rhosp,&
+       kappaG,Xi,Xip,&
+       CurrentRockMaterial,RockMaterialID,Porosity)RESULT(Cgwpp)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,rhosp,Xi,Xip,Porosity
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwp,rhoip,rhosp,kappaG,Xi,Xip,Porosity
     TYPE(RockMaterial_t), POINTER :: CurrentRockMaterial
     INTEGER, INTENT(IN) :: RockMaterialID
     REAL(KIND=dp) :: Cgwpp
     !-------------------------
-    !REAL(KIND=dp) :: kappas
-    !-------------------------
-    
-    !kappas = CurrentRockMaterial % ks0(RockMaterialID)
-    !kappaG =  CurrentRockMaterial % kG(RockMaterialID)
-    Cgwpp = Porosity * ((rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip) &
-         + (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(rhosp)
-         !+ (Xi * rhogw + (1.0_dp - Xi)*rhoi)*(kappaG - Porosity * kappas)
+    Cgwpp = Porosity * ( (rhogw - rhoi) * Xip  + Xi * rhogwp + (1.0_dp - Xi)*rhoip ) &
+         + (Xi * rhogw + (1.0_dp - Xi)*rhoi) * ( (1.0_dp - Porosity) * rhosp + kappaG )
   END FUNCTION GetCgwpp
   !---------------------------------------------------------------------------------------------
-  FUNCTION GetCgwpT(rhogw,rhoi,rhogwT,rhoiT,Xi,XiT,Porosity)RESULT(CgwpT)
+  FUNCTION GetCgwpT(rhogw,rhoi,rhogwT,rhoiT,rhosT,Xi,XiT,Porosity)RESULT(CgwpT)
     IMPLICIT NONE
-    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwT,rhoiT,Xi,XiT,Porosity
+    REAL(KIND=dp), INTENT(IN) :: rhogw,rhoi,rhogwT,rhoiT,rhosT,Xi,XiT,Porosity
     REAL(KIND=dp) :: CgwpT
     !-------------------------
-    CgwpT = Porosity * ( (rhogw - rhoi) * XiT  + Xi * rhogwT + (1.0_dp - Xi)*rhoiT )
+    CgwpT = Porosity * ( (rhogw - rhoi) * XiT  + Xi * rhogwT + (1.0_dp - Xi)*rhoiT ) &
+         + (Xi * rhogw + (1.0_dp - Xi)*rhoi) *(1.0_dp - Porosity) * rhosT
   END FUNCTION GetCgwpT
   !---------------------------------------------------------------------------------------------
   FUNCTION GetCgwpYc(rhogw,rhoi,rhogwYc,Xi,XiYc,Porosity)RESULT(CgwpYc)
@@ -2564,7 +2561,7 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN) :: Xi,MinKgw,mugw
     REAL(KIND=dp) :: Kgw(3,3)
     !--------------------------
-    REAL(KIND=dp) :: muw0,rhow0,qexp,Kgwh0(3,3),kGpe(3,3),kG0pe(3,3),factor
+    REAL(KIND=dp) :: muw0,rhow0,qexp,Kgwh0(3,3),factor
     REAL(KIND=dp), PARAMETER :: gval=9.81_dp !hard coded, so match Kgwh0 with this value
     INTEGER :: I, J
     !-------------------------
@@ -2576,6 +2573,7 @@ CONTAINS
     Kgwh0(1:3,1:3) = CurrentRockMaterial % Kgwh0(1:3,1:3,RockMaterialID) ! hydro-conductivity
     ! transformation factor from hydr. conductivity to permeability hydr. conductivity tensor
     factor = (muw0/mugw)*(Xi**qexp)/(rhow0*gval)
+    !factor = muw0*(Xi**qexp)/(rhow0*gval)
     !PRINT *,"Kgw:",muw0,mugw,rhow0,Kgwh0,Xi,factor
     Kgw = 0.0_dp
     DO I=1,3

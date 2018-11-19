@@ -345,7 +345,8 @@ CONTAINS
     REAL(KIND=dp) :: EGAtIP,nuGAtIP,kappaGAtIP ! bedrock deformation
     REAL(KIND=dp) :: GasConstant, N0, DeltaT, T0, p0,eps,Gravity(3)! real constants read only once
     REAL(KIND=dp) :: rhosAtIP,rhowAtIP,rhoiAtIP,rhocAtIP,rhogwAtIP,&
-         rhospAtIP,rhowTAtIP,rhowPAtIP,rhowYcAtIP,&
+         rhospAtIP,rhosTAtIP,&
+         rhowTAtIP,rhowPAtIP,rhowYcAtIP,&
          rhoiPAtIP,rhoiTAtIP,&
          rhocPAtIP,rhocTAtIP,rhocYcAtIP,&
          rhogwPAtIP,rhogwTAtIP,rhogwYcAtIP
@@ -465,12 +466,15 @@ CONTAINS
       END IF
 
 
-      !Materialproperties needed at IP for Xi computation (anything else thereafter)
+      ! Materialproperties (basically densities and derivatives of it)
+      ! needed at IP for Xi computation (anything ELSE thereafter)
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
-      IF (.NOT.ConstVal) THEN
-        rhospAtIP =rhosp(CurrentRockMaterial,RockMaterialID,rhosAtIP,p0,PressureAtIP)
-      ELSE
+      IF (ConstVal) THEN
         rhospAtIP = 0.0_dp
+        rhosTAtIP = 0.0_dp
+      ELSE
+        rhospAtIP =rhosp(CurrentRockMaterial,RockMaterialID,rhosAtIP,p0,PressureAtIP)
+        rhosTAtIP =rhosT(CurrentRockMaterial,RockMaterialID,rhosAtIP,T0,TemperatureAtIP)
       END IF
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)      
       rhoiAtIP = rhoi(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)
@@ -478,7 +482,7 @@ CONTAINS
 
       ! unfrozen pore-water content at IP
       SELECT CASE(PhaseChangeModel)
-      CASE('anderson')
+      CASE('anderson') ! classic simpified Anderson model
         XiAtIP(IPPerm) = &
              GetXiAnderson(0.011_dp,-0.66_dp,9.8d-08,&
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
@@ -492,7 +496,6 @@ CONTAINS
              CurrentSolventMaterial % rhow0,CurrentRockMaterial % rhos0(RockMaterialID),&
              T0,TemperatureAtIP,PressureAtIP,PorosityAtIP)        
       CASE DEFAULT ! Hartikainen model
-
         CALL  GetXiHartikainen(CurrentRockMaterial,RockMaterialID,&
              CurrentSoluteMaterial,CurrentSolventMaterial,&
              TemperatureAtIP,PressureAtIP,SalinityAtIP,PorosityAtIP,&
@@ -511,7 +514,7 @@ CONTAINS
 
       ! on Xi (directly or indirectly) dependent material parameters (incl. updates) at IP
       rhowAtIP  = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP(IPPerm),SalinityAtIP,ConstVal) ! update
-      IF ((rhowAtIP < 980.0_dp) .OR. (rhogwAtIP > 1250.0_dp)) THEN
+      IF ((rhowAtIP < 980.0_dp) .OR. (rhogwAtIP > 1250.0_dp)) THEN ! sanity check
         PRINT *,"rhowAtIP:",rhowAtIP,XiAtIP(IPPerm),SalinityAtIP
         STOP
       END IF
@@ -544,10 +547,6 @@ CONTAINS
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwpAtIP = rhogwP(rhowPAtIP,rhocPAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwTAtIP = rhogwT(rhowTAtIP,rhocTAtIP,XiAtIP(IPPerm),SalinityAtIP)
-      IF ((rhogwAtIP < 980.0_dp) .OR. (rhogwpAtIP > 1250.0_dp)) THEN
-        PRINT *,"rhogwAtIP:",rhogwAtIP, rhowAtIP,rhocAtIP,SalinityAtIP
-        STOP
-      END IF
 
       ! conductivities at IP
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
@@ -569,30 +568,31 @@ CONTAINS
       END IF
  
 
-      ! capacities at IP
+      ! Elastic properties at IP
       EGAtIP = EG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
       nuGAtIP = nuG(CurrentSolventMaterial,CurrentRockMaterial,RockMaterialID,XiAtIP(IPPerm),PorosityAtIP)
       kappaGAtIP = kappaG(EGAtIP,nuGAtIP)
-  
+      
+      ! capacities at IP
       IF (HydroGeo) THEN   ! Simplifications: Xip=0 Xi=1 kappas=0
         CgwppAtIP = PorosityAtIP * rhogwPAtIP + rhogwAtIP * kappaGAtIP
-      ELSE     
+      ELSE
         CgwppAtIP = GetCgwpp(rhogwAtIP,rhoiAtIP,rhogwPAtIP,rhoiPAtIP,rhosPAtIP,&
-             XiAtIP(IPPerm),XiPAtIP,CurrentRockMaterial,RockMaterialID,PorosityAtIP)
+             kappaGAtIP,XiAtIP(IPPerm),XiPAtIP,&
+             CurrentRockMaterial,RockMaterialID,PorosityAtIP)
       END IF
-      CgwpTAtIP = GetCgwpT(rhogwAtIP,rhoiAtIP,rhogwTAtIP,rhoiTAtIP,XiAtIP(IPPerm),XiTAtIP,PorosityAtIP)
+      CgwpTAtIP = GetCgwpT(rhogwAtIP,rhoiAtIP,rhogwTAtIP,rhoiTAtIP,rhosTAtIP,XiAtIP(IPPerm),XiTAtIP,PorosityAtIP)
       IF (.NOT.NoSalinity) THEN
-        CgwpYcAtIP = GetCgwpYc(rhogwAtIP,rhoiAtIP,rhogwYcAtIP,XiAtIP(IPPerm),XiYcAtIP,PorosityAtIP)        
+        CgwpYcAtIP = GetCgwpYc(rhogwAtIP,rhoiAtIP,rhogwYcAtIP,XiAtIP(IPPerm),XiYcAtIP,PorosityAtIP)     
       END IF
       IF (ComputeDeformation) THEN
         CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,XiAtIP(IPPerm),kappaGAtIP,CurrentRockMaterial,RockMaterialID)
-        IF (CgwpI1AtIP > 1.0d-04) THEN
+        IF (CgwpI1AtIP > 1.0d-03) THEN ! sanity check
           PRINT *,"CgwpI1AtIP", CgwpI1AtIP,&
                XiAtIP(IPPerm),rhogwAtIP,rhoiAtIP,kappaGAtIP, EGAtIP, nuGAtIP
           STOP
         END IF
       END IF
-
 
       ! parameters for diffusion-dispersion flow
       r12AtIP = GetR(CurrentSoluteMaterial,CurrentSolventMaterial,GasConstant,&
@@ -3453,17 +3453,20 @@ SUBROUTINE IPVariableInit(Model, Solver, Timestep, TransientSimulation )
   TYPE(Element_t), POINTER :: CurrentElement
   TYPE(Variable_t), POINTER :: IPVar
   REAL(KIND=dp), POINTER :: IPVarValue(:)
-  REAL(KIND=dp) :: InitValue
-  INTEGER :: IPVarDOFs, I, t
+  TYPE(ValueHandle_t) :: InitialIPVar_h
+  REAL(KIND=dp) :: InitValue, detJ
+  INTEGER :: IPVarDOFs, I, t, ICId, N, istat
   INTEGER, POINTER :: IPVarPerm(:)
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="IPVariableInit"
   CHARACTER(LEN=MAX_NAME_LEN) :: IPVariableName
-  TYPE(GaussIntegrationPoints_t), TARGET :: IntegStuff
+  TYPE(GaussIntegrationPoints_t), TARGET :: IP
   TYPE(ValueList_t), POINTER :: SolverParams
   TYPE(Element_t), POINTER :: Element
-  LOGICAL :: Visited = .FALSE., Found
+  TYPE(Nodes_t) :: Nodes
+  LOGICAL :: Visited = .FALSE., Found, ReadFromIC=.FALSE., stat
+  REAL(KIND=dp), ALLOCATABLE :: Basis(:),dBasisdx(:,:)
   SAVE Visited
- ! ????
+
   IF (Visited) RETURN
 
   SolverParams => GetSolverParams()
@@ -3472,6 +3475,9 @@ SUBROUTINE IPVariableInit(Model, Solver, Timestep, TransientSimulation )
        'IP Variable', Found )
   IF (.NOT.Found) THEN
     CALL FATAL(SolverName, ' "IP Variable" not found - you have to provide one')
+  ELSE
+    WRITE (Message,*) ' "IP Variable ": ', TRIM(IPVariableName),' found' 
+    CALL INFO(SolverName, Message,Level=1)
   END IF
   IPVar => VariableGet( Solver % Mesh % Variables, IPVariableName,Found,UnfoundFatal=.TRUE. )
   
@@ -3479,27 +3485,51 @@ SUBROUTINE IPVariableInit(Model, Solver, Timestep, TransientSimulation )
     IPVarPerm    => IPVar % Perm
     IPVarValue  => IPVar % Values
     IPVarDOFs = IPVar % DOFs
+    InitValue = GetConstReal(SolverParams,TRIM(IPVariableName),Found)
+    ReadFromIC = .NOT.(Found)
   ELSE
-    CALL FATAL(SolverName, 'Could not find "IPVariable Variable"')
+    CALL FATAL(SolverName, 'Could not find "IP Variable"')
+  END IF
+
+  IF (ReadFromIC) THEN
+    CALL ListInitElementKeyword( InitialIPVar_h,'Initial Condition',TRIM(IPVariableName) )
+    WRITE(Message,*) IPVariableName, ' from corresponding initial condition'
+    N = 2 * MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
+    ALLOCATE(Basis(N),dBasisdx(N,3),stat=istat)
+  ELSE
+    WRITE(Message,*) IPVariableName, ' to constant',  InitValue
+    IPVarValue = InitValue
   END IF
   
-  WRITE(Message,*) IPVariableName, ' to',  InitValue
-
   CALL Info(SolverName, '-----------------------------------', Level=1)
   CALL Info(SolverName, 'Initializing ip variable           ', Level=1)
   CALL Info(SolverName, Message, Level=1)
-  CALL Info(SolverName, 'levels in material file            ', Level=1)
   CALL Info(SolverName, '-----------------------------------', Level=1)
 
   Visited = .TRUE.
+  
+  IF (ReadFromIC) THEN
+    DO i = 1,  Solver % NumberOFActiveElements
+      Element => GetActiveElement(i)
+      IP = GaussPoints( Element )
+      CALL GetElementNodes( Nodes )
+      ICid = GetICId( Element, Found )
+      IF (.NOT.Found) CALL FATAL(SolverName,'Corresponding "Initial Condition" not found')
 
-  DO i = 1,  Solver % NumberOFActiveElements
-    Element => GetActiveElement(i)
-     IntegStuff = GaussPoints( Element )
-     DO t=1,IntegStuff % n
-       IPVarValue((IPVarPerm(i)*IPVarDOFs) + t*IPVarDOFs) = InitValue
-     END DO
-  END DO
+      DO t=1,IP % n
+        IF (ReadFromIC) THEN
+          stat = ElementInfo( Element, Nodes, IP % U(t), IP % V(t), &
+               IP % W(t), detJ, Basis, dBasisdx )
+          InitValue = ListGetElementReal(InitialIPVar_h, Basis, Element, Found, GaussPoint=t)
+          IF (.NOT.Found) CALL FATAL(SolverName,"Initial value not found in IC")
+        END IF
+        IPVarValue((IPVarPerm(i)*IPVarDOFs) + t*IPVarDOFs) = InitValue
+        IPVarValue((IPVarPerm(i)*IPVarDOFs) + t*IPVarDOFs) = 1.0
+      END DO
+    END DO
+    DEALLOCATE(Basis, dBasisdx)
+  END IF
+  CALL INFO(SolverName,"Itialisation Done",Level=1)
 END SUBROUTINE IPVariableInit
 !==============================================================================
 !>  initialization of Porosity to given reference value in material
