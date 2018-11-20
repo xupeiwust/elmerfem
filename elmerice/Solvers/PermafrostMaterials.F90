@@ -844,39 +844,55 @@ CONTAINS
     CALL INFO(FunctionName,"-----------------------------------------------------------------",Level=9)
   END FUNCTION ReadPermafrostConstants
   !---------------------------------------------------------------------------------------------
-  ! assign single modal variable
-  SUBROUTINE AssignSingleVar(Solver,Model,NodalVariable,VariableVar,&
-       VariableName,VariableDOFS,VariableExists)
+  ! assign single nodal variable
+  !---------------------------------------------------------------------------------------------
+  SUBROUTINE AssignSingleVar(Solver,Model,NodalVariable,VariableVar,VariablePerm,Variable,&
+       VariableName,VariableDOFS,VariableExists,PrevNodalVariable, PrevVariable)
     IMPLICIT NONE
     
     TYPE(Solver_t) :: Solver
     TYPE(Model_t) :: Model
-    REAL(KIND=dp),POINTER :: NodalVariable(:)
+    REAL(KIND=dp),POINTER :: NodalVariable(:), Variable(:)
     LOGICAL :: VariableExists
     CHARACTER(LEN=MAX_NAME_LEN) :: VariableName
     TYPE(Variable_t), POINTER :: VariableVar
+    INTEGER, POINTER :: VariablePerm(:)
     INTEGER :: VariableDOFS
+    REAL(KIND=dp),POINTER,OPTIONAL :: PrevNodalVariable(:), PrevVariable(:)
+
     ! ----
     INTEGER :: N, istat
     CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='AssignSingleVar'
     
     
     !IF (.NOT.ASSOCIATED(VariableVar)) &
-         VariableVar => VariableGet(Solver % Mesh % Variables,VariableName)
+    VariableVar => VariableGet(Solver % Mesh % Variables,VariableName)
     IF (.NOT.ASSOCIATED(VariableVar)) THEN
       VariableExists = .FALSE.
+      WRITE (Message,*) 'Variable ',TRIM(VariableName),' not found'
+      CALL WARN(SolverName,Message) 
       RETURN
+    ELSE
+      VariableDOFS = VariableVar % DOFs
+      VariablePerm => VariableVar % Perm
+      Variable => VariableVar % Values
+      IF (.NOT.ASSOCIATED(VariablePerm) .OR. .NOT.ASSOCIATED(Variable)) &
+           CALL FATAL(SolverName, ' Error in assignments of variable pointers')
+      !PRINT *, PRESENT(PrevVariable)
+      IF (PRESENT(PrevVariable)) THEN
+        PrevVariable => VariableVar % PrevValues(:,1)
+        CALL INFO(SolverName,"Assigned previous time values variable pointer",Level=1)
+      END IF
     END IF
-
-    VariableDOFS = VariableVar % DOFs
-
-
     
     IF ((.NOT.VariableExists) .OR. (Model % Mesh % Changed)) THEN
       N = MAX( Solver % Mesh % MaxElementDOFs, Solver % Mesh % MaxElementNodes )
-      IF (VariableExists) &
-           DEALLOCATE(NodalVariable)
-      ALLOCATE(NodalVariable(N*VariableDOFS),STAT=istat )
+      IF (VariableExists) THEN
+        DEALLOCATE(NodalVariable)
+        IF (PRESENT(PrevNodalVariable)) DEALLOCATE(PrevNodalVariable)
+      END IF
+      ALLOCATE(NodalVariable(N*VariableDOFS),STAT=istat )      
+      IF (PRESENT(PrevNodalVariable) .AND. (istat == 0))  ALLOCATE(PrevNodalVariable(N*VariableDOFS),STAT=istat )
       IF ( istat /= 0 ) THEN
         CALL FATAL(SolverName,"Allocation error")
       ELSE
@@ -887,8 +903,9 @@ CONTAINS
     END IF    
 
   END SUBROUTINE AssignSingleVar
-    !---------------------------------------------------------------------------------------------
-  ! assign single modal variable time derivative
+  !---------------------------------------------------------------------------------------------
+  ! assign single nodal variable time derivative
+  !---------------------------------------------------------------------------------------------
   SUBROUTINE AssignSingleVarTimeDer(Solver,Model,Element,NodalVariableTimeDer,&
        VariableVar,VariableTimeDerExists,dt)
     IMPLICIT NONE
@@ -1192,13 +1209,13 @@ CONTAINS
     INTEGER :: N,VariableDOFs
     INTEGER, POINTER :: VariablePerm(:)
     TYPE(Element_t) :: Element
-    REAL(KIND=dp),POINTER :: NodalVariable(:),Variable(:)    
+    REAL(KIND=dp),POINTER :: NodalVariable(:),Variable(:)
     !-----------------------
     INTEGER :: I,J
 
     DO I=1,N
-      DO J=1,VariableDOFs            
-        NodalVariable((VariableDOFs*I - 1) + J) =&
+      DO J=1,VariableDOFs
+        NodalVariable((VariableDOFs*I - 1) + J) = &
              Variable(VariableDOFs*(VariablePerm(Element % NodeIndexes(I))-1) + J)
       END DO
     END DO

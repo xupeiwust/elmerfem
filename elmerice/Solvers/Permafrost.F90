@@ -161,15 +161,14 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
   
   IF (ComputeDeformation) THEN
     CALL AssignSingleVar(Solver,Model,NodalStressInv,StressInvVar,&
-         StressInvName,StressInvDOFs,StressInvAllocationsDone)
+         StressInvPerm, StressInv, StressInvName,StressInvDOFs,StressInvAllocationsDone)
     PRINT *,"ComputeDeformation", ComputeDeformation
     IF (.NOT.ComputeDeformation) THEN
       WRITE (Message,*) '"Ground Stress Invariant Variable Name" assigned as ',TRIM(StressInvName),&
            ', but variable not found - no stress used'
       CALL WARN(SolverName,Message)
     ELSE
-      StressInvPerm => StressInvVar % Perm
-      StressInv => StressInvVar % Values
+
       WRITE (Message,*) '"Ground Stress Invariant Variable Name" ',TRIM(StressInvName),&
            ' assigned'
       CALL INFO(SolverName,Message,Level=1)
@@ -1498,11 +1497,11 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   INTEGER,POINTER :: TemperaturePerm(:), PressurePerm(:),&
        PorosityPerm(:),SalinityPerm(:),GWfluxPerm1(:),&
        TemperatureDtPerm(:), PressureDtPerm(:), SalinityDtPerm(:),&
-       GWfluxPerm2(:),GWfluxPerm3(:)
+       GWfluxPerm2(:),GWfluxPerm3(:), DepthPerm(:)
   REAL(KIND=dp) :: Norm, meanfactor
   REAL(KIND=dp),POINTER :: Temperature(:), Pressure(:), Porosity(:), Salinity(:),&
        TemperatureDt(:), PressureDt(:), SalinityDt(:),&
-       GWflux1(:),GWflux2(:),GWflux3(:)
+       GWflux1(:),GWflux2(:),GWflux3(:), Depth(:)
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalPressure(:), NodalSalinity(:),&
        NodalTemperature(:),NodalGWflux(:,:),NodalDepth(:),&
        NodalTemperatureDt(:), NodalSalinityDt(:),&
@@ -1520,7 +1519,7 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
        CurrentRockMaterial,CurrentSoluteMaterial,CurrentSolventMaterial,NumberOfRockRecords,&
        NodalPorosity,NodalPressure,NodalSalinity,NodalTemperature,NodalGWflux,NodalDepth,&
        NodalTemperatureDt,NodalPressureDt,NodalSalinityDt,&
-       ElementWiseRockMaterial,ComputeDt!,NodalGWflux,NoGWflux
+       ElementWiseRockMaterial,ComputeDt,DepthExists!,NodalGWflux,NoGWflux
   !------------------------------------------------------------------------------
   CALL Info( SolverName, '-------------------------------------',Level=1 )
   CALL Info( SolverName, 'Computing heat transfer              ',Level=1 )
@@ -1534,9 +1533,6 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
   VarName = Solver % Variable % Name
   Params => GetSolverParams()
   ComputeDt = GetLogical(Params,'Compute Time Derivatives',Found)
-
-
-
 
   CALL AssignVars(Solver,Model,AllocationsDone,&
        NodalTemperature,NodalPressure,NodalPorosity,NodalSalinity,NodalGWflux, &
@@ -1558,10 +1554,11 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
       WRITE(DepthName,'(A)') 'Depth'
       CALL WARN(SolverName,' "Depth Variable Name" not found. Assuming default "Depth"')
     END IF
+    
   END IF
 
-  CALL AssignSingleVar(Solver, Model,NodalDepth,DepthVar,DepthName,DepthDOFs,DepthExists)
-
+  CALL AssignSingleVar(Solver, Model,NodalDepth,DepthVar,DepthPerm,Depth,&
+       DepthName,DepthDOFs,DepthExists)
   maxiter = ListGetInteger( Params,&
        'Nonlinear System Max Iterations',Found,minv=1)
   IF(.NOT. Found ) maxiter = 1
@@ -1625,8 +1622,9 @@ SUBROUTINE PermafrostHeatTransfer( Model,Solver,dt,TransientSimulation )
            GWfluxPerm1, GWfluxPerm2,GWfluxPerm3, &
            NoSalinity,NoPressure,ConstantPorosity,GivenGWFlux,&
            PorosityName,SolverName,DIM)
+	   
+      IF (DepthExists) CALL ReadSingleVar(N,Element,DepthPerm,NodalDepth,Depth,DepthDOFs)
  
-      IF (DepthExists) CALL ReadSingleVar(N,Element,DepthVar % Perm,NodalDepth,DepthVar % Values,DepthVar % DOFs)
       ! IF (DepthExists) &
       !      NodalDepth(1:N) = DepthVar % Values(DepthVar % Perm(Element % NodeIndexes(1:N)))
 
@@ -3567,7 +3565,7 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   !------------------------------------------------------------------------------
 
   ! Execute solver only once at beginning
-  if (Visited) RETURN
+  IF (Visited) RETURN
 
   CALL Info(SolverName, '-----------------------------------', Level=1)
   CALL Info(SolverName, 'Initializing porosity to reference ', Level=1)
@@ -3681,7 +3679,197 @@ SUBROUTINE PorosityInit(Model, Solver, Timestep, TransientSimulation )
   !==============================================================================
 END SUBROUTINE PorosityInit
 !==============================================================================
+!==============================================================================
+!>  Evolution of Porosity 
+!==============================================================================
+SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimulation )
+ USE DefUtils
+  USE PermaFrostMaterials
+  IMPLICIT NONE
 
+  TYPE(Model_t) :: Model
+  TYPE(Solver_t), TARGET :: Solver
+  REAL(KIND=dp) :: Timestep
+  LOGICAL :: TransientSimulation
+
+  !------------------------------------------------------------------------------
+  ! Local variables
+  !------------------------------------------------------------------------------
+  TYPE(Element_t), POINTER :: CurrentElement
+  TYPE(Variable_t), POINTER :: PorosityVariable, TemperatureVar, PressureVar, StrainVar
+  TYPE(ValueList_t), POINTER :: SolverParams,Material
+  TYPE(RockMaterial_t),POINTER :: CurrentRockMaterial
+  INTEGER, POINTER :: PorosityPerm(:), StrainPerm(:), TemperaturePerm(:), PressurePerm(:), NodeIndexes(:)
+  REAL(KIND=dp), POINTER :: PorosityValues(:), Strain(:), Temperature(:), Pressure(:),&
+       NodalStrain(:), NodalTemperature(:), NodalPressure(:),&
+       PrevNodalTemperature(:), PrevNodalPressure(:),&
+       PrevTemperature(:), PrevPressure(:)
+       REAL(KIND=dp) :: aux, Nodalrhos, PrevNodalrhos, StrainInvariant,&
+            GasConstant, N0, DeltaT, T0, p0, eps, Gravity(3)
+  INTEGER :: DIM, i, j, k, N, NumberOfRockRecords,RockMaterialID,CurrentNode,Active,&
+       StrainDOFs,TemperatureDOFS,PressureDOFs,totalunset,totalset
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="PermafrostPorosityEvolution"
+  CHARACTER(LEN=MAX_NAME_LEN) :: PorosityName,PressureName,TemperatureName,StrainVarName,ElementRockMaterialName
+  LOGICAL :: FirstTime=.TRUE.,Found,GotIt,ElementWiseRockMaterial,&
+       StrainVarExists, TemperatureVarExists, PressureVarExists,ConstVal
+  !------------------------------
+  SAVE FirstTime,ElementWiseRockMaterial,&
+       NodalStrain, NodalTemperature, NodalPressure,&
+       PrevNodalTemperature, PrevNodalPressure,&
+       StrainVar, TemperatureVar, PressureVar,&
+       Strain, Temperature, Pressure,&
+       StrainDOFs,TemperatureDOFs,PressureDOFs,&
+       PrevTemperature, PrevPressure, &
+       StrainPerm, TemperaturePerm, PressurePerm,&
+       StrainVarExists, TemperatureVarExists, PressureVarExists, &
+       DIM, N0, GasConstant, DeltaT, T0, p0, eps, Gravity,&
+       CurrentRockMaterial,NumberOfRockRecords
+
+  !------------------------------------------------------------------------------
+  CALL Info(SolverName, '-----------------------------------', Level=1)
+  CALL Info(SolverName, ' computing evolution of porosity   ', Level=1)
+  CALL Info(SolverName, '-----------------------------------', Level=1)
+
+  ! Get info and solver variable
+  SolverParams => GetSolverParams()
+  PorosityVariable => Solver % Variable
+  IF (.NOT.ASSOCIATED(PorosityVariable)) CALL FATAL(SolverName,'No variable for "Porosity" associated')
+  PorosityName = TRIM( Solver % Variable % Name )
+  IF (TRIM(PorosityName) .NE. "porosity") THEN
+    WRITE (Message,*) TRIM(PorosityName),' is not the expected "Porosity" - hopefully on purpose'
+    CALL WARN(SolverName, Message)
+  END IF
+
+  PorosityPerm    => PorosityVariable % Perm
+  PorosityValues  => PorosityVariable % Values
+  IF (.NOT.ASSOCIATED( PorosityVariable % PrevValues )) THEN
+    ALLOCATE(PorosityVariable % PrevValues(SIZE(PorosityValues), 1))
+  END IF
+  PorosityVariable % PrevValues(1:SIZE(PorosityValues),1) =&
+       PorosityVariable % Values(1:SIZE(PorosityValues))
+  
+  IF(FirstTime) THEN
+    IF(.NOT.(&
+         ReadPermafrostConstants(Model, SolverName, DIM, GasConstant, N0, DeltaT, T0, p0, eps, Gravity)))&
+         CALL FATAL(SolverName,"Errors in reading constants")
+  END IF
+  
+  ! assign needed variables
+  !(NB: we rather skip AssignVar routine, as ONLY Temperature and Pressure are needed)
+  IF (FirstTime .OR. (Solver % Mesh % Changed ) ) THEN
+    CALL INFO(SolverName,"Initialisation",Level=1)
+    StrainVarName = GetString(SolverParams,'Strain Variable',Found)
+    IF (.NOT.Found) THEN
+      WRITE(StrainVarName,*) 'Strain'
+      WRITE(Message,*) '"Strain Variable" not found - assuming default value: ',TRIM(StrainVarName)
+      CALL WARN(SolverName,Message)
+    ELSE
+      WRITE(Message,*) '"Strain Variable" found and set to: ',TRIM(StrainVarName)
+      CALL INFO(SolverName,Message,Level=1)
+    END IF
+    CALL AssignSingleVar(Solver,Model,NodalStrain,StrainVar,StrainPerm, Strain, &
+         StrainVarName,StrainDOFs,StrainVarExists)
+    
+    TemperatureName = GetString(SolverParams,'Temperature Variable',Found)
+    IF (.NOT.Found) THEN
+      CALL WARN(SolverName,' "Temperature Variable" not found - assuming default value "Temperature" ')
+      WRITE(TemperatureName,*) 'Temperature'
+          ELSE
+      WRITE(Message,*) '"Temperature Variable" found and set to: ',TRIM(TemperatureName)
+      CALL INFO(SolverName,Message,Level=1)
+    END IF
+    CALL AssignSingleVar(Solver,Model,NodalTemperature,TemperatureVar,&
+         TemperaturePerm, Temperature, &
+         TemperatureName,TemperatureDOFS,TemperatureVarExists,&
+         PrevNodalVariable=PrevNodalTemperature, PrevVariable=PrevTemperature)
+    IF (.NOT.ASSOCIATED(PrevTemperature)) CALL FATAL(SolverName,'Previous values of temperature variable not found')
+    
+    PressureName = GetString(SolverParams,'Pressure Variable',Found)
+    IF (.NOT.Found) THEN
+      CALL WARN(SolverName,' "Pressure Variable" not found - assuming default value "Pressure" ')
+      WRITE(PressureName,*) 'Pressure'
+    ELSE
+      WRITE(Message,*) ' "Pressure Variable" found and set to: ',PressureName
+      CALL INFO(SolverName,Message,Level=1)
+    END IF
+    CALL AssignSingleVar(Solver,Model,NodalPressure,PressureVar,&
+         PressurePerm, Pressure, &
+         PressureName,PressureDOFs,PressureVarExists,&
+         PrevNodalVariable=PrevNodalPressure, PrevVariable=PrevPressure)
+    IF (.NOT.ASSOCIATED(PrevPressure)) CALL FATAL(SolverName,'Previous values of pressure variable not found')
+  END IF
+
+  ! Loop over elements
+  Active = Solver % NumberOFActiveElements
+
+  DO i = 1, Active
+    CurrentElement => GetActiveElement(i)
+    NodeIndexes => CurrentElement % NodeIndexes
+    Material => GetMaterial(CurrentElement)
+    ConstVal = GetLogical(Material,'Constant Permafrost Properties',Found)
+    IF (.NOT.Found) THEN
+      ConstVal = .FALSE.
+    ELSE
+      IF (ConstVal) &
+           CALL INFO(SolverName,'"Constant Permafrost Properties" set to true',Level=15)
+    END IF
+    IF (.NOT.ASSOCIATED(Material)) CALL FATAL(SolverName,'No Material pointer found')
+    IF (FirstTime) THEN
+      ! check, whether we have globally or element-wise defined values of rock-material parameters
+      ElementRockMaterialName = ListGetString(Material,"Element Rock Material File",ElementWiseRockMaterial)
+      IF (ElementWiseRockMaterial) THEN
+        WRITE (Message,*) 'Found "Element Rock Material File"'
+        CALL INFO(SolverName,Message,Level=3)
+        CALL INFO(SolverName,'Using element-wise rock material definition',Level=3)
+      END IF
+      IF (ElementWiseRockMaterial) THEN
+        ! read element-wise material parameter (CurrentRockMaterial will have one entry each element)
+        NumberOfRockRecords = &
+             ReadPermafrostElementRockMaterial(CurrentRockMaterial,ElementRockMaterialName,Solver,DIM)
+        PRINT *, "NumberOfRockRecords", NumberOfRockRecords
+      ELSE
+        NumberOfRockRecords =  ReadPermafrostRockMaterial( Material,Model % Constants,CurrentRockMaterial )
+      END IF
+      IF (NumberOfRockRecords < 1) THEN
+        CALL FATAL(SolverName,'No Rock Material specified')
+      ELSE
+        CALL INFO(SolverName,'Permafrost Rock Material read',Level=3)
+      END IF
+      dim = CoordinateSystemDimension()
+      FirstTime = .FALSE.
+    END IF
+
+    IF (ElementWiseRockMaterial) THEN
+      RockMaterialID = i
+    ELSE      
+      RockMaterialID = ListGetInteger(Material,'Rock Material ID', GotIt,UnfoundFatal=.TRUE.)
+      IF (.NOT.GotIt) CALL FATAL(SolverName,"Rock Material ID not found")
+    END IF
+    N = GetElementNOFNodes(CurrentElement)
+    CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,PrevNodalTemperature,PrevTemperature,TemperatureDOFs)
+    CALL ReadSingleVar(N,CurrentElement,PressurePerm,PrevNodalPressure,PrevPressure,PressureDOFs)
+    ! Loop over nodes of element
+    DO k = 1, N
+      CurrentNode = CurrentElement % NodeIndexes(k)
+      PrevNodalrhos = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,&
+           PrevNodalTemperature(TemperaturePerm(CurrentNode)),&
+           PrevNodalPressure(PressurePerm(CurrentNode)),ConstVal)
+      Nodalrhos = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,&
+           NodalTemperature(TemperaturePerm(CurrentNode)),&
+           NodalPressure(PressurePerm(CurrentNode)),ConstVal)
+      StrainInvariant = 0.0
+      DO J=1,DIM
+        StrainInvariant = StrainInvariant &
+             + Strain((StrainPerm(CurrentNode)-1)*StrainDOFs + J)
+      END DO
+      aux = 1.0_dp - (PrevNodalrhos/Nodalrhos)/(1.0_dp - StrainInvariant)
+      PorosityValues(PorosityPerm(CurrentNode)) = &
+           PorosityVariable % PrevValues(PorosityPerm(CurrentNode),1)*(1.0_dp - aux) + aux
+    END DO
+  END DO
+END SUBROUTINE PermafrostPorosityEvolution
+
+  
 !==============================================================================
 !>  initialization of arbitrary scalar given by nodal file
 !==============================================================================
@@ -4418,8 +4606,6 @@ CONTAINS
 
     CALL GetElementNodes( Nodes )
 
-    PRINT *,"inside"
-
     ! Get stuff from SIF Material section
     Material => GetMaterial(Element)
     IF (ElementWiseRockMaterial) THEN
@@ -4601,7 +4787,7 @@ CONTAINS
         END DO
 
         JgwDAtIP = GetJgwD(KgwppAtIP,KgwpTAtIP,KgwAtIP,gradpAtIP,gradTAtIP,Gravity,rhogwAtIP,DIM,CryogenicSuction)
-        PRINT *,"IPOutput: JgwD=(",JgwDAtIP(1:DIM)*365.5*24.0*3600.0,")"
+        !PRINT *,"IPOutput: JgwD=(",JgwDAtIP(1:DIM)*365.5*24.0*3600.0,")"
       END IF
 
       ! add thermal dispersion in Hydro-Geological Mode
@@ -5042,7 +5228,6 @@ FUNCTION GetElasticityForce(Model,IPNo,ArgumentsAtIP) RESULT(EforceAtIP) ! needs
   !IF (t==100 )PRINT *, "GetElasticityForce: EforceAtIP=", EforceAtIP, rhosAtIP,rhogwAtIP,rhoiAtIP,&
   !     PorosityAtIP,SalinityAtIP,XiAtIP, "   *********"  
 END FUNCTION GetElasticityForce
-
 
 
 
