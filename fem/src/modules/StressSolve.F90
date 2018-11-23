@@ -57,10 +57,13 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
          CalcStressAll, CalcVelocities
     CHARACTER :: DimensionString
 !------------------------------------------------------------------------------
-
+    CALL Info( 'StressSolve_init', ' ', Level=1 )
+    CALL Info( 'StressSolve_init', '--------------------------------------------------',Level=1 )
+    CALL Info( 'StressSolve_init', 'Solving displacements from linear elasticity model',Level=1 )     
+    CALL Info( 'StressSolve_init', '--------------------------------------------------',Level=1 )
     SolverParams => GetSolverParams()
+    dim = CoordinateSystemDimension()
     IF ( .NOT. ListCheckPresent( SolverParams,'Variable') ) THEN
-      dim = CoordinateSystemDimension()
       CALL ListAddInteger( SolverParams, 'Variable DOFs', dim )
       CALL ListAddString( SolverParams, 'Variable', 'Displacement' )
     END IF
@@ -80,10 +83,8 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
     IF(CalculateStrains)   CalcStressAll = .TRUE. ! can't calculate principal without components
 
     IF (Transient) THEN
-      CalcVelocities = GetLogical(SolverParams, 'Caclulate Velocities', Found)
+      CalcVelocities = GetLogical(SolverParams, 'Calculate Velocities', Found)
       IF (.NOT.Found) CalcVelocities = .FALSE.
-    ELSE
-      CalcVelocities = .FALSE.
     END IF
     
     ! If stress computation is requested somewhere then enforce it 
@@ -126,15 +127,17 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
             'Principal Strain[Principal Strain:3]' )
       END IF
     END IF
-
+    
     IF (CalcVelocities) THEN
       WRITE (Message,'(A,I1,A)') '-dofs ',DIM, ' Displacement Velocity'
       
       CALL ListAddString( SolverParams,&
             NextFreeKeyword('Exported Variable ',SolverParams), &
             Message )
+      WRITE (Message,'(A,A,I1,A)') 'Added:','-dofs ',DIM, ' Displacement Velocity'
+      CALL INFO('StressSolve_init',Message,Level=1)
     END IF
-
+    
     CALL ListAddLogical( SolverParams, 'stress: Linear System Save', .FALSE. )
 
 !------------------------------------------------------------------------------
@@ -400,7 +403,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        IF(CalculateStrains)   CalcStressAll = .TRUE. ! can't calculate principal without components
 
        IF (Transient) THEN
-         CalcVelocities = GetLogical(SolverParams, 'Caclulate Velocities', Found)
+         CalcVelocities = GetLogical(SolverParams, 'Calculate Velocities', Found)
          IF (.NOT.Found) THEN
            CalcVelocities = .FALSE.
          ELSE
@@ -411,7 +414,7 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
              DisplacementVelDOFs = DisplacementVelVar % DOFs
            ELSE
              CALL FATAL('StressSolver',&
-                  ' "Caclulate Velocities" set but variable "Displacement Velocity" not found')
+                  ' "Calculate Velocities" set but variable "Displacement Velocity" not found')
            END IF
          END IF
        ELSE

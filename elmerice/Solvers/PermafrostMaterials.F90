@@ -1292,6 +1292,13 @@ CONTAINS
     ELSE
       NodalPorosity(1:N) = Porosity(PorosityPerm(Element % NodeIndexes(1:N)))
     END IF
+    DO I=1,N
+      IF (NodalPorosity(I) .NE. NodalPorosity(I)) THEN
+        PRINT *,SolverName,": Invalid value dedected in NodalPorosity"
+        PRINT *,SolverName,":", Porosity(PorosityPerm(Element % NodeIndexes(1:N)))
+        CALL FATAL(SolverName,"Exiting")
+      END IF
+    END DO
     IF (NoPressure) THEN
       CALL INFO(SolverName,'No Pressure variable found - setting to "Reference Pressure"',Level=9)
       p0 = GetConstReal(Model % Constants, 'Reference Pressure', Found)

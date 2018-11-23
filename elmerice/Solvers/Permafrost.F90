@@ -157,7 +157,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
 
   StressInvName =  ListGetString(params,'Ground Stress Invariant Variable Name',ComputeDeformation)
 
-  PRINT *,"ComputeDeformation", ComputeDeformation, "StressInvName: ", TRIM(StressInvName)
+  !PRINT *,"ComputeDeformation", ComputeDeformation, "StressInvName: ", TRIM(StressInvName)
   
   IF (ComputeDeformation) THEN
     CALL AssignSingleVar(Solver,Model,NodalStressInv,StressInvVar,&
@@ -922,7 +922,8 @@ SUBROUTINE PermafrostGroundwaterFlux( Model,Solver,dt,Transient )
   REAL(KIND=dp),POINTER :: NodalPorosity(:), NodalTemperature(:), NodalSalinity(:),&
        NodalPressure(:), NodalGWflux(:,:),NodalTemperatureDt(:),NodalPressureDt(:),&
        NodalSalinityDt(:) ! all dummies
-  LOGICAL :: AllocationsDone,ConstantPorosity, NoSalinity,GivenGWFlux=.FALSE.,UnfoundFatal=.TRUE.,ComputeDt=.FALSE.,DummyLog
+  LOGICAL :: AllocationsDone,ConstantPorosity, NoSalinity,GivenGWFlux=.FALSE.,&
+       UnfoundFatal=.TRUE.,ComputeDt=.FALSE.,DummyLog
   CHARACTER(LEN=MAX_NAME_LEN) :: TemperatureName, PorosityName, SalinityName, PressureName
   CHARACTER(LEN=MAX_NAME_LEN) :: SolverName="PermafrostGroundwaterFlux"
 
@@ -1295,14 +1296,16 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
   TYPE(ValueList_t), POINTER :: SolverParams
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundStress'
   CHARACTER(LEN=MAX_NAME_LEN) :: VariableName, StressVariableName, PressureName
-  LOGICAL :: Found, FirstTime=.FALSE., NoPressure, UpdatePrev=.FALSE.
+  LOGICAL :: Found, FirstTime=.TRUE., NoPressure, UpdatePrev=.FALSE.
   TYPE(Variable_t), POINTER :: InvariantVar, StressVariableVar, PressureVar
   INTEGER, POINTER :: InvariantPerm(:), StressVariablePerm(:), PressurePerm(:)
   INTEGER :: I, DIM, StressVariableDOFs, CurrentTime
   REAL (KIND=dp), POINTER :: Invariant(:), StressVariable(:), InvariantPrev(:,:), Pressure(:)
   !------------------------------------------------------------------------------
-  SAVE FirstTime, CurrentTime, NoPressure, PressureVar, Pressure, PressurePerm,&
-       StressVariableVar, StressVariable, StressVariablePerm, StressVariableDOFs
+  SAVE FirstTime, CurrentTime, DIM, NoPressure,&
+       PressureVar, Pressure, PressurePerm, PressureName,&
+       StressVariableVar, StressVariable, StressVariablePerm, StressVariableDOFs, &
+       StressVariableName
   
   CALL Info( SolverName, '-----------------------------------------',Level=1 )
   CALL Info( SolverName, ' Computing  Permafrost Stress Invariant',Level=1 )
@@ -1322,30 +1325,31 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
     END IF
   END IF
 
-!  IF (FirstTime .OR. Model % Mesh % Changed) THEN
-!!$    PressureName = ListGetString(Params, &
-!!$       'Pressure Variable', Found )
-!!$    IF (.NOT.Found) THEN
-!!$      CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
-!!$      WRITE(PressureName,'(A)') 'Pressure'
-!!$    ELSE
-!!$      WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
-!!$      CALL INFO(SolverName,Message,Level=9)
-!!$    END IF
-!!$    PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
-!!$    IF (.NOT.ASSOCIATED(PressureVar)) THEN
-!!$      NULLIFY(Pressure)
-!!$      NoPressure = .TRUE.
-!!$      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " not associated"
-!!$      CALL WARN(SolverName,Message)
-!!$    ELSE
-!!$      Pressure => PressureVar % Values
-!!$      PressurePerm => PressureVar % Perm
-!!$      NoPressure = .FALSE.
-!!$      WRITE(Message,'(A,A,A)') "'Pressure Variable ", TRIM(PressureName), " associated"
-!!$      CALL INFO(SolverName,Message,Level=9)
-!!$    END IF
-  
+  IF (FirstTime .OR. Model % Mesh % Changed) THEN
+    DIM = CoordinateSystemDimension()
+    
+    PressureName = ListGetString(SolverParams, &
+       'Pressure Variable', Found )
+    IF (.NOT.Found) THEN
+      CALL WARN(SolverName," 'Pressure Variable' not found. Using default 'Pressure' ")
+      WRITE(PressureName,'(A)') 'Pressure'
+    ELSE
+      WRITE(Message,'(A,A)') "'Pressure Variable' found and set to: ", PressureName
+      CALL INFO(SolverName,Message,Level=9)
+    END IF
+    PressureVar => VariableGet(Solver % Mesh % Variables,PressureName)
+    IF (.NOT.ASSOCIATED(PressureVar)) THEN
+      NULLIFY(Pressure)
+      WRITE(Message,'(A,A,A)') 'Pressure Variable "', TRIM(PressureName), '" not associated'
+      CALL FATAL(SolverName,Message)
+    ELSE
+      Pressure => PressureVar % Values
+      PressurePerm => PressureVar % Perm
+      NoPressure = .FALSE.
+      WRITE(Message,'(A,A,A)') 'Pressure Variable "', TRIM(PressureName), '" associated'
+      CALL INFO(SolverName,Message,Level=9)
+    END IF
+  END IF
     StressVariableName = ListGetString(SolverParams,'Stress Variable Name',Found)
     IF (.NOT.Found) CALL FATAL(SolverName,' "Stress Variable Name" not found')
     StressVariableVar => VariableGet( Solver % Mesh % Variables, StressVariableName )
@@ -1366,10 +1370,15 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
   InvariantPrev => Solver % Variable % PrevValues
 
   DO I = 1,Solver % Mesh % Nodes % NumberOfNodes
-    IF (UpdatePrev) &
+    IF (InvariantPerm(I) == 0) CYCLE
+    IF (PressurePerm(I) == 0) THEN
+      WRITE (Message,*) 'No entry for pressure variable',PressureName,'at point',I
+      CALL FATAL(SolverName,Message)
+    END IF
+    IF ( UpdatePrev ) &         
          InvariantPrev(InvariantPerm(I),1) =  Invariant(InvariantPerm(I))
     Invariant(InvariantPerm(I)) = &
-         GetFirstInvariant(StressVariable,(StressVariablePerm(I)-1)*StressVariableDOFs,DIM)
+         GetFirstInvariant(StressVariable,Pressure(PressurePerm(I)),(StressVariablePerm(I)-1)*StressVariableDOFs,DIM)
     !IF (NoPressure)! add - 3 * gwpressure
     IF (FirstTime) THEN 
       InvariantPrev(InvariantPerm(I),1) = Invariant(InvariantPerm(I))
@@ -1377,16 +1386,17 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
   END DO
   FirstTime = .FALSE.
   CONTAINS
-    FUNCTION GetFirstInvariant(Stress,Position,DIM) RESULT(FirstInvariant)
+    FUNCTION GetFirstInvariant(Stress,PressureAtPoint,Position,DIM) RESULT(FirstInvariant)
       REAL (KIND=dp) ::  FirstInvariant
       REAL (KIND=dp), POINTER :: Stress(:)
+      REAL (KIND=dp) :: PressureAtPoint
       INTEGER :: DIM, Position
       !--------
       INTEGER :: I
       
       FirstInvariant = 0.0_dp
       DO I=1,DIM
-        FirstInvariant = FirstInvariant + Stress(Position+I)
+        FirstInvariant = FirstInvariant + Stress(Position+I) - PressureAtPoint
       END DO
       
     END FUNCTION GetFirstInvariant  
@@ -3710,10 +3720,10 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
        StrainDOFs,TemperatureDOFS,PressureDOFs,totalunset,totalset
   CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName="PermafrostPorosityEvolution"
   CHARACTER(LEN=MAX_NAME_LEN) :: PorosityName,PressureName,TemperatureName,StrainVarName,ElementRockMaterialName
-  LOGICAL :: FirstTime=.TRUE.,Found,GotIt,ElementWiseRockMaterial,&
+  LOGICAL :: FirstTime=.TRUE.,FirstVisit=.TRUE.,Found,GotIt,ElementWiseRockMaterial,&
        StrainVarExists, TemperatureVarExists, PressureVarExists,ConstVal
   !------------------------------
-  SAVE FirstTime,ElementWiseRockMaterial,&
+  SAVE FirstTime,FirstVisit,ElementWiseRockMaterial,&
        NodalStrain, NodalTemperature, NodalPressure,&
        PrevNodalTemperature, PrevNodalPressure,&
        StrainVar, TemperatureVar, PressureVar,&
@@ -3782,7 +3792,7 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
          TemperaturePerm, Temperature, &
          TemperatureName,TemperatureDOFS,TemperatureVarExists,&
          PrevNodalVariable=PrevNodalTemperature, PrevVariable=PrevTemperature)
-    IF (.NOT.ASSOCIATED(PrevTemperature)) CALL FATAL(SolverName,'Previous values of temperature variable not found')
+
     
     PressureName = GetString(SolverParams,'Pressure Variable',Found)
     IF (.NOT.Found) THEN
@@ -3796,9 +3806,19 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
          PressurePerm, Pressure, &
          PressureName,PressureDOFs,PressureVarExists,&
          PrevNodalVariable=PrevNodalPressure, PrevVariable=PrevPressure)
-    IF (.NOT.ASSOCIATED(PrevPressure)) CALL FATAL(SolverName,'Previous values of pressure variable not found')
-  END IF
 
+    FirstVisit = GetLogical(SolverParams,'Initialize Time Derivatives',Found)
+    IF (.NOT.Found) FirstVisit = .FALSE.
+  END IF
+  ! some sanity check
+  IF (.NOT.ASSOCIATED(Temperature) .OR. .NOT.ASSOCIATED(TemperaturePerm))&
+       CALL FATAL(SolverName,'Values of temperature variable not found')
+  IF (.NOT.ASSOCIATED(PrevTemperature))&
+       CALL FATAL(SolverName,'Previous values of temperature variable not found')
+  IF (.NOT.ASSOCIATED(Pressure) .OR. .NOT.ASSOCIATED(PressurePerm))&
+       CALL FATAL(SolverName,'Values of pressure variable not found')
+  IF (.NOT.ASSOCIATED(PrevPressure))&
+       CALL FATAL(SolverName,'Previous values of pressure variable not found')
   ! Loop over elements
   Active = Solver % NumberOFActiveElements
 
@@ -3846,17 +3866,42 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
       IF (.NOT.GotIt) CALL FATAL(SolverName,"Rock Material ID not found")
     END IF
     N = GetElementNOFNodes(CurrentElement)
-    CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,PrevNodalTemperature,PrevTemperature,TemperatureDOFs)
-    CALL ReadSingleVar(N,CurrentElement,PressurePerm,PrevNodalPressure,PrevPressure,PressureDOFs)
+    CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,NodalTemperature,Temperature,TemperatureDOFs)
+    CALL ReadSingleVar(N,CurrentElement,PressurePerm,NodalPressure,Pressure,PressureDOFs)
+    IF (FirstVisit) THEN ! write current values if starting
+      CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,PrevNodalTemperature,Temperature,TemperatureDOFs)
+      CALL ReadSingleVar(N,CurrentElement,PressurePerm,PrevNodalPressure,Pressure,PressureDOFs)
+    ELSE
+      CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,PrevNodalTemperature,PrevTemperature,TemperatureDOFs)
+      CALL ReadSingleVar(N,CurrentElement,PressurePerm,PrevNodalPressure,PrevPressure,PressureDOFs)
+    END IF
     ! Loop over nodes of element
     DO k = 1, N
       CurrentNode = CurrentElement % NodeIndexes(k)
       PrevNodalrhos = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,&
-           PrevNodalTemperature(TemperaturePerm(CurrentNode)),&
-           PrevNodalPressure(PressurePerm(CurrentNode)),ConstVal)
+           PrevNodalTemperature(k),&
+           PrevNodalPressure(k),ConstVal)
+      IF (PrevNodalrhos .NE. PrevNodalrhos) THEN
+        PRINT *,"PermafrostPorosityEvolution: ","Found weird number for PrevNodalrhos"
+        PRINT *,"PermafrostPorosityEvolution: ",&
+           PrevNodalTemperature(k),&
+           PrevNodalPressure(k),&
+           RockMaterialID,T0,p0,ConstVal,&
+           CurrentElement % NodeIndexes(k)
+        CALL FATAL(SolverName,'Exiting')
+      END IF
       Nodalrhos = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,&
-           NodalTemperature(TemperaturePerm(CurrentNode)),&
-           NodalPressure(PressurePerm(CurrentNode)),ConstVal)
+           NodalTemperature(k),&
+           NodalPressure(k),ConstVal)
+      IF (Nodalrhos .NE. Nodalrhos) THEN
+        PRINT *,"PermafrostPorosityEvolution: ","Found weird number for Nodalrhos"
+        PRINT *,"PermafrostPorosityEvolution: ",&
+           NodalTemperature(k),&
+           NodalPressure(k),&
+           RockMaterialID,T0,p0,ConstVal,&
+           CurrentElement % NodeIndexes(k)
+        CALL FATAL(SolverName,'Exiting')
+      END IF
       StrainInvariant = 0.0
       DO J=1,DIM
         StrainInvariant = StrainInvariant &
@@ -3865,8 +3910,17 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
       aux = 1.0_dp - (PrevNodalrhos/Nodalrhos)/(1.0_dp - StrainInvariant)
       PorosityValues(PorosityPerm(CurrentNode)) = &
            PorosityVariable % PrevValues(PorosityPerm(CurrentNode),1)*(1.0_dp - aux) + aux
+      IF (PorosityValues(PorosityPerm(CurrentNode)) .NE. PorosityValues(PorosityPerm(CurrentNode))) THEN
+        PRINT *,"PermafrostPorosityEvolution: ","Found weird number for PorosityValues"
+        PRINT *,"PermafrostPorosityEvolution: PorosityValues(",PorosityPerm(CurrentNode),")=",&
+             PorosityValues(PorosityPerm(CurrentNode))
+        PRINT *,"PermafrostPorosityEvolution:  Prev=",PorosityVariable % PrevValues(PorosityPerm(CurrentNode),1)
+        PRINT *,"PermafrostPorosityEvolution: ",PrevNodalrhos,Nodalrhos,StrainInvariant
+        CALL FATAL(SolverName,'Exiting')
+      END IF
     END DO
   END DO
+  FirstVisit = .FALSE.
 END SUBROUTINE PermafrostPorosityEvolution
 
   
