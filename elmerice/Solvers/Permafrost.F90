@@ -191,6 +191,7 @@ SUBROUTINE PermafrostGroundwaterFlow( Model,Solver,dt,TransientSimulation )
       IF (ComputeDeformation) THEN
         CALL AssignSingleVarTimeDer(Solver,Model,Element,NodalStressInvDt,&
              StressInvVar,StressInvDtAllocationsDone,dt)
+        !PRINT *, "Darcy:", NodalStressInvDt(1:GetElementNOFNodes(Element))
         ComputeDeformation = StressInvDtAllocationsDone
         
         IF (.NOT.ComputeDeformation) THEN
@@ -585,7 +586,8 @@ CONTAINS
         CgwpYcAtIP = GetCgwpYc(rhogwAtIP,rhoiAtIP,rhogwYcAtIP,XiAtIP(IPPerm),XiYcAtIP,PorosityAtIP)     
       END IF
       IF (ComputeDeformation) THEN
-        CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,XiAtIP(IPPerm),kappaGAtIP,CurrentRockMaterial,RockMaterialID)
+        CgwpI1AtIP = GetCgwpI1(rhogwAtIP,rhoiAtIP,XiAtIP(IPPerm),&
+             kappaGAtIP,CurrentRockMaterial,RockMaterialID)
         IF (CgwpI1AtIP > 1.0d-03) THEN ! sanity check
           PRINT *,"CgwpI1AtIP", CgwpI1AtIP,&
                XiAtIP(IPPerm),rhogwAtIP,rhoiAtIP,kappaGAtIP, EGAtIP, nuGAtIP
@@ -656,6 +658,20 @@ CONTAINS
         END DO
       END DO
       ! body forces
+
+      !REMOVE AT SOME STAGE-----------------
+      !IF ((t==1) .AND. (ABS(Model % Nodes % x( Element % NodeIndexes( 1 ) )) < 0.5) .AND.&
+       !    ( (Model % Nodes % y( Element % NodeIndexes( 1 ) )< -0.2) .AND. &
+      !     (Model % Nodes % y( Element % NodeIndexes( 1 ) )> -2.0) ) ) THEN
+        !IF (SUM(NodalStressInvDt(1:N)*Basis(1:N)) > 0.0) THEN
+          !PRINT *,"(X,Y)=",Model % Nodes % x( Element % NodeIndexes( 1 ) ), Model % Nodes % y( Element % NodeIndexes( 1 ) )
+          
+          !PRINT *,"Invariant",CgwpI1AtIP,SUM(NodalStressInvDt(1:N)*Basis(1:N))
+          !PRINT *,"StressInvVar", StressInvVar % PrevValues(StressInvPerm(Element % NodeIndexes( 1 )),1),&
+           !    StressInvVar % Values(StressInvPerm(Element % NodeIndexes( 1 )))
+        !END IF
+      !END IF
+      !--------------------------------------
       DO p=1,nd     
         FORCE(p) = FORCE(p) + Weight * rhogwAtIP *  SUM(fluxgAtIP(1:DIM)*dBasisdx(p,1:DIM))
         IF (CryogenicSuction) &
@@ -667,10 +683,7 @@ CONTAINS
         IF (ComputeDeformation)  THEN
           FORCE(p) = FORCE(p) &
                - Weight*CgwpI1AtIP* Basis(p)* SUM(NodalStressInvDt(1:N)*Basis(1:N))
-          !IF ((ABS(SUM(NodalStressInvDt(1:N)*Basis(1:N))) > 1.0d03) .OR. (CgwpI1AtIP>500.0))&
-          !     PRINT *,"Invariant",CgwpI1AtIP,SUM(NodalStressInvDt(1:N)*Basis(1:N))
-          !IF (CgwpI1AtIP>350.0) &
-          !     PRINT *,"Invariant",CgwpI1AtIP,
+ 
         END IF
         FORCE(p) = FORCE(p) - &
              Weight * Basis(p) * CurrentRockMaterial % etak(RockMaterialID) *&
@@ -1294,13 +1307,14 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
   LOGICAL :: TransientSimulation
   !------------------------------------------------------------------------------
   TYPE(ValueList_t), POINTER :: SolverParams
-  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostGroundStress'
+  CHARACTER(LEN=MAX_NAME_LEN), PARAMETER :: SolverName='PermafrostStressInvariant'
   CHARACTER(LEN=MAX_NAME_LEN) :: VariableName, StressVariableName, PressureName
   LOGICAL :: Found, FirstTime=.TRUE., NoPressure, UpdatePrev=.FALSE.
   TYPE(Variable_t), POINTER :: InvariantVar, StressVariableVar, PressureVar
   INTEGER, POINTER :: InvariantPerm(:), StressVariablePerm(:), PressurePerm(:)
   INTEGER :: I, DIM, StressVariableDOFs, CurrentTime
-  REAL (KIND=dp), POINTER :: Invariant(:), StressVariable(:), InvariantPrev(:,:), Pressure(:)
+  REAL (KIND=dp), POINTER :: Invariant(:), StressVariable(:),&
+       InvariantPrev(:,:), Pressure(:), PrevPressure(:)
   !------------------------------------------------------------------------------
   SAVE FirstTime, CurrentTime, DIM, NoPressure,&
        PressureVar, Pressure, PressurePerm, PressureName,&
@@ -1322,6 +1336,8 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
     IF (CurrentTime .NE. GetTimeStep()) THEN
       UpdatePrev = .TRUE.
       CurrentTime=GetTimeStep()
+    ELSE
+      UpdatePrev = .FALSE.
     END IF
   END IF
 
@@ -1345,6 +1361,7 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
     ELSE
       Pressure => PressureVar % Values
       PressurePerm => PressureVar % Perm
+      PrevPressure => PressureVar % PrevValues(:,1)
       NoPressure = .FALSE.
       WRITE(Message,'(A,A,A)') 'Pressure Variable "', TRIM(PressureName), '" associated'
       CALL INFO(SolverName,Message,Level=9)
@@ -1375,12 +1392,13 @@ SUBROUTINE PermafrostStressInvariant( Model,Solver,dt,TransientSimulation )
       WRITE (Message,*) 'No entry for pressure variable',PressureName,'at point',I
       CALL FATAL(SolverName,Message)
     END IF
-    IF ( UpdatePrev ) &         
-         InvariantPrev(InvariantPerm(I),1) =  Invariant(InvariantPerm(I))
+    IF ( UpdatePrev ) THEN
+      InvariantPrev(InvariantPerm(I),1) =  Invariant(InvariantPerm(I))
+    END IF
+    !PRINT *,"PermafrostStressInvariant",Pressure(PressurePerm(I))
     Invariant(InvariantPerm(I)) = &
          GetFirstInvariant(StressVariable,Pressure(PressurePerm(I)),(StressVariablePerm(I)-1)*StressVariableDOFs,DIM)
-    !IF (NoPressure)! add - 3 * gwpressure
-    IF (FirstTime) THEN 
+    IF (FirstTime) THEN
       InvariantPrev(InvariantPerm(I),1) = Invariant(InvariantPerm(I))
     END IF
   END DO
@@ -3903,10 +3921,12 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
         CALL FATAL(SolverName,'Exiting')
       END IF
       StrainInvariant = 0.0
+      ! first 1..DIM elements of StrainRate variable are th ediagonal entries
       DO J=1,DIM
         StrainInvariant = StrainInvariant &
              + Strain((StrainPerm(CurrentNode)-1)*StrainDOFs + J)
       END DO
+      !IF (StrainInvariant < 0.0) PRINT *,"PermafrostPorosityEvolution:",StrainInvariant
       aux = 1.0_dp - (PrevNodalrhos/Nodalrhos)/(1.0_dp - StrainInvariant)
       PorosityValues(PorosityPerm(CurrentNode)) = &
            PorosityVariable % PrevValues(PorosityPerm(CurrentNode),1)*(1.0_dp - aux) + aux

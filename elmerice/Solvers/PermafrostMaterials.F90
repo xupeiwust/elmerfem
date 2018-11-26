@@ -961,8 +961,10 @@ CONTAINS
         DO J=1,VariableDOFS
           NodalVariableTimeDer((I-1)*VariableDOFS + J) = &
                (Variable((CurrentVariableNodeIndex - 1) * VariableDOFS + J) &
-          - VariablePrev((CurrentVariableNodeIndex - 1) * VariableDOFS + J,1))/dt
+               - VariablePrev((CurrentVariableNodeIndex - 1) * VariableDOFS + J,1))/dt          
         END DO
+        !PRINT *,"AssignSingleVarTimeDer:", Variable((CurrentVariableNodeIndex - 1) * VariableDOFS + J),&
+        !     VariablePrev((CurrentVariableNodeIndex - 1) * VariableDOFS + J,1)
       END DO
     END IF
 
