@@ -307,12 +307,13 @@ SUBROUTINE StressSolver_Init( Model,Solver,dt,Transient )
        CALL Fatal('StressSolver','Number of Dofs smaller than dim: '&
            //I2S(STDOFs)//' vs. '//I2S(Mesh % MeshDim))
      END IF
-
+     QuasiStationary = GetLogical( SolverParams, 'Quasi Stationary',Found)
+     
      Incompr = GetLogical( SolverParams, 'Incompressible', Found )
 
      MeshDisplacementActive = ListGetLogical( SolverParams,  &
                'Displace Mesh', Found )
-     QuasiStationary = GetLogical( SolverParams, 'Quasi Stationary',Found)
+
      IF ( .NOT. Found ) &
        MeshDisplacementActive = .NOT.EigenOrHarmonicAnalysis()
 
