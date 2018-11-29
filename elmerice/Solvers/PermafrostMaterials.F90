@@ -935,6 +935,8 @@ CONTAINS
         CALL INFO(SolverName,"Deallocation of nodal time derivtive")
         DEALLOCATE(NodalVariableTimeDer)
       END IF
+
+      VariableDOFS = VariableVar % DOFs
       ALLOCATE(NodalVariableTimeDer(MaxNodes*VariableDOFS),STAT=istat )
       IF ( istat /= 0 ) THEN
         CALL FATAL(SolverName,"Allocation error")
@@ -944,9 +946,9 @@ CONTAINS
       END IF
     END IF
     
-    NodalVariableTimeDer(1:maxNodes*VariableDOFS) = 0.0_dp
     VariableDOFS = VariableVar % DOFs
     VariablePrev => VariableVar % PrevValues
+    NodalVariableTimeDer(1:maxNodes*VariableDOFS) = 0.0_dp
     
     IF (.NOT.ASSOCIATED(VariablePrev)) THEN
       VariableTimeDerExists = .FALSE.
@@ -1034,6 +1036,7 @@ CONTAINS
 
     IF (TRIM(CallerSolverName) == "PermafrostHeatEquation") THEN
       TemperatureVar => Solver % Variable
+      TemperatureName = Solver % Variable % Name
     ELSE
       TemperatureName = ListGetString(Params, &
            'Temperature Variable', Found )
@@ -1073,6 +1076,7 @@ CONTAINS
     
     IF (TRIM(CallerSolverName) == "PermafrostGroundWaterFlow") THEN
       PressureVar => Solver % Variable
+      PressureName = Solver % Variable % Name
     ELSE
       PressureName = ListGetString(Params, &
            'Pressure Variable', Found )

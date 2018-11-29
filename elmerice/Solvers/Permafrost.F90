@@ -514,10 +514,7 @@ CONTAINS
 
       ! on Xi (directly or indirectly) dependent material parameters (incl. updates) at IP
       rhowAtIP  = rhowupdate(CurrentSolventMaterial,rhowAtIP,XiAtIP(IPPerm),SalinityAtIP,ConstVal) ! update
-      IF ((rhowAtIP < 980.0_dp) .OR. (rhogwAtIP > 1250.0_dp)) THEN ! sanity check
-        PRINT *,"rhowAtIP:",rhowAtIP,XiAtIP(IPPerm),SalinityAtIP
-        STOP
-      END IF
+
       IF (ConstVal) THEN
         rhowPAtIP = 0.0_dp
         rhowTAtIP = 0.0_dp
@@ -547,6 +544,11 @@ CONTAINS
       rhogwAtIP = rhogw(rhowAtIP,rhocAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwpAtIP = rhogwP(rhowPAtIP,rhocPAtIP,XiAtIP(IPPerm),SalinityAtIP)
       rhogwTAtIP = rhogwT(rhowTAtIP,rhocTAtIP,XiAtIP(IPPerm),SalinityAtIP)
+
+      IF ((rhowAtIP < 980.0_dp) .OR. (rhogwAtIP > 1250.0_dp)) THEN ! sanity check
+        PRINT *,"rhowAtIP:",rhowAtIP,XiAtIP(IPPerm),SalinityAtIP
+        STOP
+      END IF
 
       ! conductivities at IP
       mugwAtIP = mugw(CurrentSolventMaterial,CurrentSoluteMaterial,&
