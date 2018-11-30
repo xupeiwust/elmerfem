@@ -453,6 +453,9 @@ CONTAINS
 
 
       ! Variable gradients at IP
+      gradTAtIP  = 0._dp
+      gradYcAtIP = 0._dp
+      gradpAtIP  = 0._dp
       DO i=1,DIM        
         gradTAtIP(i) =  SUM(NodalTemperature(1:n)*dBasisdx(1:n,i))
         gradYcAtIP(i) = SUM(NodalSalinity(1:n)*dBasisdx(1:n,i))
@@ -609,6 +612,7 @@ CONTAINS
              Gravity,rhogwAtIP,DIM,CryogenicSuction)
         KcAtIP = GetKc(CurrentRockMaterial,RockMaterialID,DmAtIP,XiAtIP(IPPerm),JgwDAtIP,PorosityAtIP)
       END IF
+      JcFAtIP = 0._dp
       IF (.NOT.NoSalinity) THEN        
         fcAtIP = GetFc(rhocAtIP,rhowAtIP,Gravity,r12AtIP,XiTAtIP,XiPAtIP,XiAtIP(IPPerm),gradPAtIP,gradTAtIP)
         KcYcYcAtIP = GetKcYcYc(KcAtIP,r12AtIP)
@@ -685,7 +689,6 @@ CONTAINS
         IF (ComputeDeformation)  THEN
           FORCE(p) = FORCE(p) &
                - Weight*CgwpI1AtIP* Basis(p)* SUM(NodalStressInvDt(1:N)*Basis(1:N))
- 
         END IF
         FORCE(p) = FORCE(p) - &
              Weight * Basis(p) * CurrentRockMaterial % etak(RockMaterialID) *&
