@@ -949,6 +949,7 @@ CONTAINS
     VariableDOFS = VariableVar % DOFs
     VariablePrev => VariableVar % PrevValues
     NodalVariableTimeDer(1:maxNodes*VariableDOFS) = 0.0_dp
+    IF ( gettimestep() == 1 ) RETURN ! use zero value in 1st timestep
     
     IF (.NOT.ASSOCIATED(VariablePrev)) THEN
       VariableTimeDerExists = .FALSE.
@@ -1657,7 +1658,7 @@ CONTAINS
 
     aux = 1.0_dp/(1.0_dp - Salinity)
     biYc(1) = (d1 + d2*Salinity*aux)*aux*aux
-    biYc(1) = (d1*(1.0_dp + Salinity) + d2*Salinity*(2.0_dp + Salinity))*aux**3.0_dp
+    biYc(2) = (d1*(1.0_dp + Salinity) + d2*Salinity*(2.0_dp + Salinity))*aux**3.0_dp
   END FUNCTION GetBiYc
   !---------------------------------------------------------------------------------------------
   FUNCTION GetB(CurrentRockMaterial,RockMaterialID,CurrentSolventMaterial,&
