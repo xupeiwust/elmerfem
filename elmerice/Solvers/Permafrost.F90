@@ -3912,6 +3912,7 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
       CALL ReadSingleVar(N,CurrentElement,TemperaturePerm,PrevNodalTemperature,PrevTemperature,TemperatureDOFs)
       CALL ReadSingleVar(N,CurrentElement,PressurePerm,PrevNodalPressure,PrevPressure,PressureDOFs)
     END IF
+
     ! Loop over nodes of element
     DO k = 1, N
       CurrentNode = CurrentElement % NodeIndexes(k)
@@ -3946,10 +3947,8 @@ SUBROUTINE PermafrostPorosityEvolution( Model, Solver, Timestep, TransientSimula
         StrainInvariant = StrainInvariant &
              + Strain((StrainPerm(CurrentNode)-1)*StrainDOFs + J)
       END DO
-      !IF (StrainInvariant < 0.0) PRINT *,"PermafrostPorosityEvolution:",StrainInvariant
-      !aux = 1.0_dp - (PrevNodalrhos/Nodalrhos)/(1.0_dp + StrainInvariant)
       aux = 1.0_dp - (PrevNodalrhos/Nodalrhos)*&
-           (1.0_dp + PrevStrainInvariant(StrainPerm(CurrentNode))/(1.0_dp + StrainInvariant))
+           (1.0_dp + PrevStrainInvariant(StrainPerm(CurrentNode)))/(1.0_dp + StrainInvariant)
       PorosityValues(PorosityPerm(CurrentNode)) = &
            PorosityVariable % PrevValues(PorosityPerm(CurrentNode),1)*(1.0_dp - aux) + aux
       IF (PorosityValues(PorosityPerm(CurrentNode)) .NE. PorosityValues(PorosityPerm(CurrentNode))) THEN
