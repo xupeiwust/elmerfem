@@ -1713,7 +1713,8 @@ CONTAINS
         CALL FATAL("Permafrost(GetXi)","Zero or negative porosity detected")
       END IF
     ELSE
-      Xi0tilde = MIN(Xi0 * (eta0/Porosity) * (1.0_dp - Porosity)/(1.0_dp - eta0),1.0_dp)
+      !Xi0tilde = MIN(Xi0 * (eta0/Porosity) * (1.0_dp - Porosity)/(1.0_dp - eta0),1.0_dp)
+      Xi0tilde = Xi0 * (eta0/Porosity) * (1.0_dp - Porosity)/(1.0_dp - eta0)
     END IF
   END FUNCTION GetXi0Tilde
   !---------------------------------------------------------------------------------------------

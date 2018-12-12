@@ -4302,7 +4302,8 @@ CONTAINS
     REAL(KIND=dp), POINTER :: gWork(:,:)
     REAL(KIND=DP) :: PropertyAtIP
     INTEGER :: i,t,p,q,DIM, RockMaterialID
-    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.,ConstVal=.FALSE.,CryogenicSuction=.FALSE.
+    LOGICAL :: Stat,Found, ConstantsRead=.FALSE.,ConstVal=.FALSE.,ConstantMeanFactor=.FALSE.,&
+         CryogenicSuction=.FALSE.
     TYPE(GaussIntegrationPoints_t) :: IP
     TYPE(ValueList_t), POINTER :: BodyForce, Material
     TYPE(Nodes_t) :: Nodes
@@ -4345,11 +4346,12 @@ CONTAINS
            CALL INFO(FunctionName,'"Constant Permafrost Properties" set to true',Level=9)
     END IF
 
-    meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",Found)
-    IF (.NOT.Found) THEN
-      CALL INFO(FunctionName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
-      meanfactor = 1.0_dp
-    END IF
+    meanfactor = GetConstReal(Material,"Conductivity Arithmetic Mean Weight",ConstantMeanFactor)
+    
+    !IF (.NOT.Found) THEN
+    !  CALL INFO(FunctionName,'"Conductivity Arithmetic Mean Weight" not found. Using default unity value.',Level=9)
+    !  meanfactor = 1.0_dp
+    !END IF
     MinKgw = GetConstReal( Material, &
          'Hydraulic Conductivity Limit', Found)
     IF (.NOT.Found .OR. (MinKgw <= 0.0_dp))  &
@@ -4373,7 +4375,8 @@ CONTAINS
       PorosityAtIP = SUM( Basis(1:N) * NodalPorosity(1:N))
       PressureAtIP = SUM( Basis(1:N) * NodalPressure(1:N))      
       SalinityAtIP = SUM( Basis(1:N) * NodalSalinity(1:N))
-
+      
+      
       !Materialproperties needed at IP
 
       rhowAtIP = rhow(CurrentSolventMaterial,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal) !!
@@ -4404,7 +4407,10 @@ CONTAINS
              XiAtIP,XiTAtIP,XiYcAtIP,XiPAtIP,XiEtaAtIP,&
              .FALSE.,.TRUE.,.TRUE.,.FALSE.,.FALSE.)
       END SELECT
-
+      
+      IF (.NOT.ConstantMeanFactor) & 
+           meanfactor = 1.0_dp - PorosityAtIP * XiAtIp
+      
       !Materialproperties needed at IP:
       rhosAtIP = rhos(CurrentRockMaterial,RockMaterialID,T0,p0,TemperatureAtIP,PressureAtIP,ConstVal)!!
       rhocAtIP = rhoc(CurrentSoluteMaterial,T0,p0,XiAtIP,TemperatureAtIP,PressureAtIP,SalinityAtIP,ConstVal)
